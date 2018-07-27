@@ -1,3 +1,9 @@
 [submodule "quickbb"]
 	path = quickbb
 	url = https://github.com/qbit-/quickbb.git
+[submodule "GRCS"]
+	path = GRCS
+	url = https://github.com/sboixo/GRCS.git
+[submodule "test_circuits"]
+	path = test_circuits
+	url = https://github.com/sboixo/GRCS.git
