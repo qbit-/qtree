@@ -1,0 +1,3 @@
+[submodule "quickbb"]
+	path = quickbb
+	url = https://github.com/qbit-/quickbb.git
