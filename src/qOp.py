@@ -1,6 +1,6 @@
 import numpy as np
 import logging as log
-import re
+import re, cirq
 
 class qOperation:
     def factory(self,arg):
@@ -20,30 +20,44 @@ class qOperation:
 
         if op_identif=='h':
             return H(q_idx)
+        if op_identif=='t':
+            return T(q_idx)
         if op_identif=='cz':
             return cZ(q_idx)
         if op_identif=='x_1_2':
             return X2(q_idx)
         if op_identif=='y_1_2':
             return Y2(q_idx)
+    def get_grid_idx(self,grid_size):
+        try:
+            return [(i//grid_size,i%grid_size) for i in self.qubit_idx]
+        except TypeError:
+            return [(i//grid_size,i%grid_size) for i in [self.qubit_idx]]
+    def to_cirq(self,grid_size):
+        return self.cirq_op(
+            *[cirq.GridQubit(*x) for x in self.get_grid_idx(grid_size)]
+             )
+
     def __str__(self):
-        raise NotImplementedError
+        return "<%s operator on %s>"%(self.name , self.qubit_idx)
+    def __repr__(self):
+        return self.__str__()
 
 
 class H(qOperation):
     matr = 1/np.sqrt(2)* np.array([[1,1],[1,-1]])
-
+    name ='H'
+    cirq_op = cirq.H
     def __init__(self,qubit):
         if isinstance(qubit,int):
             self.qubit_idx = qubit
     def apply(self,vec):
         return np.dot(self.matr,vec)
-    def __str__(self):
-        return "<Haramard operator on %s>"%(self.qubit_idx)
 
 class cZ(qOperation):
     #matr = 1/np.sqrt(2)* np.array([[1,1],[1,-1]])
-
+    cirq_op = cirq.CZ
+    name = 'cZ'
     def __init__(self,qubit):
         if isinstance(qubit,tuple):
             self.qubit_idx = qubit
@@ -54,10 +68,26 @@ class cZ(qOperation):
             str(self.qubit_idx)
         )
 
+class T(qOperation):
+    #matr = 1/np.sqrt(2)* np.array([[1,1],[1,-1]])
+    name='T'
+    cirq_op = cirq.T
+    def __init__(self,qubit):
+        if isinstance(qubit,int):
+            self.qubit_idx = qubit
+    def apply(self,vec):
+        return np.dot(self.matr,vec)
+    def __str__(self):
+        return "<T operator on %s>"%(
+            str(self.qubit_idx)
+        )
+
 class X2(qOperation):
     #matr = 1/np.sqrt(2)* np.array([[1,1],[1,-1]])
+    name='√X'
+    cirq_op = lambda s,x: cirq.X(x)**0.5
     def __init__(self,qubit):
-        if isinstance(qubit,tuple):
+        if isinstance(qubit,int):
             self.qubit_idx = qubit
     def apply(self,vec):
         return np.dot(self.matr,vec)
@@ -67,8 +97,10 @@ class X2(qOperation):
         )
 class Y2(qOperation):
     #matr = 1/np.sqrt(2)* np.array([[1,1],[1,-1]])
+    name='√Y'
+    cirq_op = lambda s,x: cirq.Y(x)**0.5
     def __init__(self,qubit):
-        if isinstance(qubit,tuple):
+        if isinstance(qubit,int):
             self.qubit_idx = qubit
     def apply(self,vec):
         return np.dot(self.matr,vec)
