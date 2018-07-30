@@ -50,29 +50,42 @@ def main():
     filename = 'inst_4x4_10_0.txt'
     n_qubits, circuit = read_test(filename)
     side_length = int(np.sqrt(n_qubits))
-    
+    target_state_str =  '1010010110100101'
+    # reverse the string for index counting
+    target_state = [int(i) for i in target_state_str[::-1] ]
+    if len(target_state)!=n_qubits:
+        raise Exception('target state length is not equal to qbit count')
+
     cirq_circuit = cirq.Circuit()
 
     for layer in circuit:
         cirq_circuit.append(op.to_cirq(side_length) for op in layer)
-        
+
     print("Circuit:")
     print(cirq_circuit)
     simulator = cirq.google.XmonSimulator()
 
     result = simulator.simulate(cirq_circuit)
-    print("Results:")
-    print(result)
+    print("Simulation completed\n")
+    #print("Amplitudes:")
+    #print(result.final_state)
 
-    print("DONE\n")
-
+    amp_idx = 0
+    i = 0
+    for q in target_state:
+        amp_idx+=q*np.power(2,i)
+        i+=1
+    target_amp  = result.final_state[amp_idx]
+    print(f'Amplitude of {target_state_str} (index {amp_idx}) is {target_amp}')
 
 if __name__ == "__main__":
     main()
 
 
-with open('inst_4x4_10_0.txt', 'r+') as fp: 
+'''
+with open('inst_4x4_10_0.txt', 'r+') as fp:
     line_one = fp.readline()
     print(f'line_1: {line_one}')
     for n, line in enumerate(fp):
         print(f'line {n}: {line}')
+'''
