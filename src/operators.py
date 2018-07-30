@@ -57,6 +57,8 @@ class H(qOperation):
     matrix = 1/np.sqrt(2) * np.array([[ 1.+0.j,  1.+0.j],
                                       [ 1.+0.j, -1.+0.j]])
     name = 'H'
+    cirq_op = cirq.H
+    diagonal = False
     n_qubit = 1
 
     cirq_op = cirq.H
@@ -75,6 +77,7 @@ class cZ(qOperation):
                        [ 0.+0.j,  0.+0.j,  1.+0.j,  0.+0.j],
                        [ 0.+0.j,  0.+0.j,  0.+0.j, -1.+0.j]])
     name = 'cZ'
+    diagonal = True
     n_qubit = 2
 
     cirq_op = cirq.CZ
@@ -94,6 +97,7 @@ class T(qOperation):
     n_qubit = 1
 
     cirq_op = cirq.T
+    diagonal = True
 
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
@@ -107,6 +111,7 @@ class X_1_2(qOperation):
     matrix = np.array([[0.5+0.5j, 0.5-0.5j],
                        [0.5-0.5j, 0.5+0.5j]])
     name = 'X_1_2'
+    diagonal = False
     n_qubit = 1
 
     def cirq_op(self, x): return cirq.X(x)**0.5
@@ -123,6 +128,7 @@ class Y_1_2(qOperation):
     matrix = np.array([[ 0.5+0.5j, -0.5-0.5j],
                        [ 0.5+0.5j,  0.5+0.5j]])
     name = 'Y_1_2'
+    diagonal = False
     n_qubit = 1
 
     def cirq_op(self, x): return cirq.Y(x)**0.5
