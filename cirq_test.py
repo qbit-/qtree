@@ -7,7 +7,7 @@ import numpy as np
 OP = qOperation()
 
 
-def read_test(filename, max_depth=None):
+def read_circuit_file(filename, max_depth=None):
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
@@ -46,23 +46,17 @@ def read_test(filename, max_depth=None):
     return qubit_count, circuit
 
 
-def main():
-    # filename = sys.argv[1]
-    filename = 'inst_4x4_10_0.txt'
-    n_qubits, circuit = read_test(filename)
+def get_amplitude_from_cirq(filename, target_state_str):
+    #filename = 'inst_4x4_10_0.txt'
+    n_qubits, circuit = read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
-    target_state_str =  '1010010110100101'
-    # reverse the string for index counting
-    target_state = [int(i) for i in target_state_str[::-1] ]
-    if len(target_state)!=n_qubits:
-        raise Exception('target state length is not equal to qbit count')
 
     graph = circ2graph(circuit)
 
     cirq_circuit = cirq.Circuit()
 
     for layer in circuit:
-        cirq_circuit.append(op.to_cirq(side_length) for op in layer)
+        cirq_circuit.append(op.to_cirq_2d_circ_op(side_length) for op in layer)
 
     print("Circuit:")
     print(cirq_circuit)
@@ -70,25 +64,20 @@ def main():
 
     result = simulator.simulate(cirq_circuit)
     print("Simulation completed\n")
-    #print("Amplitudes:")
-    #print(result.final_state)
 
-    amp_idx = 0
-    i = 0
-    for q in target_state:
-        amp_idx+=q*np.power(2,i)
-        i+=1
+    # target_state_str =  '1010010110100101'
+    # reverse the string for index counting
+    target_state = [int(i) for i in target_state_str[::-1] ]
+
+    if len(target_state)!=n_qubits:
+        raise Exception('target state length is not equal to qbit count')
+
+    amp_idx = np.ravel_multi_index(target_state, [2,]*len(target_state))
     target_amp  = result.final_state[amp_idx]
+
     print(f'Amplitude of {target_state_str} (index {amp_idx}) is {target_amp}')
+    return target_amp
 
 if __name__ == "__main__":
-    main()
+    get_amplitude_from_cirq(sys.argv[1], sys.argv[2])
 
-
-'''
-with open('inst_4x4_10_0.txt', 'r+') as fp:
-    line_one = fp.readline()
-    print(f'line_1: {line_one}')
-    for n, line in enumerate(fp):
-        print(f'line {n}: {line}')
-'''
