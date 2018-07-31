@@ -32,9 +32,58 @@ class Tensor2Vars():
         self.vars.append(var)
     def __iadd__(self,var):
         self.append_var(var)
+class Variable2Qubitidx():
+    storage = {}
+    def __init__(self):
+        pass
+    def add_variable_idx(self,variable,idx):
+        try:
+            self.storage[idx].append(variable)
+        except:
+            self.storage[idx] = [variable]
+    def get_qubit_idx_of_var(self,var):
+        for index,variables self.storage.items():
+            if variable in variables:
+                return index
 
-def vertical_eliminate(buckets):
-    pass
+
+def find_tensors_by_var(tensors2vars,var):
+    tensors = []
+    for t in tensors2vars:
+        if var in t.vars
+        tensors.append(t)
+    return tensors
+
+def get_transpose_order(t,qidx):
+    if isinstance( t.op, cZ):
+        idx = t.op._qubits
+        # Not sure if it's actually works
+        if idx[0]== qidx:
+            return (0,1,2,3)
+        else:
+            return (1,3,0,2)
+    else:
+        if idx[0]== qidx:
+            return (0,1)
+        else:
+            return (1,0)
+
+def naive_eliminate(graph,tensors2vars,v2qidx):
+    for variable in graph.get_nodes():
+        tensors = find_tensors_by_var(variable)
+        product = tensors[0]
+        for t in tensors[1:]:
+            qidx = v2qidx.get_qubit_idx_of_var(
+                        variable
+                    )
+
+            t_ordered = np.transpose(
+                t.tensor,
+                get_transpose_order(t,qidx)
+            )
+            product = np.multiply(product,t_ordered)
+        new_tensor = np.sum(product,axis=0)
+        ten
 
 
 def circ2graph(circuit):
@@ -45,16 +94,20 @@ def circ2graph(circuit):
     print(qubit_count)
 
     # we start from 0 here to avoid problems with quickbb
+    tensors2vars = []
+    v2qidx = Variable2Qubitidx()
+
+    # Process first layer
     for i in range(1, qubit_count+1):
         g.add_node(i)
+        tv = Tensor2Vars(op)
+        tv += i
+        tensors2vars.append(tv)
+        v2qidx.add_variable_idx(i,i)
+
     current_var = qubit_count
     variable_col= list(range(1,qubit_count+1))
-    # Process first layer
-    buckets = []
-    for op in circ[0]:
-        bucket = Bucket(op._qubits[0])
-        bucket += op
-        buckets.append(bucket)
+
 
     variable_col= list(range(1, qubit_count+1))
     for layer in circuit[1:-1]:
@@ -69,21 +122,26 @@ def circ2graph(circuit):
                     current_var+1 )
                 current_var += 1
                 tensor2vars += current_var
-                #bucket = Bucket(current_var+1)
-                #bucket += op
-                #buckets.append(bucket)
+                tensor2vars += variable_col[op._qubits[0]]
+                v2qidx.add_variable_idx(
+                    variable_col[op._qubits[0]],
+                    current_var
+                )
 
                 variable_col[op._qubits[0]] = current_var
 
-            if isinstance(op,cZ):
+            elif isinstance(op,cZ):
                 # cZ connects two variables with an edge
                 i1 = variable_col[op._qubits[0]]
                 i2 = variable_col[op._qubits[1]]
                 tensor2vars += i1
                 tensor2vars += i2
                 g.add_edge(i1,i2)
-
-        tensors2vars.append(tensor2vars)
+            # tensors2 vars is a list of tensos
+            # which leads to variables it operates on
+            elif:
+                tensor2vars += current_var
+            tensors2vars.append(tensor2vars)
     v = g.number_of_nodes()
     e = g.number_of_edges()
     print(g)
@@ -101,5 +159,5 @@ def circ2graph(circuit):
     plt.figure(figsize=(10,10))
     nx.draw(g,with_labels=True)
     plt.savefig('graph.eps')
-    return g
+    return g,tensors2vars,v2qidx
 
