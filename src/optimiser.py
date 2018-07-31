@@ -6,6 +6,22 @@ import numpy as np
 import logging as log
 from .operators import *
 
+class Bucket():
+    tensors = []
+    def __init__(self, var):
+        self.var = var
+    def set_var(self,var):
+        self.var = var
+    def append(self,t):
+        self.tensors.append(t)
+    def __iadd__(self,t):
+        self.append(t)
+
+
+def vertical_eliminate(buckets):
+    pass
+
+
 def circ2graph(circ):
     vertices = []
     edges = []
@@ -19,9 +35,15 @@ def circ2graph(circ):
         g.add_node(i)
     current_var = qubit_count
     variable_col= list(range(1,qubit_count+1))
+    bucket = Bucket(variable_col)
+    # Process first layer
+    for op in circ[0]:
+        bucket += op
+    buckets = [bucket]
 
     for layer in circ[1:-1]:
         print(layer)
+        bucket = Bucket()
         for op in layer:
             if not op.diagonal:
                 # Non-diagonal gate adds a vertex to graph
@@ -33,6 +55,8 @@ def circ2graph(circ):
                     current_var+1 )
                 current_var += 1
 
+                bucket +=op
+
                 variable_col[op._qubits[0]] = current_var
 
             if isinstance(op,cZ):
@@ -43,6 +67,7 @@ def circ2graph(circ):
                     variable_col[op._qubits[0]],
                     variable_col[op._qubits[1]]
                 )
+        bucket.set_var(variable_col)
     v = g.number_of_nodes()
     e = g.number_of_edges()
     print(g)
