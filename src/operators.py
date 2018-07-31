@@ -1,7 +1,8 @@
 import numpy as np
-import logging as log
 import re
 import cirq
+import logging
+log = logging.getLogger('qtree')
 
 
 class qOperation:
@@ -10,7 +11,7 @@ class qOperation:
             return self._create_from_string(arg)
 
     def _create_from_string(sefl, s):
-        log.debug("creating op from '{}'".format(s))
+        #log.debug("creating op from '{}'".format(s))
         m = re.search(
             r'(?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', s)
         if m is None:
@@ -103,6 +104,13 @@ class cZ(qOperation):
                 ]
             ]
         )
+        self.tensor = self.get_simplified()
+
+    def get_simplified(self):
+        t = self.tensor
+        r = np.arange(t.shape[0])
+        # cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
+        return np.array([[t[i,i,j,j] for i in r] for j in r])
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
@@ -121,10 +129,14 @@ class T(qOperation):
         self._check_qubit_count(qubits)
         self._qubits = qubits
         self.tensor = self.matrix
+        self.tensor = self.get_simplified()
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
 
+    def get_simplified(self):
+	# cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
+        return self.tensor.diagonal()
 
 class X_1_2(qOperation):
     matrix = np.array([[0.5+0.5j, 0.5-0.5j],

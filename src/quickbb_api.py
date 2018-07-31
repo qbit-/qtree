@@ -1,6 +1,8 @@
 import networkx as nx
 import subprocess
 import logging as log
+import logging
+log = logging.getLogger('qtree')
 
 import os
 

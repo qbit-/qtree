@@ -1,15 +1,11 @@
 import numpy as np
-import logging as log
+import logging
+log = logging.getLogger('qtree')
 
 class Tensor():
     def __init__(self,op=None):
         if op:
-            if op.name=='cZ':
-                self._tensor = np.sum(
-                    op.tensor,
-                    axis=(0,2))
-            else:
-                self._tensor = op.tensor
+            self._tensor = op.tensor
             #self._op = op
         self.variables = []
 
@@ -28,43 +24,75 @@ class Tensor():
 
     def get_ordered_tensors(self,var):
         log.debug(self._tensor)
-        self._align_to_vars()
+        #self._align_to_vars()
         return np.transpose(
             self._tensor,
             self._get_var_ordering(var)
         )
-    def _align_to_vars(self):
-        if len(self._tensor.shape)!=len(self.variables):
-            if len(self.variables)==1:
-                self._tensor = np.sum(self._tensor,axis=0)
-            elif len(self.variables)==2:
-                self._tensor = np.sum(
-                    self._tensor,
-                    # indexes are (in1,out1,in2,out2)
-                    axis=(0,2)
-                )
-
     def multiply(self,tensor,var):
         t = Tensor()
-        t1 = self.get_ordered_tensors(var)
-        t2 = tensor.get_ordered_tensors(var)
-        print("op1 op2 and result:")
-        print(t1)
-        print(t2)
-        _t = np.tensordot(t1,t2,axes=0)
-        _t = np.sum(_t,axis=0)
-        print(_t)
-        t._tensor = _t
-        t.add_variable(
-            *(self.variables+tensor.variables)
+        _t = np.tensordot(
+            self._tensor,tensor._tensor,
+            axes=0)
+        xs = self.variables+tensor.variables
+        indexes = [i for i,x in enumerate(xs) if x ==var]
+
+        _t = np.diagonal(
+            _t,
+            axis1=indexes[0],
+            axis2=indexes[1]
         )
+        t._tensor = _t
+        new_variables = [x for i,x in enumerate(xs)
+                         if x !=var]
+        t.variables=new_variables+[var]
+        t.diagonalize_if_dupl()
+        #print(t)
         return t
-    def sum(self,axis=0):
-        print(self._tensor)
+    def diagonalize_if_dupl(self):
+        def duplicates(lst,item):
+            return [i for i,x in enumerate(lst) if x==item]
+        l = self.variables
+        i = 0
+        while True:
+            try:
+                v = l[i]
+            except IndexError:
+                break
+            dup = duplicates(l,v)
+            if len(dup)>1:
+                print("__duplicate of",v,'@',dup)
+                print("__vars",l)
+                self._tensor = np.diagonal(
+                    self._tensor,
+                    axis1=dup[0],
+                    axis2=dup[1]
+                )
+                l = [x for i,x in enumerate(l) if x!=v]
+                l += [v]
+            i+=1
+        self.variables = l
+
+
+    def sum(self,over,axis=-1):
+        print('summing',self)
         t = Tensor()
-        v = self.variables[0]
-        t.variables = [y for y in self.variables if y != v]
-        t._tensor = np.sum(self._tensor,axis=0)
+        v = over
+        index = self.variables.index(v)
+        if len(self.variables)>1:
+            print('___',v,'@',index)
+            t.variables = self.variables
+            t.variables.remove(v)
+        else:
+            t.variables = []
+            print("____ scalar!",self)
+
+        t._tensor = np.sum(self._tensor,axis=index)
         return t
     def __repr__(self):
-        return "<tensor \n "+self._tensor.__repr__()+ '\nvars: '+str(self.variables)+">"
+        if sum(self._tensor.shape)<10:
+            return "<tensor \n "+self._tensor.__repr__()+ '\nvars: '+str(self.variables)+">"
+        else:
+            s = self._tensor.shape
+            r = len(s)
+            return f"<tensor with shape {s} and rank {r}\nvars: "+str(self.variables)+f"({len(self.variables)})>"

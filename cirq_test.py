@@ -1,6 +1,4 @@
 from src.operators import *
-from src.logging import log
-from src.optimizer  import *
 import sys
 import re
 import numpy as np

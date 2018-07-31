@@ -1,8 +1,15 @@
-import logging as log
-log.basicConfig(
-    format='qtree:%(levelname)s•\t%(message)s',
-    #filename='parsing.log',
-    level=log.INFO)
-#log.addLevelName(log.ERROR, "\033[1;41m%s\033[1;0m" %log.getLevelName(log.ERROR))
+import logging
+def get_logger():
+    log = logging.getLogger('qtree')
+    log.setLevel(logging.DEBUG)
 
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
 
+    formatter = logging.Formatter(
+            '%(asctime)s- %(levelname)s•\t%(message)s')
+    ch.setFormatter(formatter)
+    log.addHandler(ch)
+
+    log.info("foo")
+    return log
