@@ -1,6 +1,7 @@
 from src.operators import *
 from src.logging import log
 from src.optimiser  import *
+from src.quickbb_api import *
 import sys
 import re
 import numpy as np
@@ -52,6 +53,9 @@ def get_amplitude_from_cirq(filename, target_state_str):
     side_length = int(np.sqrt(n_qubits))
 
     graph = circ2graph(circuit)
+    cnffile = 'quickbb.cnf'
+    gen_cnf(cnffile,graph)
+    run_quickbb(cnffile)
 
     cirq_circuit = cirq.Circuit()
 

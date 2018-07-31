@@ -14,11 +14,11 @@ def circ2graph(circ):
     qubit_count = len(circ[0])
     vertices = range(qubit_count)
     print(qubit_count)
-    current_var = qubit_count-1
-    variable_col= list(range(qubit_count))
 
-    for i in range(qubit_count):
+    for i in range(1,qubit_count):
         g.add_node(i)
+    current_var = qubit_count
+    variable_col= list(range(1,qubit_count+1))
 
     for layer in circ[1:-1]:
         print(layer)
@@ -47,6 +47,7 @@ def circ2graph(circ):
     e = g.number_of_edges()
     print(g)
     log.info(f"Generated graph with {v} nodes and {e} edges")
+    log.info(f"last index contains from {variable_col}")
 
     aj = nx.adjacency_matrix(g)
     matfile = 'adjacency_graph.mat'
