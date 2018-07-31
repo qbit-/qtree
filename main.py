@@ -2,7 +2,7 @@ import argparse
 
 from src.operators import *
 from src.logging import log
-from src.optimiser  import *
+from src.optimizer  import *
 from src.quickbb_api import *
 from cirq_test import *
 
