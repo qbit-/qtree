@@ -15,10 +15,23 @@ class Bucket():
     def __iadd__(self,t):
         self.append(t)
     def process(self):
-        result = self.tensors[0]
+        result = self.tensors[0].matrix
         for op in self.tensors:
+            result = np.multiply(result,op.matrix,
+                                axes=[(-1,),(index),()]
+                                )
 
+        return np.sum(result, axis = )
 
+class Tensor2Vars():
+    def __init__(self,op):
+        self.op = op
+        self.tensor = op.tensor
+        self.vars = []
+    def append_var(self,var):
+        self.vars.append(var)
+    def __iadd__(self,var):
+        self.append_var(var)
 
 def vertical_eliminate(buckets):
     pass
@@ -26,6 +39,7 @@ def vertical_eliminate(buckets):
 
 def circ2graph(circuit):
     g = nx.Graph()
+    tensors2vars = []
 
     qubit_count = len(circuit[0])
     print(qubit_count)
@@ -35,18 +49,17 @@ def circ2graph(circuit):
         g.add_node(i)
     current_var = qubit_count
     variable_col= list(range(1,qubit_count+1))
-    bucket = Bucket(variable_col)
     # Process first layer
+    buckets = []
     for op in circ[0]:
+        bucket = Bucket(op._qubits[0])
         bucket += op
-    buckets = [bucket]
+        buckets.append(bucket)
 
-    for layer in circ[1:-1]:
-        print(layer)
-        bucket = Bucket()
     variable_col= list(range(1, qubit_count+1))
     for layer in circuit[1:-1]:
         for op in layer:
+            tensor2vars = Tensor2Vars(op)
             if not op.diagonal:
                 # Non-diagonal gate adds a new variable and
                 # an edge to graph
@@ -55,17 +68,22 @@ def circ2graph(circuit):
                     variable_col[op._qubits[0]],
                     current_var+1 )
                 current_var += 1
+                tensor2vars += current_var
+                #bucket = Bucket(current_var+1)
+                #bucket += op
+                #buckets.append(bucket)
 
-                bucket +=op
                 variable_col[op._qubits[0]] = current_var
 
             if isinstance(op,cZ):
                 # cZ connects two variables with an edge
-                g.add_edge(
-                    variable_col[op._qubits[0]],
-                    variable_col[op._qubits[1]]
-                )
-        bucket.set_var(variable_col)
+                i1 = variable_col[op._qubits[0]]
+                i2 = variable_col[op._qubits[1]]
+                tensor2vars += i1
+                tensor2vars += i2
+                g.add_edge(i1,i2)
+
+        tensors2vars.append(tensor2vars)
     v = g.number_of_nodes()
     e = g.number_of_edges()
     print(g)
