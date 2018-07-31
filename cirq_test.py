@@ -48,15 +48,6 @@ def read_circuit_file(filename, max_depth=None):
 
 
 def get_amplitude_from_cirq(filename, target_state_str):
-    #filename = 'inst_4x4_10_0.txt'
-    n_qubits, circuit = read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
-
-    graph = circ2graph(circuit)
-    cnffile = 'quickbb.cnf'
-    gen_cnf(cnffile,graph)
-    run_quickbb(cnffile)
-
     cirq_circuit = cirq.Circuit()
 
     for layer in circuit:
@@ -82,6 +73,21 @@ def get_amplitude_from_cirq(filename, target_state_str):
     print(f'Amplitude of {target_state_str} (index {amp_idx}) is {target_amp}')
     return target_amp
 
-if __name__ == "__main__":
-    get_amplitude_from_cirq(sys.argv[1], sys.argv[2])
 
+def get_decomposed_graphical_model(filename):
+    filename = 'inst_2x2_7_0.txt'
+    n_qubits, circuit = read_circuit_file(filename)
+    side_length = int(np.sqrt(n_qubits))
+
+    graph = circ2graph(circuit)
+    cnffile = 'quickbb.cnf'
+    gen_cnf(cnffile, graph)
+    #run_quickbb(cnffile)
+
+    
+if __name__ == "__main__":
+    get_decomposed_graphical_model(sys.argv[1])
+
+l = [1, 2, 3, 4, 5]
+for i in l[1:-1]:
+    print(i)
