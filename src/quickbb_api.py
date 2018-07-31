@@ -2,6 +2,8 @@ import networkx as nx
 import subprocess
 import logging as log
 
+import os
+
 def gen_cnf(filename,g):
     v = g.number_of_nodes()
     e = g.number_of_edges()
@@ -17,6 +19,13 @@ def gen_cnf(filename,g):
 def run_quickbb(cnffile):
     outfile = 'quickbb_out.qbb'
     statfile = 'quickbb_stat.qbb'
+    try:
+        os.remove(outfile)
+        os.remove(statfile)
+    except FileNotFoundError as e:
+        log.warn(e)
+        pass
+
     sh = "./quickbb_64 "
     sh += "--min-fill-ordering "
     sh += "--time 60 "
