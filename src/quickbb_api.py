@@ -2,9 +2,9 @@ import networkx as nx
 import subprocess
 import logging as log
 
-def gen_cnf(filename,g):
-    v = g.number_of_nodes()
-    e = g.number_of_edges()
+def gen_cnf(filename, graph):
+    v = graph.number_of_nodes()
+    e = graph.number_of_edges()
     log.info(f"generating config file {filename}")
     cnf = "c a configuration of -qtree simulator\n"
     cnf += f"p cnf {v} {e}\n"
@@ -14,14 +14,15 @@ def gen_cnf(filename,g):
     #print("cnf file:",cnf)
     with open(filename,'w+') as fp:
         fp.write(cnf)
-def run_quickbb(cnffile):
+
+def run_quickbb(cnffile, command='./quickbb_64'):
     outfile = 'quickbb_out.qbb'
     statfile = 'quickbb_stat.qbb'
-    sh = "./quickbb_64 "
-    sh += "--min-fill-ordering "
-    sh += "--time 60 "
-    sh += f"--outfile {outfile} --statfile {statfile} "
-    sh += f"--cnffile {cnffile} "
+    sh = command
+    sh += " --min-fill-ordering "
+    sh += " --time 60 "
+    sh += f" --outfile {outfile} --statfile {statfile} "
+    sh += f" --cnffile {cnffile} "
     log.info("excecuting quickbb: "+sh)
     process = subprocess.Popen(
         sh.split(), stdout=subprocess.PIPE)
