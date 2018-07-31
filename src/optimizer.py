@@ -14,6 +14,10 @@ class Bucket():
         self.tensors.append(t)
     def __iadd__(self,t):
         self.append(t)
+    def process(self):
+        result = self.tensors[0]
+        for op in self.tensors:
+
 
 
 def vertical_eliminate(buckets):

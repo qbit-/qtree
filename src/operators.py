@@ -66,6 +66,7 @@ class H(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
+        self.tensor = self.matrix
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
@@ -85,6 +86,23 @@ class cZ(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
+        # indexes are (in1,out1,in2,out2)
+        self.tensor = np.array(
+            [
+                [
+                    [[1.+0j, 0+0j],
+                     [0.+0j, 1+0j]],
+                    [[0.+0j, 0+0j],
+                     [0.+0j, 0+0j]]
+                ],
+                [
+                    [[0.+0j, 0+0j],
+                     [0.+0j, 0+0j]],
+                    [[1.+0j, 0+0j],
+                     [0.+0j, -1+0j]]
+                ]
+            ]
+        )
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
@@ -102,6 +120,7 @@ class T(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
+        self.tensor = self.matrix
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
@@ -119,6 +138,7 @@ class X_1_2(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
+        self.tensor = self.matrix
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
@@ -136,6 +156,7 @@ class Y_1_2(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
+        self.tensor = self.matrix
 
     def apply(self, vec):
         return np.dot(self.matr, vec)
