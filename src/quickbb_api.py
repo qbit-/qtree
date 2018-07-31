@@ -16,7 +16,8 @@ def gen_cnf(filename,g):
     #print("cnf file:",cnf)
     with open(filename,'w+') as fp:
         fp.write(cnf)
-def run_quickbb(cnffile):
+
+def run_quickbb(cnffile, command='./quickbb_64'):
     outfile = 'quickbb_out.qbb'
     statfile = 'quickbb_stat.qbb'
     try:

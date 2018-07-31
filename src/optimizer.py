@@ -1,6 +1,4 @@
-
 import networkx as nx
-#import graph_tool
 import matplotlib.pyplot as plt
 import numpy as np
 import logging as log
@@ -22,16 +20,14 @@ def vertical_eliminate(buckets):
     pass
 
 
-def circ2graph(circ):
-    vertices = []
-    edges = []
+def circ2graph(circuit):
     g = nx.Graph()
 
-    qubit_count = len(circ[0])
-    vertices = range(qubit_count)
+    qubit_count = len(circuit[0])
     print(qubit_count)
 
-    for i in range(1,qubit_count):
+    # we start from 0 here to avoid problems with quickbb
+    for i in range(1, qubit_count+1):
         g.add_node(i)
     current_var = qubit_count
     variable_col= list(range(1,qubit_count+1))
@@ -44,25 +40,23 @@ def circ2graph(circ):
     for layer in circ[1:-1]:
         print(layer)
         bucket = Bucket()
+    variable_col= list(range(1, qubit_count+1))
+    for layer in circuit[1:-1]:
         for op in layer:
             if not op.diagonal:
-                # Non-diagonal gate adds a vertex to graph
-                #vertices.append(current_var+1)
-                #edges.append( (current_var,current_var+1) )
-                g.add_node(current_var+1 )
+                # Non-diagonal gate adds a new variable and
+                # an edge to graph
+                g.add_node(current_var+1)
                 g.add_edge(
                     variable_col[op._qubits[0]],
                     current_var+1 )
                 current_var += 1
 
                 bucket +=op
-
                 variable_col[op._qubits[0]] = current_var
 
             if isinstance(op,cZ):
-                # Hadamard connects two variables with edge
-                #edges.append(
-                #g.add_edges(
+                # cZ connects two variables with an edge
                 g.add_edge(
                     variable_col[op._qubits[0]],
                     variable_col[op._qubits[1]]
