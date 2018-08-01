@@ -1,5 +1,5 @@
 import networkx as nx
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 from .Tensor import Tensor
 from .operators import *
@@ -45,6 +45,21 @@ def naive_eliminate(graph,tensors):
         new_tensor = product.sum(over=variable)
         tensors.append(new_tensor)
         log.debug('new tensor'+str(new_tensor))
+    log.info('DONE'+str(tensors))
+
+    T = tensors[0]
+    vs = T.variables
+    indexes = []
+    for i in range(0,-len(vs),-1):
+        indexes.append(vs.index(i))
+    print(indexes)
+    ordered = T._tensor.transpose(indexes)
+    #fl = tensors[0]._tensor.flatten()
+    fl = ordered[0,:].flatten()
+
+    if len(fl)<100:
+        print('me',fl.round(2))
+    return  fl[0]
 
 
 def circ2graph(circuit):
@@ -63,6 +78,7 @@ def circ2graph(circuit):
         tensor =Tensor(circuit[0][i-1])
         # 0 is inital index
         tensor.add_variable(0,i)
+        tensors.append(tensor)
 
     current_var = qubit_count
     variable_col= list(range(1,qubit_count+1))
@@ -95,6 +111,14 @@ def circ2graph(circuit):
             else:
                 tensor.add_variable( current_var)
             tensors.append(tensor)
+    i = 1
+    for op in circuit[-1]:
+        tensor = Tensor(op)
+        tensor.add_variable(variable_col[i-1],-i)
+        tensors.append(tensor)
+        i+=1
+    log.info(f"there are {len(tensors)} tensors")
+
     v = g.number_of_nodes()
     e = g.number_of_edges()
     print(g)
@@ -109,8 +133,8 @@ def circ2graph(circuit):
         #s = s.replace(' ','-')
         #print(s.replace('0','-'))
 
-    #plt.figure(figsize=(10,10))
+    plt.figure(figsize=(10,10))
     nx.draw(g,with_labels=True)
-    #plt.savefig('graph.eps')
+    plt.savefig('graph.eps')
     return g,tensors
 

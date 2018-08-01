@@ -72,7 +72,7 @@ def get_amplitude_from_cirq(filename, target_state_str):
     target_amp  = result.final_state[amp_idx]
 
     print(f'Amplitude of {target_state_str} (index {amp_idx}) is {target_amp}')
-    return target_amp
+    return target_amp, result.final_state
 
 
 def get_decomposed_graphical_model(filename):
