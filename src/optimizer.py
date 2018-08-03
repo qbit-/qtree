@@ -73,9 +73,9 @@ def circ2buckets(circuit):
 
     # we start from 1 here to follow the graph indices
     buckets = []
-    for i in range(1, qubit_count+1):
+    for ii in range(1, qubit_count+1):
         buckets.append(
-            [['I', [i]]]
+            [['I{}'.format(ii), [ii]]]
         )
 
     current_var = qubit_count
@@ -185,11 +185,21 @@ def get_tf_buckets(buckets, qubit_count):
     Y_1_2 = tf.placeholder(tf.complex64, [2, 2], 'Y_1_2')
     H = tf.placeholder(tf.complex64, [2, 2], 'H')
     cZ = tf.placeholder(tf.complex64, [2, 2], 'cZ')
-    I = tf.placeholder(tf.complex64, [2], 'I')
     T = tf.placeholder(tf.complex64, [2], 'T')
     
     elements = {'X_1_2': X_1_2, 'Y_1_2': Y_1_2,
-                'H': H, 'cZ': cZ, 'T': T, 'I': I}
+                'H': H, 'cZ': cZ, 'T': T}
+
+    # Add input vectors
+    input_names = ['I{}'.format(ii)
+                   for ii in range(1, qubit_count+1)]
+    inputs = [tf.placeholder(tf.complex64, [2], name)
+              for name in input_names]
+    
+    elements.update(
+        dict(zip(
+            input_names, inputs))
+    )
 
     # Add output vectors
     output_names = ['O{}'.format(ii)
@@ -232,31 +242,45 @@ def qubit_vector_generator(target_state, n_qubits):
         yield DOWN if bit == '0' else UP
 
 
-def run_tf_graph(tf_variable, p_dict, target_state, n_qubits):
+def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
 
-    h_mat = H(1).matrix
-    x_1_2_mat = X_1_2(1).matrix
-    y_1_2_mat = X_1_2(1).matrix
-    t_mat = np.diag(T(1).matrix)
-    cz_mat = np.diag(cZ(1, 1).matrix).reshape([2, 2])
-    i_mat = DOWN @ h_mat
+    # Actual values of gates
+    values_dict = {
+        'H' : H(1).matrix,
+        'X_1_2' : X_1_2(1).matrix,
+        'Y_1_2' : Y_1_2(1).matrix,
+        'T' : np.diag(T(1).matrix),
+        'cZ' : np.diag(cZ(1, 1).matrix).reshape([2, 2])
+        }
 
+    # Fill all common gate's placeholders
+    feed_dict = {placeholder_dict[key]: values_dict[key] for key in values_dict.keys()}
+
+    # Fill placeholders for the input layer
+    input_dict = {}
+    for ii, bc_state in enumerate(
+            qubit_vector_generator(0, n_qubits)):
+        input_dict.update({
+            'I{}'.format(ii+1) : bc_state @ values_dict['H'] #numeration starts at 1!
+            })
+    input_feed_dict = {placeholder_dict[key] : val for key, val in input_dict.items()}
+
+    feed_dict.update(input_feed_dict)
+    
+    # fill placeholders for the output layer
     output_dict = {}
     for ii, bc_state in enumerate(
             qubit_vector_generator(target_state, n_qubits)):
         output_dict.update({
-            'O{}'.format(ii+1) : h_mat @ bc_state #numeration starts at 1!
+            'O{}'.format(ii+1) : #values_dict['H'] @ bc_state #numeration starts at 1!
             })
-    output_feed_dict = {p_dict[key] : val for key, val in output_dict.items()}
+    output_feed_dict = {placeholder_dict[key] : val for key, val in output_dict.items()}
     
-    feed_dict = {p_dict['X_1_2']: x_1_2_mat,
-                 p_dict['Y_1_2']: y_1_2_mat,
-                 p_dict['H']: h_mat,
-                 p_dict['cZ']: cz_mat,
-                 p_dict['T']: t_mat,
-                 p_dict['I']: i_mat,
-    }
     feed_dict.update(output_feed_dict)
+
+    return feed_dict
+
+def run_tf_session(tf_variable, feed_dict):
     
     with tf.Session() as sess:
         res = sess.run(tf_variable, feed_dict=feed_dict)

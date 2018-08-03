@@ -53,14 +53,14 @@ def get_decomposed_graphical_model(filename):
 
 
 def contract_with_tensorflow(filename):
-    filename = 'inst_2x2_7_0.txt'
+    filename = 'inst_2x2_1_1.txt'
     n_qubits, circuit = read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
 
     # Run quickbb
     buckets, graph = circ2buckets(circuit)
 
-    if graph.number_of_edges() > 3: #only if not elementary cliques 
+    if graph.number_of_edges() > 1: #only if not elementary cliques 
         cnffile = 'quickbb.cnf'
         gen_cnf(cnffile, graph)
         out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
@@ -85,19 +85,21 @@ def contract_with_tensorflow(filename):
 
     amplitudes = []
     for target_state in range(2**n_qubits):
-        amplitude = run_tf_graph(comput_graph, placeholder_dict,
-                                 target_state, n_qubits)
-        amplitudes.append(round(amplitude,3))
+        feed_dict = assign_placeholder_values(
+            placeholder_dict,
+            target_state, n_qubits)
+        amplitude = run_tf_session(comput_graph, feed_dict)
+        amplitudes.append(amplitude)
 
     amplitudes_reference = get_amplitudes_from_cirq(filename)
     print('Result:')
     print(np.array(amplitudes))    
     print('Reference:')
-    print(np.round(amplitudes_reference, 3))
+    print(amplitudes_reference)
 
 
 if __name__ == "__main__":
-    # contract_with_tensorflow(1)
-    amplitudes_reference = get_amplitudes_from_cirq('inst_2x2_1_1.txt')
-    print('Reference:')
-    print(np.round(amplitudes_reference, 3))
+    contract_with_tensorflow(1)
+    # amplitudes_reference = get_amplitudes_from_cirq('inst_2x2_1_1.txt')
+    # print('Reference:')
+    # print(np.round(amplitudes_reference, 3))

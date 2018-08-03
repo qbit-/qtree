@@ -54,8 +54,8 @@ class qOperation:
 
         
 class H(qOperation):
-    matrix = 1/np.sqrt(2) * np.array([[ 1.+0.j,  1.+0.j],
-                                      [ 1.+0.j, -1.+0.j]])
+    matrix = 1/np.sqrt(2) * np.array([[ -1.j,  -1.+0.j],
+                                      [ -1.j, 1.j]])
     # matrix = -1j * matrix
     name = 'H'
     cirq_op = cirq.H
@@ -75,8 +75,8 @@ class H(qOperation):
 class cZ(qOperation):
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
                        [ 0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  1.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  0.+0.j, -1.+0.j]])
+                       [ 0.+0.j,  0.+0.j,  -1.j,  0.+0.j],
+                       [ 0.+0.j,  0.+0.j,  0.+0.j, 1.j]])
     name = 'cZ'
     diagonal = True
     n_qubit = 2
@@ -109,8 +109,8 @@ class T(qOperation):
 
 
 class X_1_2(qOperation):
-    matrix = np.array([[0.5+0.5j, 0.5-0.5j],
-                       [0.5-0.5j, 0.5+0.5j]])
+    matrix = 1/sqrt(2) * np.array([[1, -1j],
+                                   [-1j, 1]])
     name = 'X_1_2'
     diagonal = False
     n_qubit = 1
@@ -126,8 +126,8 @@ class X_1_2(qOperation):
 
 
 class Y_1_2(qOperation):
-    matrix = np.array([[ 0.5+0.5j, -0.5-0.5j],
-                       [ 0.5+0.5j,  0.5+0.5j]])
+    matrix = 1/sqrt(2) * np.array([[ 1, 1],
+                                   [ -1,  1]])
     name = 'Y_1_2'
     diagonal = False
     n_qubit = 1
