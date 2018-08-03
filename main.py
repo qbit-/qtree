@@ -11,6 +11,10 @@ def main():
     parser.add_argument('circuitfile', help='file with circuit')
     parser.add_argument('target_state',
                         help='state x against which amplitude is computed')
+    parser.add_argument('--with_quickbb',
+                        dest='quickbb_command',
+                        default='./quickbb',
+                        help='path to quickbb executable')
     args = parser.parse_args()
 
     #target_amp = get_amplitude_from_cirq(
@@ -20,8 +24,8 @@ def main():
 
     graph = circ2graph(circuit)
     cnffile = 'quickbb.cnf'
-    gen_cnf(cnffile,graph)
-    run_quickbb(cnffile)
+    gen_cnf(cnffile, graph)
+    run_quickbb(cnffile, args.quickbb_command)
 
 if __name__=="__main__":
     main()

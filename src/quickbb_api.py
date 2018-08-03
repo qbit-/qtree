@@ -27,7 +27,7 @@ def run_quickbb(cnffile, command='./quickbb_64'):
         log.warn(e)
         pass
 
-    sh = "./quickbb_64 "
+    sh = command + " "
     sh += "--min-fill-ordering "
     sh += "--time 60 "
     sh += f"--outfile {outfile} --statfile {statfile} "
