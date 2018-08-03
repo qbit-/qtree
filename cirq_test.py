@@ -1,15 +1,18 @@
 from src.operators import *
+
 import sys
 import re
 import numpy as np
-OP = qOperation()
+import logging
+log = logging.getLogger('qtree')
 
+OP = qOperation()
 
 def read_circuit_file(filename, max_depth=None):
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
-    
+
     with open(filename, "r") as fp:
         qubit_count = int(fp.readline())
         log.info("There are {:d} qubits in circuit".format(qubit_count))
@@ -85,6 +88,27 @@ def get_decomposed_graphical_model(filename):
     gen_cnf(cnffile, graph)
     #run_quickbb(cnffile)
 
-    
+def test_gates():
+    test_cirquits = [
+        [X_1_2(0)],
+        [Y_1_2(0)],
+        [T(0)],
+        [X(0)],
+        [Y(0)]
+    ]
+    for circuit in test_cirquits:
+        cirq_circuit = cirq.Circuit()
+        side_length = 1
+        cirq_circuit.append(op.to_cirq_2d_circ_op(side_length) for op in circuit)
+
+        print("Testing circuit "+str(circuit))
+        print("Cirq"+str(cirq_circuit))
+        simulator = cirq.google.XmonSimulator()
+
+        result = simulator.simulate(cirq_circuit)
+        print( result.final_state.round(4))
+        print()
+
 if __name__ == "__main__":
-    get_decomposed_graphical_model(sys.argv[1])
+    #get_decomposed_graphical_model(sys.argv[1])
+    test_gates()

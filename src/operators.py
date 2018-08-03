@@ -52,8 +52,9 @@ class qOperation:
 
     def __repr__(self):
         return self.__str__()
+    def apply(self, vec):
+        return np.dot(self.matr, vec)
 
-        
 class H(qOperation):
     matrix = 1/np.sqrt(2) * np.array([[ 1.+0.j,  1.+0.j],
                                       [ 1.+0.j, -1.+0.j]])
@@ -68,10 +69,6 @@ class H(qOperation):
         self._check_qubit_count(qubits)
         self._qubits = qubits
         self.tensor = self.matrix
-
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
-
 
 class cZ(qOperation):
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
@@ -112,10 +109,6 @@ class cZ(qOperation):
         # cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
         return np.array([[t[i,i,j,j] for i in r] for j in r])
 
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
-
-
 class T(qOperation):
     matrix = np.array([[1.+0.j,  0.+0.j        ],
                        [0.+0.j, np.exp(1.j*np.pi/4)]])
@@ -130,9 +123,6 @@ class T(qOperation):
         self._qubits = qubits
         self.tensor = self.matrix
         self.tensor = self.get_simplified()
-
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
 
     def get_simplified(self):
 	# cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
@@ -152,10 +142,6 @@ class X_1_2(qOperation):
         self._qubits = qubits
         self.tensor = self.matrix
 
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
-
-
 class Y_1_2(qOperation):
     matrix = np.array([[ 0.5+0.5j, -0.5-0.5j],
                        [ 0.5+0.5j,  0.5+0.5j]])
@@ -170,6 +156,30 @@ class Y_1_2(qOperation):
         self._qubits = qubits
         self.tensor = self.matrix
 
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
+class X(qOperation):
+    matrix = np.array([[0.+0.j, 1.+0j],
+                       [1.+0j, 0.+0j]])
+    name = 'X'
+    diagonal = False
+    n_qubit = 1
 
+    def cirq_op(self, x): return cirq.X(x)
+
+    def __init__(self, *qubits):
+        self._check_qubit_count(qubits)
+        self._qubits = qubits
+        self.tensor = self.matrix
+
+class Y(qOperation):
+    matrix = np.array([[0.+1j, 0.+0j],
+                       [0.+0j, 0.-1j]])
+    name = 'Y'
+    diagonal = False
+    n_qubit = 1
+
+    def cirq_op(self, x): return cirq.Y(x)
+
+    def __init__(self, *qubits):
+        self._check_qubit_count(qubits)
+        self._qubits = qubits
+        self.tensor = self.matrix
