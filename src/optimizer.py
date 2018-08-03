@@ -272,7 +272,7 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
     for ii, bc_state in enumerate(
             qubit_vector_generator(target_state, n_qubits)):
         output_dict.update({
-            'O{}'.format(ii+1) : #values_dict['H'] @ bc_state #numeration starts at 1!
+            'O{}'.format(ii+1) : values_dict['H'] @ bc_state #numeration starts at 1!
             })
     output_feed_dict = {placeholder_dict[key] : val for key, val in output_dict.items()}
     
