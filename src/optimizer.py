@@ -81,7 +81,7 @@ def circ2buckets(circuit):
     current_var = qubit_count
     layer_variables= list(range(1, qubit_count+1))
 
-    for layer in circuit[1:-1]:
+    for layer in reversed(circuit[1:-1]):
         for op in layer:
             if not op.diagonal:
                 # Non-diagonal gate adds a new variable and
@@ -218,7 +218,7 @@ def get_tf_buckets(buckets, qubit_count):
         tf_bucket = []
         for label, variables in bucket:
 
-            # sort tensor dimensions
+            # sort tensor dimensions (reversed order)
             transpose_order = np.argsort(variables)
             variables = sorted(variables)
 
