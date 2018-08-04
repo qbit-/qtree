@@ -1,9 +1,9 @@
 import numpy as np
 import re
 import cirq
-import logging
-log = logging.getLogger('qtree')
-
+from src.logger_setup import log
+from math import sqrt, pi
+from cmath import exp
 
 class qOperation:
     def factory(self, arg):
@@ -56,8 +56,9 @@ class qOperation:
         return np.dot(self.matr, vec)
 
 class H(qOperation):
-    matrix = 1/np.sqrt(2) * np.array([[ 1.+0.j,  1.+0.j],
-                                      [ 1.+0.j, -1.+0.j]])
+    matrix = 1/sqrt(2) * np.array([[ -1j,  -1j],
+                                   [ -1j, 1j]])
+    # matrix = -1j * matrix
     name = 'H'
     cirq_op = cirq.H
     diagonal = False
@@ -73,8 +74,8 @@ class H(qOperation):
 class cZ(qOperation):
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
                        [ 0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  1.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  0.+0.j, -1.+0.j]])
+                       [ 0.+0.j,  0.+0.j,  1,  0.+0.j],
+                       [ 0.+0.j,  0.+0.j,  0.+0.j, -1]])
     name = 'cZ'
     diagonal = True
     n_qubit = 2
@@ -110,8 +111,8 @@ class cZ(qOperation):
         return np.array([[t[i,i,j,j] for i in r] for j in r])
 
 class T(qOperation):
-    matrix = np.array([[1.+0.j,  0.+0.j        ],
-                       [0.+0.j, np.exp(1.j*np.pi/4)]])
+    matrix = np.array([[exp(1.j*pi/8),  0],
+                       [0,  exp(-1.j*pi/8)]])
     name = 'T'
     n_qubit = 1
 
@@ -129,8 +130,8 @@ class T(qOperation):
         return self.tensor.diagonal()
 
 class X_1_2(qOperation):
-    matrix = np.array([[0.5+0.5j, 0.5-0.5j],
-                       [0.5-0.5j, 0.5+0.5j]])
+    matrix = 1/sqrt(2) * np.array([[1, -1j],
+                                   [-1j, 1]])
     name = 'X_1_2'
     diagonal = False
     n_qubit = 1
@@ -143,8 +144,8 @@ class X_1_2(qOperation):
         self.tensor = self.matrix
 
 class Y_1_2(qOperation):
-    matrix = np.array([[ 0.5+0.5j, -0.5-0.5j],
-                       [ 0.5+0.5j,  0.5+0.5j]])
+    matrix = 1/sqrt(2) * np.array([[ 1, 1],
+                                   [ -1,  1]])
     name = 'Y_1_2'
     diagonal = False
     n_qubit = 1
@@ -177,9 +178,49 @@ class Y(qOperation):
     diagonal = False
     n_qubit = 1
 
-    def cirq_op(self, x): return cirq.Y(x)
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
-        self.tensor = self.matrix
+def read_circuit_file(filename, max_depth=None):
+    log.info("reading file {}".format(filename))
+    circuit = []
+    circuit_layer = []
+    
+    with open(filename, "r") as fp:
+        qubit_count = int(fp.readline())
+        log.info("There are {:d} qubits in circuit".format(qubit_count))
+        n_ignored_layers = 0
+        current_layer = 0
+
+        for line in fp:
+            m = re.search(r'(?P<layer>[0-9]+) (?=[a-z])', line)
+            if m is None:
+                raise Exception("file format error at line {}".format(idx))
+            # Read circuit layer by layer
+            layer_num = int(m.group('layer'))
+
+            if max_depth is not None and layer_num > max_depth:
+                n_ignored_layers = layer_num - max_depth
+                continue
+
+            if layer_num > current_layer:
+                circuit.append(circuit_layer)
+                circuit_layer = []
+                current_layer = layer_num
+
+            op_str = line[m.end():]
+            op = qOperation().factory(op_str)
+            circuit_layer.append(op)
+
+        circuit.append(circuit_layer) # last layer
+
+        if n_ignored_layers > 0:
+            log.info("Ignored {} layers".format(n_ignored_layers))
+
+    return qubit_count, circuit
+
+operator_matrices_dict = {
+    'H' : H(1).matrix,
+    'X_1_2' : X_1_2(1).matrix,
+    'Y_1_2' : Y_1_2(1).matrix,
+    'T' : np.diag(T(1).matrix),
+    'cZ' : np.diag(cZ(1, 1).matrix).reshape([2, 2])
+}
