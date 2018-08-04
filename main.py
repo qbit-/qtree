@@ -1,31 +1,19 @@
 import argparse
-
-from src.operators import *
-from src.logging import log
-from src.optimizer  import *
-from src.quickbb_api import *
-from cirq_test import *
+from src.logger_setup import log
+from src.cirq_test import contract_with_tensorflow
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('circuitfile', help='file with circuit')
-    parser.add_argument('target_state',
-                        help='state x against which amplitude is computed')
+    parser.add_argument('circuit_file', help='file with circuit')
+    # parser.add_argument('target_state',
+    #                     help='state x against which amplitude is computed')
     parser.add_argument('--with_quickbb',
                         dest='quickbb_command',
                         default='./quickbb',
                         help='path to quickbb executable')
     args = parser.parse_args()
 
-    #target_amp = get_amplitude_from_cirq(
-    #   args.circuitfile, args.target_state)
-
-    n_qubits, circuit = read_circuit_file(args.circuitfile)
-
-    graph = circ2graph(circuit)
-    cnffile = 'quickbb.cnf'
-    gen_cnf(cnffile, graph)
-    run_quickbb(cnffile, args.quickbb_command)
+    contract_with_tensorflow(args.circuit_file, args.quickbb_command)
 
 if __name__=="__main__":
     main()

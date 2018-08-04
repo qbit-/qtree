@@ -180,3 +180,11 @@ def read_circuit_file(filename, max_depth=None):
             log.info("Ignored {} layers".format(n_ignored_layers))
 
     return qubit_count, circuit
+
+operator_matrices_dict = {
+    'H' : H(1).matrix,
+    'X_1_2' : X_1_2(1).matrix,
+    'Y_1_2' : Y_1_2(1).matrix,
+    'T' : np.diag(T(1).matrix),
+    'cZ' : np.diag(cZ(1, 1).matrix).reshape([2, 2])
+}

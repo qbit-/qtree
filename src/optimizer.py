@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 import logging as log
-from .operators import *
+import src.operators as ops
 
 UP   = np.array([1, 0])
 DOWN = np.array([0, 1])
@@ -33,7 +33,7 @@ def circ2graph(circuit):
                 current_var += 1
                 variable_col[op._qubits[0]] = current_var
 
-            if isinstance(op,cZ):
+            if isinstance(op, ops.cZ):
                 # cZ connects two variables with an edge
                 g.add_edge(
                    variable_col[op._qubits[0]],
@@ -75,7 +75,7 @@ def circ2buckets(circuit):
     buckets = []
     for ii in range(1, qubit_count+1):
         buckets.append(
-            [['O{}'.format(ii), [ii]]]
+            [[f'O{ii}', [ii]]]
         )
 
     current_var = qubit_count
@@ -106,7 +106,7 @@ def circ2buckets(circuit):
                 current_var += 1
                 layer_variables[op._qubits[0]] = current_var
 
-            if isinstance(op,cZ):
+            if isinstance(op,ops.cZ):
                 var1 = layer_variables[op._qubits[0]]
                 var2 = layer_variables[op._qubits[1]]
 
@@ -121,7 +121,7 @@ def circ2buckets(circuit):
                     [op.name, [var1, var2]]
                     )
 
-            if isinstance(op, T):
+            if isinstance(op, ops.T):
                 var1 = layer_variables[op._qubits[0]]
                 # Do not add any variables but add tensor
                 buckets[var1-1].append(
@@ -245,13 +245,7 @@ def qubit_vector_generator(target_state, n_qubits):
 def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
 
     # Actual values of gates
-    values_dict = {
-        'H' : H(1).matrix,
-        'X_1_2' : X_1_2(1).matrix,
-        'Y_1_2' : Y_1_2(1).matrix,
-        'T' : np.diag(T(1).matrix),
-        'cZ' : np.diag(cZ(1, 1).matrix).reshape([2, 2])
-        }
+    values_dict = ops.operator_matrices_dict
 
     # Fill all common gate's placeholders
     feed_dict = {placeholder_dict[key]: values_dict[key] for key in values_dict.keys()}
@@ -300,9 +294,14 @@ def num_to_alpha(num):
     
 def get_einsum_expr(idx1, idx2):
     result_indices = sorted(list(set(idx1 + idx2)))
-    str1 = ''.join(num_to_alpha(ii) for ii in idx1)
-    str2 = ''.join(num_to_alpha(ii) for ii in idx2)
-    str3 = ''.join(num_to_alpha(ii) for ii in result_indices)
+    # remap indices to reduce their order, as einsum does not like
+    # large numbers
+    idx_to_least_idx = {old_idx : new_idx for new_idx, old_idx
+                        in enumerate(result_indices)}
+
+    str1 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in idx1)
+    str2 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in idx2)
+    str3 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in result_indices)
     return str1 + ',' + str2 + '->' + str3
 
 
