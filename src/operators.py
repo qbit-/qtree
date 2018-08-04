@@ -2,7 +2,8 @@ import numpy as np
 import logging as log
 import re
 import cirq
-from math import sqrt
+from math import sqrt, pi
+from cmath import exp
 
 class qOperation:
     def factory(self, arg):
@@ -54,8 +55,8 @@ class qOperation:
 
         
 class H(qOperation):
-    matrix = 1/np.sqrt(2) * np.array([[ -1.j,  -1.+0.j],
-                                      [ -1.j, 1.j]])
+    matrix = 1/sqrt(2) * np.array([[ -1j,  -1j],
+                                   [ -1j, 1j]])
     # matrix = -1j * matrix
     name = 'H'
     cirq_op = cirq.H
@@ -92,8 +93,8 @@ class cZ(qOperation):
 
 
 class T(qOperation):
-    matrix = np.array([[1.+0.j,  0.+0.j        ],
-                       [0.+0.j, np.exp(1.j*np.pi/4)]])
+    matrix = np.array([[exp(-1.j*pi/8),  0],
+                       [0,  exp(1.j*pi/8)]])
     name = 'T'
     n_qubit = 1
 

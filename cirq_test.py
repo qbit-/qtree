@@ -93,9 +93,9 @@ def contract_with_tensorflow(filename):
 
     amplitudes_reference = get_amplitudes_from_cirq(filename)
     print('Result:')
-    print(np.array(amplitudes))    
+    print(np.round(np.array(amplitudes), 3))    
     print('Reference:')
-    print(amplitudes_reference)
+    print(np.round(amplitudes_reference, 3))
 
 
 if __name__ == "__main__":
