@@ -93,8 +93,8 @@ class cZ(qOperation):
 
 
 class T(qOperation):
-    matrix = np.array([[exp(-1.j*pi/8),  0],
-                       [0,  exp(1.j*pi/8)]])
+    matrix = np.array([[exp(1.j*pi/8),  0],
+                       [0,  exp(-1.j*pi/8)]])
     name = 'T'
     n_qubit = 1
 
