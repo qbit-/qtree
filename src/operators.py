@@ -76,8 +76,8 @@ class H(qOperation):
 class cZ(qOperation):
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
                        [ 0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  -1.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  0.+0.j, 1.j]])
+                       [ 0.+0.j,  0.+0.j,  1,  0.+0.j],
+                       [ 0.+0.j,  0.+0.j,  0.+0.j, -1]])
     name = 'cZ'
     diagonal = True
     n_qubit = 2
