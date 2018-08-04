@@ -5,8 +5,8 @@ import tensorflow as tf
 import logging as log
 from .operators import *
 
-DOWN = np.array([0, 1])
 UP   = np.array([1, 0])
+DOWN = np.array([0, 1])
 
 def circ2graph(circuit):
     g = nx.Graph()
@@ -75,7 +75,7 @@ def circ2buckets(circuit):
     buckets = []
     for ii in range(1, qubit_count+1):
         buckets.append(
-            [['I{}'.format(ii), [ii]]]
+            [['O{}'.format(ii), [ii]]]
         )
 
     current_var = qubit_count
@@ -132,7 +132,7 @@ def circ2buckets(circuit):
     for qubit_idx, var in zip(range(1, qubit_count+1),
                               layer_variables):
         buckets[var-1].append(
-            [f'O{qubit_idx}', [var, ]]
+            [f'I{qubit_idx}', [var, ]]
         )
         
     v = g.number_of_nodes()
