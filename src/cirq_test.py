@@ -2,6 +2,7 @@ import src.operators as ops
 import cirq
 import src.optimizer as opt
 from src.quickbb_api import gen_cnf, run_quickbb
+from src.graph_model import get_peo
 import sys
 import re
 import numpy as np
@@ -41,7 +42,7 @@ def get_decomposed_graphical_model(
 
 
 def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
-    #filename = 'inst_2x2_1_1.txt'
+    filename = 'inst_2x2_7_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
 
@@ -49,17 +50,7 @@ def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64
     buckets, graph = opt.circ2buckets(circuit)
 
     if graph.number_of_edges() > 1: #only if not elementary cliques 
-        cnffile = 'quickbb.cnf'
-        gen_cnf(cnffile, graph)
-        out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
-
-        # Extract order
-        m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
-                      out_bytes, flags=re.MULTILINE | re.DOTALL )
-
-        peo = np.array([int(ii) for ii in m['peo'].split()])
-        treewidth = int(m['treewidth'])
-        
+        peo, max_mem = get_peo(graph)
         perm_buckets = opt.transform_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
