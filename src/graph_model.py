@@ -1,5 +1,6 @@
 import numpy as np
 import re
+import copy
 from src.quickbb_api import gen_cnf, run_quickbb
 
 
@@ -45,10 +46,19 @@ def get_peo(graph, n_qubit_parralel=0, fix_variables=None):
     return peo, 2**treewidth
 
 
-def get_peo_random(graph, n_qubit_parralel=0, fix_variables=None):
+def get_peo_random(old_graph, n_qubit_parralel=0, edge_variables=None):
     """
     Same as above, but with randomly chosen nodes
     to parallelize. For testing only
     """
-    pass
-    
+    graph = copy.deepcopy(old_graph)
+
+    indices = list(graph.nodes())
+    idx_parallel = np.random.choice(
+        indices, size=n_qubit_parralel, replace=False)
+
+    for idx in idx_parallel:
+        graph.remove_node(idx)
+    print(idx_parallel)
+
+    return None, None

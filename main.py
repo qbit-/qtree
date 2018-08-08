@@ -1,6 +1,8 @@
 import argparse
 from src.logger_setup import log
 from src.cirq_test import contract_with_tensorflow
+from src.cirq_test import get_parallel_contraction
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -13,7 +15,8 @@ def main():
                         help='path to quickbb executable')
     args = parser.parse_args()
 
-    contract_with_tensorflow(args.circuit_file, args.quickbb_command)
+    # contract_with_tensorflow(args.circuit_file, args.quickbb_command)
+    get_parallel_contraction(args.circuit_file)
 
 if __name__=="__main__":
     main()

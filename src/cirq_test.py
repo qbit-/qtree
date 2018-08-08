@@ -2,7 +2,7 @@ import src.operators as ops
 import cirq
 import src.optimizer as opt
 from src.quickbb_api import gen_cnf, run_quickbb
-from src.graph_model import get_peo
+from src.graph_model import get_peo, get_peo_random
 import sys
 import re
 import numpy as np
@@ -42,7 +42,7 @@ def get_decomposed_graphical_model(
 
 
 def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
-    filename = 'inst_2x2_7_0.txt'
+    # filename = 'inst_2x2_7_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
 
@@ -73,6 +73,15 @@ def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
 
+    
+def get_parallel_contraction(filename):
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    side_length = int(np.sqrt(n_qubits))
+
+    # Run quickbb
+    buckets, graph = opt.circ2buckets(circuit)
+
+    peo, max_mem = get_peo_random(graph, 2)
 
 if __name__ == "__main__":
     contract_with_tensorflow('inst_2x2_7_0.txt')
