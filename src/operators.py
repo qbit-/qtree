@@ -56,8 +56,8 @@ class qOperation:
         return np.dot(self.matr, vec)
 
 class H(qOperation):
-    matrix = 1/sqrt(2) * np.array([[ -1j,  -1j],
-                                   [ -1j, 1j]])
+    matrix = 1/sqrt(2) * np.array([[ 1j,  1j],
+                                   [ 1j, -1j]])
     # matrix = -1j * matrix
     name = 'H'
     cirq_op = cirq.H
@@ -69,7 +69,7 @@ class H(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        self.tensor = self.matrix
+
 
 class cZ(qOperation):
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
@@ -85,34 +85,11 @@ class cZ(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        # indexes are (in1,out1,in2,out2)
-        self.tensor = np.array(
-            [
-                [
-                    [[1.+0j, 0+0j],
-                     [0.+0j, 1+0j]],
-                    [[0.+0j, 0+0j],
-                     [0.+0j, 0+0j]]
-                ],
-                [
-                    [[0.+0j, 0+0j],
-                     [0.+0j, 0+0j]],
-                    [[1.+0j, 0+0j],
-                     [0.+0j, -1+0j]]
-                ]
-            ]
-        )
-        self.tensor = self.get_simplified()
 
-    def get_simplified(self):
-        t = self.tensor
-        r = np.arange(t.shape[0])
-        # cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
-        return np.array([[t[i,i,j,j] for i in r] for j in r])
 
 class T(qOperation):
-    matrix = np.array([[exp(1.j*pi/8),  0],
-                       [0,  exp(-1.j*pi/8)]])
+    matrix = np.array([[exp(-1.j*pi/8),  0],
+                       [0,  exp(1.j*pi/8)]])
     name = 'T'
     n_qubit = 1
 
@@ -122,16 +99,11 @@ class T(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        self.tensor = self.matrix
-        self.tensor = self.get_simplified()
 
-    def get_simplified(self):
-	# cZ_ijkl (diagonal)-> cZ_iijj -> cz_ij
-        return self.tensor.diagonal()
 
 class X_1_2(qOperation):
-    matrix = 1/sqrt(2) * np.array([[1, -1j],
-                                   [-1j, 1]])
+    matrix = 1/sqrt(2) * np.array([[1, 1j],
+                                   [1j, 1]])
     name = 'X_1_2'
     diagonal = False
     n_qubit = 1
@@ -141,7 +113,7 @@ class X_1_2(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        self.tensor = self.matrix
+
 
 class Y_1_2(qOperation):
     matrix = 1/sqrt(2) * np.array([[ 1, 1],
@@ -155,7 +127,7 @@ class Y_1_2(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        self.tensor = self.matrix
+
 
 class X(qOperation):
     matrix = np.array([[0.+0.j, 1.+0j],
@@ -169,11 +141,11 @@ class X(qOperation):
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
-        self.tensor = self.matrix
+
 
 class Y(qOperation):
-    matrix = np.array([[0.+1j, 0.+0j],
-                       [0.+0j, 0.-1j]])
+    matrix = np.array([[0.-1j, 0.+0j],
+                       [0.+0j, 0.+1j]])
     name = 'Y'
     diagonal = False
     n_qubit = 1
