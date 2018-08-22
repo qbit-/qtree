@@ -1,10 +1,32 @@
 import numpy as np
 import re
 import copy
+import networkx as nx
 from src.quickbb_api import gen_cnf, run_quickbb
+from src.logger_setup import log
 
 
-def get_peo(graph, n_qubit_parralel=0, fix_variables=None):
+def relabel_graph_nodes(graph, label_dict=None):
+    """
+    Relabel graph nodes to consequtive numbers. If label
+    dictionary is not provided, a relabelled graph and a
+    dict old->new will be returned. Otherwise, the graph
+    is relabelled (and returned) according to the label dictionary and
+    an inverted dictionary is returned.
+    """
+    if label_dict is None:
+        label_dict = {old : num for num, old in
+                      enumerate(graph.nodes(data=False), 1)}
+        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+    else:
+        # invert the dictionary
+        label_dict = {val : key for key, val in label_dict.items()}
+        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+        
+    return new_graph, label_dict
+
+
+def get_peo(graph):
     """
     Calculates the elimination order for an undirected
     graphical model of the circuit. Optionally finds `n_qubit_parralel`
@@ -17,12 +39,6 @@ def get_peo(graph, n_qubit_parralel=0, fix_variables=None):
     ----------
     graph : networkx.Graph
           graph of the undirected graphical model to decompose
-    n_qubit_parralel : int, default 0
-          parallelize over this nimber of qubits. Results in
-          2**n_qubit_parralel independent jobs
-    fix_variables : list, default None
-          list containing edge variables which should not be
-          eliminated
     Returns
     -------
     peo : list
@@ -33,6 +49,8 @@ def get_peo(graph, n_qubit_parralel=0, fix_variables=None):
     """
 
     cnffile = 'quickbb.cnf'
+    graph, label_dict = relabel_graph_nodes(graph)
+    
     gen_cnf(cnffile, graph)
     out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
 
@@ -41,12 +59,17 @@ def get_peo(graph, n_qubit_parralel=0, fix_variables=None):
                       out_bytes, flags=re.MULTILINE | re.DOTALL )
 
     peo = [int(ii) for ii in m['peo'].split()]
+    
+    # invert the label dictionary and relabel peo back
+    label_dict = {val : key for key, val in label_dict.items()}
+    peo = [label_dict[pp] for pp in peo]
+    
     treewidth = int(m['treewidth'])
 
     return peo, 2**treewidth
 
 
-def get_peo_random(old_graph, n_qubit_parralel=0, edge_variables=None):
+def get_peo_parallel_random(old_graph, n_qubit_parralel=0):
     """
     Same as above, but with randomly chosen nodes
     to parallelize. For testing only
@@ -59,6 +82,18 @@ def get_peo_random(old_graph, n_qubit_parralel=0, edge_variables=None):
 
     for idx in idx_parallel:
         graph.remove_node(idx)
-    print(idx_parallel)
 
-    return None, None
+    log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
+
+    peo, max_mem = get_peo(graph)
+
+    # find isolated nodes as they may emerge after split
+    # and are not accounted by quickbb. They don't affect
+    # scaling and may be added to the end of the bucket list
+
+    isolated_nodes = nx.isolates(graph)    
+    peo = peo + sorted(isolated_nodes)
+    
+    return peo, max_mem, sorted(idx_parallel), graph
+
+

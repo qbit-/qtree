@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from src.logger_setup import log
 import src.operators as ops
+import io
 
 UP   = np.array([1, 0])
 DOWN = np.array([0, 1])
@@ -148,17 +149,15 @@ def circ2buckets(circuit):
         
     v = g.number_of_nodes()
     e = g.number_of_edges()
-    print(g)
+
     log.info(f"Generated graph with {v} nodes and {e} edges")
     log.info(f"last index contains from {layer_variables}")
 
-    aj = nx.adjacency_matrix(g)
-    matfile = 'adjacency_graph.mat'
-    np.savetxt(matfile ,aj.toarray(),delimiter=" ",fmt='%i')
-    with open(matfile,'r') as fp:
-        s = fp.read()
-        #s = s.replace(' ','-')
-        print(s.replace('0','-'))
+    with io.StringIO() as outstrings:
+        aj = nx.adjacency_matrix(g)
+        np.savetxt(outstrings, aj.toarray(), delimiter=" ",fmt='%i')
+        s = outstrings.getvalue()
+        log.info("Adjacency matrix:\n" + s.replace('0','-'))
 
     plt.figure(figsize=(10,10))
     nx.draw(g, with_labels=True)
@@ -198,7 +197,7 @@ def get_tf_buckets(buckets, qubit_count):
     cZ = tf.placeholder(tf.complex64, [2, 2], 'cZ')
     T = tf.placeholder(tf.complex64, [2], 'T')
     
-    elements = {'X_1_2': X_1_2, 'Y_1_2': Y_1_2,
+    placeholder_dict = {'X_1_2': X_1_2, 'Y_1_2': Y_1_2,
                 'H': H, 'cZ': cZ, 'T': T}
 
     # Add input vectors
@@ -207,7 +206,7 @@ def get_tf_buckets(buckets, qubit_count):
     inputs = [tf.placeholder(tf.complex64, [2], name)
               for name in input_names]
     
-    elements.update(
+    placeholder_dict.update(
         dict(zip(
             input_names, inputs))
     )
@@ -218,7 +217,7 @@ def get_tf_buckets(buckets, qubit_count):
     outputs = [tf.placeholder(tf.complex64, [2], name)
                for name in output_names]
 
-    elements.update(
+    placeholder_dict.update(
         dict(zip(
             output_names, outputs))
     )
@@ -235,20 +234,32 @@ def get_tf_buckets(buckets, qubit_count):
 
             tf_bucket.append(
                 (
-                    tf.transpose(elements[label],
+                    tf.transpose(placeholder_dict[label],
                               perm=transpose_order),
                     variables
                 )
             )
         tf_buckets.append(tf_bucket)
     
-    return tf_buckets, elements
+    return tf_buckets, placeholder_dict
+
+
+def int_to_bitstring(integer, width):
+    """
+    Transforms an integer to its bitsting of a specified width 
+    """
+    bitstring = bin(integer)[2:]
+    if len(bitstring) < width:
+        bitstring = '0' * (width - len(bitstring)) + bitstring
+    return bitstring
 
 
 def qubit_vector_generator(target_state, n_qubits):
-    bitstring = bin(target_state)[2:]
-    if len(bitstring) < n_qubits:
-        bitstring = '0' * (n_qubits - len(bitstring)) + bitstring
+    """
+    Generates a sequence of qubits corresponding to the
+    binary representation of the target_state
+    """
+    bitstring = int_to_bitstring(target_state, n_qubits)
     for bit in bitstring:
         yield DOWN if bit == '0' else UP
 
@@ -284,6 +295,63 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
     feed_dict.update(output_feed_dict)
 
     return feed_dict
+
+
+def transform_buckets_parallel(old_buckets, permutation, idx_parallel):
+    """
+    """
+    
+    all_variables = permutation + idx_parallel
+    buckets = transform_buckets(old_buckets, all_variables)
+    # drop last buckets as we don't need to contract over parallelized variables
+    return buckets
+
+
+def slice_tf_buckets(tf_buckets, pdict, idx_parallel):
+    """
+    """
+
+    # Define slice variables
+    slice_var_dict = {'q_{}'.format(var) :
+                 tf.placeholder(dtype=tf.int32,
+                                shape=[], name='q_{}'.format(var))
+                 for var in idx_parallel}
+    pdict.update(slice_var_dict)
+
+    # Create tf buckets from unordered buckets
+    sliced_buckets = []
+    for bucket in tf_buckets:
+        sliced_bucket = []
+        for tensor, variables in bucket:
+            slice_bounds = []
+            new_shape = []
+            for var in variables:
+                if var in idx_parallel:
+                    slice_bounds.append(slice_var_dict[f'q_{var}'])
+                    new_shape.append(1)
+                else:
+                    slice_bounds.append(slice(None))
+                    new_shape.append(2)
+            sliced_bucket.append(
+                (tf.reshape(tensor[slice_bounds], new_shape), variables)
+            )
+        sliced_buckets.append(sliced_bucket)
+
+    return sliced_buckets, pdict
+
+
+def slice_values_generator(comm_size, rank, idx_parallel):
+    """
+    Generates dictionaries containing current values for
+    each variable we parallelize over
+    """
+    var_names = ["q_{}".format(var) for var in idx_parallel]
+    
+    # iterate over all possible values of variables idx_parallel
+    for ii in range(rank, 2**len(idx_parallel), comm_size):
+        bitstring = int_to_bitstring(integer=ii, width=len(idx_parallel))
+        yield dict(zip(var_names, bitstring))
+        
 
 def run_tf_session(tf_variable, feed_dict):
     
