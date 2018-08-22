@@ -1,3 +1,7 @@
+"""
+Operations with graphical models
+"""
+
 import numpy as np
 import re
 import copy
@@ -10,18 +14,33 @@ def relabel_graph_nodes(graph, label_dict=None):
     """
     Relabel graph nodes to consequtive numbers. If label
     dictionary is not provided, a relabelled graph and a
-    dict old->new will be returned. Otherwise, the graph
-    is relabelled (and returned) according to the label dictionary and
-    an inverted dictionary is returned.
+    dict {new : old} will be returned. Otherwise, the graph
+    is relabelled (and returned) according to the label
+    dictionary and an inverted dictionary is returned.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+            graph to relabel
+    label_dict : optional, dict-like
+            dictionary for relabelling {old : new}
+
+    Returns
+    -------
+    new_graph : networkx.Graph
+            relabeled graph
+    label_dict : dict
+            {new : old} dictionary for inverse relabeling
     """
     if label_dict is None:
         label_dict = {old : num for num, old in
                       enumerate(graph.nodes(data=False), 1)}
         new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
     else:
-        # invert the dictionary
-        label_dict = {val : key for key, val in label_dict.items()}
         new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+
+    # invert the dictionary
+    label_dict = {val : key for key, val in label_dict.items()}
         
     return new_graph, label_dict
 
@@ -38,14 +57,14 @@ def get_peo(graph):
     Parameters
     ----------
     graph : networkx.Graph
-          graph of the undirected graphical model to decompose
+            graph of the undirected graphical model to decompose
+    
     Returns
     -------
     peo : list
-          list containing indices in order to eliminate
+          list containing indices in loptimal order of elimination
     max_mem : int
-          memory amount needed to perform the contraction
-          (in floats)
+          leading memory order needed to perform the contraction (in floats)
     """
 
     cnffile = 'quickbb.cnf'
@@ -69,16 +88,35 @@ def get_peo(graph):
     return peo, 2**treewidth
 
 
-def get_peo_parallel_random(old_graph, n_qubit_parralel=0):
+def get_peo_parallel_random(old_graph, n_var_parallel=0):
     """
-    Same as above, but with randomly chosen nodes
-    to parallelize. For testing only
+    Same as :py:meth:`get_peo`, but with randomly chosen nodes
+    to parallelize over.
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph
+                graph to contract (after eliminating variables which
+                are parallelized over)
+    n_var_parallel : int
+                number of variables to eliminate by parallelization
+
+    Returns
+    -------
+    peo : list
+          list containing indices in loptimal order of elimination
+    max_mem : int
+          leading memory order needed to perform the contraction (in floats)
+    idx_parallel : list
+          variables removed by parallelization
+    graph : networkx.Graph
+          new graph without parallelized variables
     """
     graph = copy.deepcopy(old_graph)
 
     indices = list(graph.nodes())
     idx_parallel = np.random.choice(
-        indices, size=n_qubit_parralel, replace=False)
+        indices, size=n_var_parallel, replace=False)
 
     for idx in idx_parallel:
         graph.remove_node(idx)
@@ -89,7 +127,7 @@ def get_peo_parallel_random(old_graph, n_qubit_parralel=0):
 
     # find isolated nodes as they may emerge after split
     # and are not accounted by quickbb. They don't affect
-    # scaling and may be added to the end of the bucket list
+    # scaling and may be added to the end of the variables list
 
     isolated_nodes = nx.isolates(graph)    
     peo = peo + sorted(isolated_nodes)

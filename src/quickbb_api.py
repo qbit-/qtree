@@ -4,7 +4,17 @@ from src.logger_setup import log
 
 import os
 
-def gen_cnf(filename,g):
+def gen_cnf(filename, g):
+    """
+    Genarate QuickBB input file for the graph g
+
+    Parameters
+    ----------
+    filename : str
+           Output file name
+    g : networkx.Graph
+           Undirected graphical model
+    """
     v = g.number_of_nodes()
     e = g.number_of_edges()
     log.info(f"generating config file {filename}")
@@ -18,6 +28,21 @@ def gen_cnf(filename,g):
         fp.write(cnf)
 
 def run_quickbb(cnffile, command='./quickbb_64'):
+    """
+    Run QuickBB program and collect its output
+
+    Parameters
+    ----------
+    cnffile : str
+         Path to the QuickBB input file
+    command : str, optional
+         QuickBB command name
+
+    Returns
+    -------
+    output : str
+         Process output
+    """
     outfile = 'quickbb_out.qbb'
     statfile = 'quickbb_stat.qbb'
     try:

@@ -1,3 +1,6 @@
+"""
+This module implements quantum gates from the CMON set of Google
+"""
 import numpy as np
 import re
 import cirq
@@ -6,7 +9,21 @@ from math import sqrt, pi
 from cmath import exp
 
 class qOperation:
+    """
+    Factory class for quantum gates.
+    """
     def factory(self, arg):
+        """
+        Creates appropriate gates from strings of the form:
+
+        | x_1_2 1
+        | cz 3 4
+
+        Parameters
+        ----------
+        arg : str
+              string to use
+        """
         if isinstance(arg, str):
             return self._create_from_string(arg)
 
@@ -56,9 +73,11 @@ class qOperation:
         return np.dot(self.matr, vec)
 
 class H(qOperation):
+    """
+    Hadamard gate
+    """
     matrix = 1/sqrt(2) * np.array([[ 1j,  1j],
                                    [ 1j, -1j]])
-    # matrix = -1j * matrix
     name = 'H'
     cirq_op = cirq.H
     diagonal = False
@@ -72,6 +91,9 @@ class H(qOperation):
 
 
 class cZ(qOperation):
+    """
+    Controlled :math:`Z` gate
+    """
     matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
                        [ 0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
                        [ 0.+0.j,  0.+0.j,  1,  0.+0.j],
@@ -88,6 +110,9 @@ class cZ(qOperation):
 
 
 class T(qOperation):
+    """
+    :math:`T`-gate
+    """
     matrix = np.array([[exp(-1.j*pi/8),  0],
                        [0,  exp(1.j*pi/8)]])
     name = 'T'
@@ -102,6 +127,10 @@ class T(qOperation):
 
 
 class X_1_2(qOperation):
+    r"""
+    :math:`X^{1/2}`
+    gate
+    """
     matrix = 1/sqrt(2) * np.array([[1, 1j],
                                    [1j, 1]])
     name = 'X_1_2'
@@ -116,6 +145,9 @@ class X_1_2(qOperation):
 
 
 class Y_1_2(qOperation):
+    r"""
+    :math:`Y^{1/2}` gate
+    """
     matrix = 1/sqrt(2) * np.array([[ 1, 1],
                                    [ -1,  1]])
     name = 'Y_1_2'
@@ -152,6 +184,22 @@ class Y(qOperation):
 
 
 def read_circuit_file(filename, max_depth=None):
+    """
+    Read circuit file and return quantum circuit in the
+    form of a list of lists
+
+    Parameters
+    ----------
+    filename : str
+             circuit file in the format of Sergio Boixo
+    max_depth : int
+             maximal depth of gates to read
+
+    Returns
+    -------
+    circuit : list of lists
+            quantum circuit as a list of layers of gates
+    """
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
@@ -189,6 +237,9 @@ def read_circuit_file(filename, max_depth=None):
 
     return qubit_count, circuit
 
+# Dictionary containing (compressed) entries of all operators
+# in this module. Only nonzero entries are listed, which means diagonal
+# for diagonal matrices or double diagonal for diagonal fourth order tensors
 operator_matrices_dict = {
     'H' : H(1).matrix,
     'X_1_2' : X_1_2(1).matrix,

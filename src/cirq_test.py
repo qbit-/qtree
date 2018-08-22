@@ -1,3 +1,7 @@
+"""
+Test programs to demonstrate various use cases of the
+Qtree quantum circuit simulator.
+"""
 import src.operators as ops
 import cirq
 import src.optimizer as opt
@@ -11,6 +15,9 @@ import tensorflow as tf
 
 
 def get_amplitudes_from_cirq(filename):
+    """
+    Calculates amplitudes for a circuit in file ``filename`` using Cirq 
+    """
     #filename = 'inst_2x2_1_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
@@ -30,9 +37,13 @@ def get_amplitudes_from_cirq(filename):
     return result.final_state
 
 
-def get_decomposed_graphical_model(
+def get_optimal_graphical_model(
         filename,
         quickbb_command='./quickbb/run_quickbb_64.sh'):
+    """
+    Builds a graphical model to contract a circuit in ``filename``
+    and finds its tree decomposition
+    """
     #filename = 'inst_2x2_1_1.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
@@ -43,7 +54,12 @@ def get_decomposed_graphical_model(
     run_quickbb(cnffile, quickbb_command)
 
 
-def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+def eval_circuit_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+    """
+    Loads circuit from file and evaluates all amplitudes
+    using the bucket elimination algorithm (with tensorflow tensors).
+    Same amplitudes are evaluated with Cirq for comparison.
+    """
     # filename = 'inst_2x2_7_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
@@ -76,7 +92,14 @@ def contract_with_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64
     print(np.round(amplitudes_reference, 3))
 
     
-def prepare_paralell_contraction(filename):
+def prepare_parallel_evaluation(filename):
+    """
+    Prepares for parallel evaluation of the quantum circuit.
+    Some of the variables in the circuit are parallelized over.
+    Symbolic bucket elimination is performed with tensorflow and
+    the resulting computation graph (as GraphDef) and other
+    supporting information is returned
+    """
     #filename = 'inst_2x2_7_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
@@ -88,8 +111,8 @@ def prepare_paralell_contraction(filename):
     peo, max_mem, idx_parallel, reduced_graph = gm.get_peo_parallel_random(graph, 2)
 
     # Permute buckets to the order of optimal contraction
-    perm_buckets = opt.transform_buckets_parallel(
-        buckets, peo, idx_parallel)
+    perm_buckets = opt.transform_buckets(
+        buckets, peo + idx_parallel)
 
     # Transform tensor labels in buckets to tensorflow placeholders
     tf_buckets, placeholder_dict = opt.get_tf_buckets(
@@ -116,16 +139,24 @@ def prepare_paralell_contraction(filename):
 
 
 def extract_placeholder_dict(tf_graph, variable_names):
+    """
+    Extract placeholders from the tensorflow computation Graph.
+
+    Returns
+    -------
+    pdict : dict
+        List containing {label : tensorflow placeholder} pairs
+    """
     return {
         name : tf_graph.get_tensor_by_name(name + ':0') for 
         name in variable_names
     }
 
 
-def mpi_parallel_contraction(filename):
+def eval_circuit_parallel_mpi(filename):
     """
-    Contract quantum circuit using MPI to parallelize
-    over some variables
+    Evaluate quantum circuit using MPI to parallelize
+    over some of the variables.
     """
     comm = MPI.COMM_WORLD
     comm_size = comm.size
@@ -133,7 +164,7 @@ def mpi_parallel_contraction(filename):
     status = MPI.Status()
 
     if rank == 0:
-        env = prepare_paralell_contraction(filename)
+        env = prepare_parallel_evaluation(filename)
     else:
         env = None
 
@@ -184,4 +215,4 @@ def mpi_parallel_contraction(filename):
 
 if __name__ == "__main__":
     # contract_with_tensorflow('inst_2x2_7_1.txt')
-    mpi_parallel_contraction('inst_2x2_7_0.txt')
+    eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
