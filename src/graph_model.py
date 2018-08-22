@@ -78,9 +78,8 @@ def get_peo(graph):
                       out_bytes, flags=re.MULTILINE | re.DOTALL )
 
     peo = [int(ii) for ii in m['peo'].split()]
-    
-    # invert the label dictionary and relabel peo back
-    label_dict = {val : key for key, val in label_dict.items()}
+
+    # Map peo back to original indices
     peo = [label_dict[pp] for pp in peo]
     
     treewidth = int(m['treewidth'])
