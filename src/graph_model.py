@@ -134,3 +134,51 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
     return peo, max_mem, sorted(idx_parallel), graph
 
 
+def get_peo_parallel_degree(old_graph, n_var_parallel=0):
+    """
+    Parallel-splitted version of :py:meth:`get_peo` with greedy
+    choice of nodes to split.
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph
+                graph to contract (after eliminating variables which
+                are parallelized over)
+    n_var_parallel : int
+                number of variables to eliminate by parallelization
+
+    Returns
+    -------
+    peo : list
+          list containing indices in loptimal order of elimination
+    max_mem : int
+          leading memory order needed to perform the contraction (in floats)
+    idx_parallel : list
+          variables removed by parallelization
+    graph : networkx.Graph
+          new graph without parallelized variables
+    """
+    graph = copy.deepcopy(old_graph)
+
+    nodes_by_degree = sorted([(node, degree) for node, degree in graph.degree()], key=lambda pair: pair[1])
+
+    idx_parallel = []
+    for ii in range(n_var_parallel):
+        node, degree = nodes_by_degree[ii]
+        idx_parallel.append(node)
+
+    for idx in idx_parallel:
+        graph.remove_node(idx)
+
+    log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
+
+    peo, max_mem = get_peo(graph)
+
+    # find isolated nodes as they may emerge after split
+    # and are not accounted by quickbb. They don't affect
+    # scaling and may be added to the end of the variables list
+
+    isolated_nodes = nx.isolates(graph)    
+    peo = peo + sorted(isolated_nodes)
+    
+    return peo, max_mem, sorted(idx_parallel), graph
