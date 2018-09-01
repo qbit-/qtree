@@ -1,0 +1,7 @@
+* Improvements
+ - [ ] Performance plotting
+ - [ ] Separate tf interface
+ - [ ] Read directly into buckets
+ - [ ] Buckets to graph function
+ - [ ] Cost function evaluation
+ - [ ] Numpy interface

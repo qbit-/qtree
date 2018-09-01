@@ -7,8 +7,6 @@ import cirq
 import src.optimizer as opt
 from src.quickbb_api import gen_cnf, run_quickbb
 import src.graph_model as gm
-import sys
-import re
 import numpy as np
 from mpi4py import MPI
 import tensorflow as tf
@@ -16,9 +14,9 @@ import tensorflow as tf
 
 def get_amplitudes_from_cirq(filename):
     """
-    Calculates amplitudes for a circuit in file ``filename`` using Cirq 
+    Calculates amplitudes for a circuit in file filename using Cirq
     """
-    #filename = 'inst_2x2_1_0.txt'
+    # filename = 'inst_2x2_1_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
 
@@ -44,9 +42,8 @@ def get_optimal_graphical_model(
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    #filename = 'inst_2x2_1_1.txt'
+    # filename = 'inst_2x2_1_1.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
 
     graph, buckets = opt.circ2buckets(circuit)
     cnffile = 'quickbb.cnf'
@@ -54,20 +51,20 @@ def get_optimal_graphical_model(
     run_quickbb(cnffile, quickbb_command)
 
 
-def eval_circuit_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+def eval_circuit(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with tensorflow tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
-    # filename = 'inst_2x2_7_0.txt'
+    # filename = 'inst_4x4_11_2.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
 
-    # Run quickbb
+    # Convert circuit to buckets
     buckets, graph = opt.circ2buckets(circuit)
 
-    if graph.number_of_edges() > 1: #only if not elementary cliques 
+    # Run quickbb
+    if graph.number_of_edges() > 1:  # only if not elementary cliques
         peo, max_mem = gm.get_peo(graph)
         perm_buckets = opt.transform_buckets(buckets, peo)
     else:
@@ -91,8 +88,8 @@ def eval_circuit_tensorflow(filename, quickbb_command='./quickbb/run_quickbb_64.
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
 
-    
-def prepare_parallel_evaluation(filename):
+
+def prepare_parallel_evaluation(filename, n_var_parallel):
     """
     Prepares for parallel evaluation of the quantum circuit.
     Some of the variables in the circuit are parallelized over.
@@ -100,15 +97,16 @@ def prepare_parallel_evaluation(filename):
     the resulting computation graph (as GraphDef) and other
     supporting information is returned
     """
-    #filename = 'inst_2x2_7_0.txt'
+    # filename = 'inst_2x2_7_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
 
     # Prepare graphical model
     buckets, graph = opt.circ2buckets(circuit)
 
     # Run quickBB and get contraction order
-    peo, max_mem, idx_parallel, reduced_graph = gm.get_peo_parallel_random(graph, 2)
+    (peo, max_mem,
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_random(
+         graph, n_var_parallel)
 
     # Permute buckets to the order of optimal contraction
     perm_buckets = opt.transform_buckets(
@@ -134,7 +132,7 @@ def prepare_parallel_evaluation(filename):
         tf_graph_def=tf.get_default_graph().as_graph_def(),
         input_names=list(placeholder_dict.keys())
     )
-    
+
     return environment
 
 
@@ -148,7 +146,7 @@ def extract_placeholder_dict(tf_graph, variable_names):
         List containing {label : tensorflow placeholder} pairs
     """
     return {
-        name : tf_graph.get_tensor_by_name(name + ':0') for 
+        name: tf_graph.get_tensor_by_name(name + ':0') for
         name in variable_names
     }
 
@@ -161,15 +159,17 @@ def eval_circuit_parallel_mpi(filename):
     comm = MPI.COMM_WORLD
     comm_size = comm.size
     rank = comm.rank
-    status = MPI.Status()
 
+    # number of variables to split by parallelization
+    # this should be adjusted by the algorithm from memory/cpu
+    # requirements
+    n_var_parallel = 2 
     if rank == 0:
-        env = prepare_parallel_evaluation(filename)
+        env = prepare_parallel_evaluation(filename, n_var_parallel)
     else:
         env = None
 
     env = comm.bcast(env, root=0)
-    
 
     # restore tensorflow graph, extract inputs and outputs
     tf.import_graph_def(env['tf_graph_def'], name='')
@@ -194,11 +194,12 @@ def eval_circuit_parallel_mpi(filename):
         # and do contraction
 
         amplitude = 0
-        for slice_dict in opt.slice_values_generator(comm_size, rank, idx_parallel):
+        for slice_dict in opt.slice_values_generator(
+                comm_size, rank, idx_parallel):
             parallel_vars_feed = {
-                placeholder_dict[key] : val for key, val
+                placeholder_dict[key]: val for key, val
                 in slice_dict.items()}
-            
+
             feed_dict.update(parallel_vars_feed)
             amplitude += opt.run_tf_session(result, feed_dict)
 
@@ -211,8 +212,8 @@ def eval_circuit_parallel_mpi(filename):
         print(np.round(np.array(amplitudes), 3))    
         print('Reference:')
         print(np.round(amplitudes_reference, 3))
-        
+
 
 if __name__ == "__main__":
-    # contract_with_tensorflow('inst_2x2_7_1.txt')
-    eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit('inst_4x4_10_2.txt')
+    # eval_circuit_parallel_mpi('inst_4x4_11_2.txt')

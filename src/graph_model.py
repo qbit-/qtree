@@ -41,7 +41,7 @@ def relabel_graph_nodes(graph, label_dict=None):
 
     # invert the dictionary
     label_dict = {val : key for key, val in label_dict.items()}
-        
+
     return new_graph, label_dict
 
 
@@ -67,9 +67,9 @@ def get_peo(graph):
           leading memory order needed to perform the contraction (in floats)
     """
 
-    cnffile = 'quickbb.cnf'
+    cnffile = 'output/quickbb.cnf'
     graph, label_dict = relabel_graph_nodes(graph)
-    
+
     gen_cnf(cnffile, graph)
     out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
 

@@ -2,14 +2,13 @@
 Operations to load/contract quantum circuits
 """
 import networkx as nx
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from src.logger_setup import log
 import src.operators as ops
 import io
 
-UP   = np.array([1, 0])
+UP = np.array([1, 0])
 DOWN = np.array([0, 1])
 
 
@@ -24,7 +23,8 @@ def circ2buckets(circuit):
     Parameters
     ----------
     circuit : list of lists
-            quantum circuit as returned by :py:meth:`operators.read_circuit_file`
+            quantum circuit as returned by
+            :py:meth:`operators.read_circuit_file`
 
     Returns
     -------
@@ -112,18 +112,18 @@ def circ2buckets(circuit):
         buckets[var-1].append(
             [f'I{qubit_idx}', [var, ]]
         )
-        
+
     v = g.number_of_nodes()
     e = g.number_of_edges()
 
     log.info(f"Generated graph with {v} nodes and {e} edges")
     log.info(f"last index contains from {layer_variables}")
 
-    with io.StringIO() as outstrings:
-        aj = nx.adjacency_matrix(g)
-        np.savetxt(outstrings, aj.toarray(), delimiter=" ",fmt='%i')
-        s = outstrings.getvalue()
-        log.info("Adjacency matrix:\n" + s.replace('0','-'))
+    # with io.StringIO() as outstrings:
+    #     aj = nx.adjacency_matrix(g)
+    #     np.savetxt(outstrings, aj.toarray(), delimiter=" ",fmt='%i')
+    #     s = outstrings.getvalue()
+    #     log.info("Adjacency matrix:\n" + s.replace('0','-'))
 
     # plt.figure(figsize=(10,10))
     # nx.draw(g, with_labels=True)

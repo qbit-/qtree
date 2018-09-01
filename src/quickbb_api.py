@@ -4,6 +4,7 @@ from src.logger_setup import log
 
 import os
 
+
 def gen_cnf(filename, g):
     """
     Genarate QuickBB input file for the graph g
@@ -21,13 +22,17 @@ def gen_cnf(filename, g):
     cnf = "c a configuration of -qtree simulator\n"
     cnf += f"p cnf {v} {e}\n"
     for line in nx.generate_edgelist(g):
-        cnf+=line.replace("{}",' 0\n')
+        cnf += line.replace("{}", ' 0\n')
 
-    #print("cnf file:",cnf)
-    with open(filename,'w+') as fp:
+    # print("cnf file:",cnf)
+    with open(filename, 'w+') as fp:
         fp.write(cnf)
 
-def run_quickbb(cnffile, command='./quickbb_64'):
+
+def run_quickbb(cnffile,
+                command='./quickbb_64',
+                outfile='output/quickbb_out.qbb',
+                statfile='output/quickbb_stat.qbb'):
     """
     Run QuickBB program and collect its output
 
@@ -37,25 +42,27 @@ def run_quickbb(cnffile, command='./quickbb_64'):
          Path to the QuickBB input file
     command : str, optional
          QuickBB command name
-
+    outfile : str, optional
+         QuickBB output file
+    statfile : str, optional
+         QuickBB stat file
     Returns
     -------
     output : str
          Process output
     """
-    outfile = 'quickbb_out.qbb'
-    statfile = 'quickbb_stat.qbb'
-    try:
-        os.remove(outfile)
-        os.remove(statfile)
-    except FileNotFoundError as e:
-        log.warn(e)
-        pass
+    # try:
+    #     os.remove(outfile)
+    #     os.remove(statfile)
+    # except FileNotFoundError as e:
+    #     log.warn(e)
+    #     pass
 
     sh = command + " "
-    sh += "--min-fill-ordering "
+    # sh += "--min-fill-ordering " - this option leads to missed nodes!
     sh += "--time 60 "
-    sh += f"--outfile {outfile} --statfile {statfile} "
+    # this makes Docker process too slow and sometimes fails
+    # sh += f"--outfile {outfile} --statfile {statfile} "
     sh += f"--cnffile {cnffile} "
     log.info("excecuting quickbb: "+sh)
     process = subprocess.Popen(
@@ -64,11 +71,9 @@ def run_quickbb(cnffile, command='./quickbb_64'):
     if error:
         log.error(error)
     log.info(output)
-    with open(outfile,'r') as fp:
-        log.info("OUTPUT:\n"+fp.read())
-    with open(statfile,'r') as fp:
-        log.info("STAT:\n"+fp.read())
+    # with open(outfile, 'r') as fp:
+    #     log.info("OUTPUT:\n"+fp.read())
+    # with open(statfile, 'r') as fp:
+    #     log.info("STAT:\n"+fp.read())
 
     return output
-
-
