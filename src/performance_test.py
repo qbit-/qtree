@@ -5,13 +5,14 @@ import src.operators as ops
 import src.optimizer as opt
 import src.graph_model as gm
 from src.logger_setup import log
+import numpy as np
 import time
 from mpi4py import MPI
 import tensorflow as tf
 from src.cirq_test import extract_placeholder_dict
 import pandas as pd
-import trace
-import sys
+import subprocess
+from matplotlib import pyplot as plt
 
 
 def time_single_amplitude(
@@ -107,9 +108,11 @@ def time_single_amplitude_mpi(
         )
     else:
         env = None
+        start_time = None
 
     # Synchronize processes
     env = comm.bcast(env, root=0)
+    start_time = comm.bcast(start_time, root=0)
 
     # restore tensorflow graph, extract inputs and outputs
     tf.reset_default_graph()
@@ -140,11 +143,8 @@ def time_single_amplitude_mpi(
 
     amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
 
-    if rank == 0:
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-    else:
-        elapsed_time = None
+    end_time = time.time()
+    elapsed_time = end_time - start_time
 
     comm.bcast(elapsed_time, root=0)
 
@@ -165,7 +165,13 @@ def collect_timings(
     try:
         data = pd.read_pickle(out_filename)
     except FileNotFoundError:
-        data = pd.DataFrame()
+        # lays down the structure of data
+        data = pd.DataFrame(
+            [],
+            index=['exec_time', 'total_time'],
+            columns=pd.MultiIndex.from_product(
+                [[], []],
+                names=['grid size', 'depth']))
 
     total_tests = len(grid_sizes)*len(depths)
     log.info(f'Will run {total_tests} tests')
@@ -195,17 +201,8 @@ def collect_timings(
             end_time = time.time()
             total_time = end_time - start_time
 
-            # Turn result into a pandas.Dataframe for storing
-            col_index = pd.MultiIndex.from_product(
-                [[grid_size], [depth]],
-                names=['grid size', 'depth'])
-
-            res = pd.DataFrame([exec_time, total_time],
-                               index=['exec_time', 'total_time'],
-                               columns=col_index)
-
             # Merge current result with the rest
-            data = pd.merge(data, res, left_index=True, right_index=True)
+            data[grid_size, depth] = [exec_time, total_time]
 
     # Save result
     data.to_pickle(out_filename)
@@ -235,7 +232,13 @@ def collect_timings_mpi(
         try:
             data = pd.read_pickle(out_filename)
         except FileNotFoundError:
-            data = pd.DataFrame()
+            # lays down the structure of data
+            data = pd.DataFrame(
+                [],
+                index=['exec_time', 'total_time'],
+                columns=pd.MultiIndex.from_product(
+                    [[], []],
+                    names=['grid size', 'depth']))
 
         total_tests = len(grid_sizes)*len(depths)
         log.info(f'Will run {total_tests} tests')
@@ -265,6 +268,7 @@ def collect_timings_mpi(
             target_state = 2**(grid_size**2) - 1
 
             # Set the number of parallelized variables ~ number of threads
+            n_var_parallel = int(np.floor(np.log2(comm_size)))
 
             # Synchronize processes
             comm.bcast(testfile, root=0)
@@ -272,23 +276,18 @@ def collect_timings_mpi(
 
             # Measure time
             start_time = time.time()
-            exec_time = time_single_amplitude_mpi(testfile, target_state)
+            exec_time = time_single_amplitude_mpi(
+                testfile, target_state, n_var_parallel)
             end_time = time.time()
             total_time = end_time - start_time
 
+            # Get maximal time as it determines overall time
+            comm.reduce(exec_time, op=MPI.MAX, root=0)
+            comm.reduce(total_time, op=MPI.MAX, root=0)
+
             if rank == 0:  # Parent process. Store results
-                # Turn result into a pandas.Dataframe for storing
-                col_index = pd.MultiIndex.from_product(
-                    [[grid_size], [depth]],
-                    names=['grid size', 'depth'])
-
-                res = pd.DataFrame([exec_time, total_time],
-                                   index=['exec_time', 'total_time'],
-                                   columns=col_index)
-
                 # Merge current result with the rest
-                data = pd.merge(data, res,
-                                left_index=True, right_index=True)
+                data[grid_size, depth] = [exec_time, total_time]
 
     if rank == 0:
         # Save result
@@ -297,5 +296,152 @@ def collect_timings_mpi(
     return data
 
 
+def collect_timings_for_multiple_processes(
+        filename_base='output/test', n_processes=[1], extra_args=[]):
+    """
+    Run :py:meth:`collect_timings_mpi` with different number of mpi processes
+
+    Parameters
+    ----------
+    filename_base : str
+           base of the output filename to be appended with process #
+    n_processes : list, default [1]
+           number of processes
+    extra_args : list, default []
+           additional arguments to :py:meth:`collect_timings_mpi`
+    """
+    for n_proc in n_processes:
+        filename = filename_base + '_' + str(n_proc) + '.p'
+        sh = "mpiexec -n {} ".format(n_proc)
+        sh += "python -c 'from src.performance_test import collect_timings_mpi;collect_timings_mpi(\"{}\",{})'".format(
+            filename, ','.join(map(str, extra_args)))
+        print(sh)
+
+        process = subprocess.Popen(sh, shell=True)
+        process.communicate()
+
+
+def extract_parallel_efficiency(seq_filename,
+                                par_filename_base,
+                                n_processes=[1, 2],
+                                grid_size=4,
+                                depth=10,
+                                time_id='exec_time'):
+    """
+    Calculates parallel efficiency from collected data
+    """
+    seq_data = pd.read_pickle(seq_filename)
+    seq_time = seq_data[(grid_size, depth)][time_id]
+
+    par_times = []
+    efficiencies = []
+    for n_proc in n_processes:
+        filename = par_filename_base + str(n_proc) + '.p'
+        par_data = pd.read_pickle(filename)
+        par_time = par_data[(grid_size, depth)][time_id]
+
+        par_times.append(par_time)
+        efficiencies.append(par_time * n_proc / seq_time)
+
+    return efficiencies, n_processes
+
+
+def extract_timings_vs_gridsize(
+        filename, grid_sizes,
+        depth=10, time_id='exec_time'):
+    """
+    Extracts timings vs grid size from the timings data file
+    for a fixed depth
+    """
+    data = pd.read_pickle(filename)
+
+    times = []
+    for grid_size in grid_sizes:
+        time = data[(grid_size, depth)][time_id]
+        times.append(time)
+
+    return times, grid_sizes
+
+
+def extract_timings_vs_depth(
+        filename, depths,
+        grid_size=4, time_id='exec_time'):
+    """
+    Extracts timings vs depth from the timings data file
+    for a fixed grid_size
+    """
+    data = pd.read_pickle(filename)
+
+    times = []
+    for depth in depths:
+        time = data[(grid_size, depth)][time_id]
+        times.append(time)
+
+    return times, depths
+
+
+def plot_time_vs_depth(filename,
+                       fig_filename='time_vs_depth.png',
+                       interactive=False):
+    """
+    Plots time vs depth for some number of grid sizes
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    grid_sizes = [4, 5]
+    depths = range(10, 20)
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
+                             figsize=(12, 6))
+
+    for grid_size, ax in zip(grid_sizes, axes):
+        time, depths = extract_timings_vs_depth(
+            filename, depths, grid_size)
+        ax.semilogy(depths, time)
+        ax.set_xlabel(
+            'depth of {}x{} circuit'.format(grid_size, grid_size))
+        ax.set_ylabel('log(time in seconds)')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_par_efficiency(
+        seq_filename, par_filename_base,
+        n_processes=[1, 2], fig_filename='efficiency.png',
+        interactive=False):
+    """
+    Plots parallel efficiency for a given set of processors
+    """
+    grid_size = 4
+    depth = 10
+
+    efficiency, n_proc = extract_parallel_efficiency(
+        seq_filename, par_filename_base,
+        n_processes, grid_size, depth,
+    )
+
+    # Create empty canvas
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+    ax.semilogy(n_proc, efficiency)
+    ax.set_xlabel(
+            'number of processes')
+    ax.set_ylabel('Efficiency')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 if __name__ == "__main__":
-    collect_timings_mpi('test.p')
+    collect_timings('output/test.p', [4, 5], list(range(10, 21)))
+    collect_timings_for_multiple_processes(
+        'output/test', [1, 2, 4], [[4, 5], list(range(10, 21))])
+    plot_time_vs_depth('output/test.p', interactive=True)

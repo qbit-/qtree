@@ -442,7 +442,12 @@ def run_tf_session(tf_variable, feed_dict):
     res : numpy.array
                result of the calculation
     """
-    with tf.Session() as sess:
+    # Configure tensorflow for single threaded execution
+    session_conf = tf.ConfigProto(
+        intra_op_parallelism_threads=1,
+        inter_op_parallelism_threads=1)
+
+    with tf.Session(config=session_conf) as sess:
         res = sess.run(tf_variable, feed_dict=feed_dict)
 
     return res

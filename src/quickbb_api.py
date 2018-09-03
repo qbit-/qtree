@@ -59,7 +59,7 @@ def run_quickbb(cnffile,
     #     pass
 
     sh = command + " "
-    # sh += "--min-fill-ordering " - this option leads to missed nodes!
+    sh += "--min-fill-ordering "
     sh += "--time 60 "
     # this makes Docker process too slow and sometimes fails
     # sh += f"--outfile {outfile} --statfile {statfile} "
