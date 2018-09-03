@@ -444,8 +444,9 @@ def run_tf_session(tf_variable, feed_dict):
     """
     # Configure tensorflow for single threaded execution
     session_conf = tf.ConfigProto(
-        intra_op_parallelism_threads=1,
-        inter_op_parallelism_threads=1)
+        # intra_op_parallelism_threads=1,
+        # inter_op_parallelism_threads=1
+    )
 
     with tf.Session(config=session_conf) as sess:
         res = sess.run(tf_variable, feed_dict=feed_dict)
@@ -506,7 +507,7 @@ def get_einsum_expr(idx1, idx2):
     return str1 + ',' + str2 + '->' + str3
 
 
-def process_bucket(bucket):
+def process_bucket_tf(bucket):
     """
     Process bucket in the bucket elimination algorithm.
     We multiply all tensors in the bucket and sum over the
@@ -539,7 +540,7 @@ def process_bucket(bucket):
     return tf.reduce_sum(result, axis=0), variables
 
 
-def bucket_elimination(buckets):
+def bucket_elimination(buckets, process_bucket_fn):
     """
     Algorithm to evaluate a contraction of a large number of tensors.
     The variables to contract over are assigned ``buckets`` which
@@ -549,6 +550,7 @@ def bucket_elimination(buckets):
     Parameters
     ----------
     buckets : list of lists
+    process_bucket_fn : function that will process this kind of buckets
 
     Returns
     -------
@@ -559,7 +561,7 @@ def bucket_elimination(buckets):
     result = None
     for n, bucket in enumerate(buckets):
         if len(bucket) > 0:
-            tensor, variables = process_bucket(bucket)
+            tensor, variables = process_bucket_fn(bucket)
             if len(variables) > 0:
                 first_index = variables[0]
                 buckets[first_index-1].append((tensor, variables))

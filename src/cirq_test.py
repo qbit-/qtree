@@ -72,7 +72,8 @@ def eval_circuit(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
         perm_buckets = buckets
 
     tf_buckets, placeholder_dict = opt.get_tf_buckets(perm_buckets, n_qubits)
-    comput_graph = opt.bucket_elimination(tf_buckets)
+    comput_graph = opt.bucket_elimination(
+        tf_buckets, opt.process_bucket_tf)
 
     amplitudes = []
     for target_state in range(2**n_qubits):
@@ -217,6 +218,40 @@ def eval_circuit_parallel_mpi(filename):
         print(np.round(amplitudes_reference, 3))
 
 
+def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+    """
+    Loads circuit from file and evaluates all amplitudes
+    using the bucket elimination algorithm (with Numpy tensors).
+    Same amplitudes are evaluated with Cirq for comparison.
+    """
+    # filename = 'inst_4x4_11_2.txt'
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    # Convert circuit to buckets
+    buckets, graph = opt.circ2buckets(circuit)
+
+    # Run quickbb
+    if graph.number_of_edges() > 1:  # only if not elementary cliques
+        peo, max_mem = gm.get_peo(graph)
+        perm_buckets = opt.transform_buckets(buckets, peo)
+    else:
+        print('QuickBB skipped')
+        perm_buckets = buckets
+
+    amplitudes = []
+    for target_state in range(2**n_qubits):
+        np_buckets = opt.get_np_buckets(
+            perm_buckets, n_qubits, target_state)
+        amplitude = opt.bucket_elimination(np_buckets, backend='numpy')
+        amplitudes.append(amplitude)
+
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    print('Result:')
+    print(np.round(np.array(amplitudes), 3))    
+    print('Reference:')
+    print(np.round(amplitudes_reference, 3))
+
+
 if __name__ == "__main__":
-    eval_circuit('inst_4x4_10_2.txt')
+    eval_circuit('test_circuits/inst/cz_v2/4x4/inst_4x4_10_2.txt')
     # eval_circuit_parallel_mpi('inst_4x4_11_2.txt')
