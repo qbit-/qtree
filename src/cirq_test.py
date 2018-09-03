@@ -125,7 +125,8 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
 
     # Do symbolic computation of the result
     result = tf.identity(
-        opt.bucket_elimination(sliced_tf_buckets),
+        opt.bucket_elimination(
+            sliced_tf_buckets, opt.process_bucket_tf),
         name='result'
         )
 
@@ -242,7 +243,8 @@ def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
     for target_state in range(2**n_qubits):
         np_buckets = opt.get_np_buckets(
             perm_buckets, n_qubits, target_state)
-        amplitude = opt.bucket_elimination(np_buckets, backend='numpy')
+        amplitude = opt.bucket_elimination(
+            np_buckets, opt.process_bucket_np)
         amplitudes.append(amplitude)
 
     amplitudes_reference = get_amplitudes_from_cirq(filename)
@@ -253,5 +255,6 @@ def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
 
 
 if __name__ == "__main__":
-    eval_circuit('test_circuits/inst/cz_v2/4x4/inst_4x4_10_2.txt')
+    eval_circuit('inst_2x2_7_0.txt')
+    eval_circuit_np('inst_2x2_7_0.txt')
     # eval_circuit_parallel_mpi('inst_4x4_11_2.txt')

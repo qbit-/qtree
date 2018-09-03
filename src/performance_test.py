@@ -38,7 +38,8 @@ def time_single_amplitude(
     perm_buckets = opt.transform_buckets(buckets, peo)
 
     tf_buckets, placeholder_dict = opt.get_tf_buckets(perm_buckets, n_qubits)
-    comput_graph = opt.bucket_elimination(tf_buckets)
+    comput_graph = opt.bucket_elimination(
+        tf_buckets, opt.process_bucket_tf)
 
     feed_dict = opt.assign_placeholder_values(
         placeholder_dict,
@@ -96,7 +97,8 @@ def time_single_amplitude_mpi(
 
         # Do symbolic computation of the result
         result = tf.identity(
-            opt.bucket_elimination(sliced_tf_buckets),
+            opt.bucket_elimination(
+                sliced_tf_buckets, opt.process_bucket_tf),
             name='result'
         )
 

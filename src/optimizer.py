@@ -6,6 +6,7 @@ import numpy as np
 import tensorflow as tf
 from src.logger_setup import log
 import src.operators as ops
+import copy
 
 UP = np.array([1, 0])
 DOWN = np.array([0, 1])
@@ -248,6 +249,79 @@ def get_tf_buckets(buckets, qubit_count):
     return tf_buckets, placeholder_dict
 
 
+def get_np_buckets(buckets, qubit_count, target_state):
+    """
+    Takes buckets and returns their Numpy counterparts.
+
+    Parameters
+    ----------
+    buckets : list of list
+              buckets as returned by :py:meth:`circ2buckets`
+              and :py:meth:`transform_buckets`.
+    qubit_count : int
+              total number of qubits
+    target_state : int
+              We estimate the amplitude of target state.
+              Thus we know the values of circuit outputs
+    Returns
+    -------
+    np_buckets : list of lists
+               Buckets having Numpy tensors in place of gate labels
+    """
+    # import pdb
+    # pdb.set_trace()
+
+    # Define ingredients
+    matrices_dict = copy.deepcopy(
+        ops.operator_matrices_dict)
+
+    # Add input vectors
+
+    input_layer_dict = {
+    'I{}'.format(qubit_idx): qubit_value @ matrices_dict['H']
+        for qubit_idx, qubit_value
+        in zip(
+            range(1, qubit_count+1),
+            qubit_vector_generator(0, qubit_count)
+        )
+    }
+    matrices_dict.update(input_layer_dict)
+
+    # Add output vectors
+
+    output_layer_dict = {
+    'O{}'.format(qubit_idx): matrices_dict['H'] @ qubit_value
+        for qubit_idx, qubit_value
+        in zip(
+            range(1, qubit_count+1),
+            qubit_vector_generator(target_state, qubit_count)
+        )
+    }
+    matrices_dict.update(output_layer_dict)
+
+    # Create tf buckets from unordered buckets
+    np_buckets = []
+    for bucket in buckets:
+        np_bucket = []
+        for label, variables in bucket:
+
+            # sort tensor dimensions (reversed order)
+            transpose_order = np.argsort(variables)
+            variables = sorted(variables)
+            tensor = np.array(
+                matrices_dict[label],
+                copy=True)
+            np_bucket.append(
+                (
+                    np.transpose(tensor, transpose_order),
+                    variables
+                )
+            )
+        np_buckets.append(np_bucket)
+
+    return np_buckets
+
+
 def int_to_bitstring(integer, width):
     """
     Transforms an integer to its bitsting of a specified width
@@ -444,8 +518,8 @@ def run_tf_session(tf_variable, feed_dict):
     """
     # Configure tensorflow for single threaded execution
     session_conf = tf.ConfigProto(
-        # intra_op_parallelism_threads=1,
-        # inter_op_parallelism_threads=1
+        intra_op_parallelism_threads=1,
+        inter_op_parallelism_threads=1
     )
 
     with tf.Session(config=session_conf) as sess:
@@ -538,6 +612,39 @@ def process_bucket_tf(bucket):
 
     # reduce
     return tf.reduce_sum(result, axis=0), variables
+
+
+def process_bucket_np(bucket):
+    """
+    Process bucket in the bucket elimination algorithm.
+    We multiply all tensors in the bucket and sum over the
+    variable which the bucket corresponds to. This way the
+    variable of the bucket is removed from the expression.
+
+    Parameters
+    ----------
+    bucket : list
+           List containing tuples of tensors (gates) with their indices.
+
+    Returns
+    -------
+    tensor : tuple
+           array and a list of its indices
+    """
+    result, variables = bucket[0]
+
+    for tensor, variables_current in bucket[1:]:
+        expr = get_einsum_expr(variables, variables_current)
+        result = np.einsum(expr, result, tensor)
+        variables = sorted(list(set(variables + variables_current)))
+
+    if len(variables) > 1:
+        variables = variables[1:]
+    else:
+        variables = []
+
+    # reduce
+    return np.sum(result, axis=0), variables
 
 
 def bucket_elimination(buckets, process_bucket_fn):
