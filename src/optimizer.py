@@ -6,7 +6,6 @@ import numpy as np
 import tensorflow as tf
 from src.logger_setup import log
 import src.operators as ops
-import io
 
 UP = np.array([1, 0])
 DOWN = np.array([0, 1])
@@ -38,7 +37,7 @@ def circ2buckets(circuit):
     g = nx.Graph()
 
     qubit_count = len(circuit[0])
-    #print(qubit_count)
+    # print(qubit_count)
 
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
@@ -54,7 +53,7 @@ def circ2buckets(circuit):
         )
 
     current_var = qubit_count
-    layer_variables= list(range(1, qubit_count+1))
+    layer_variables = list(range(1, qubit_count+1))
 
     for layer in reversed(circuit[1:-1]):
         for op in layer:
@@ -78,12 +77,12 @@ def circ2buckets(circuit):
                 # Create a new variable
                 buckets.append(
                     []
-                    )
+                )
 
                 current_var += 1
                 layer_variables[op._qubits[0]] = current_var
 
-            if isinstance(op,ops.cZ):
+            if isinstance(op, ops.cZ):
                 var1 = layer_variables[op._qubits[0]]
                 var2 = layer_variables[op._qubits[1]]
 
@@ -96,7 +95,7 @@ def circ2buckets(circuit):
                 var1, var2 = sorted([var1, var2])
                 buckets[var1-1].append(
                     [op.name, [var1, var2]]
-                    )
+                )
 
             if isinstance(op, ops.T):
                 var1 = layer_variables[op._qubits[0]]
@@ -167,9 +166,9 @@ def transform_buckets(old_buckets, permutation):
             # will be needed to transform tensorflow tensor
             new_buckets[bucket_idx-1].append([label, new_variables])
 
-    return new_buckets 
+    return new_buckets
 
-            
+
 def get_tf_buckets(buckets, qubit_count):
     """
     Takes buckets and returns their Tensorflow counterparts, along
@@ -201,16 +200,16 @@ def get_tf_buckets(buckets, qubit_count):
     H = tf.placeholder(tf.complex64, [2, 2], 'H')
     cZ = tf.placeholder(tf.complex64, [2, 2], 'cZ')
     T = tf.placeholder(tf.complex64, [2], 'T')
-    
+
     placeholder_dict = {'X_1_2': X_1_2, 'Y_1_2': Y_1_2,
-                'H': H, 'cZ': cZ, 'T': T}
+                        'H': H, 'cZ': cZ, 'T': T}
 
     # Add input vectors
     input_names = ['I{}'.format(ii)
                    for ii in range(1, qubit_count+1)]
     inputs = [tf.placeholder(tf.complex64, [2], name)
               for name in input_names]
-    
+
     placeholder_dict.update(
         dict(zip(
             input_names, inputs))
@@ -218,7 +217,7 @@ def get_tf_buckets(buckets, qubit_count):
 
     # Add output vectors
     output_names = ['O{}'.format(ii)
-               for ii in range(1, qubit_count+1)]
+                    for ii in range(1, qubit_count+1)]
     outputs = [tf.placeholder(tf.complex64, [2], name)
                for name in output_names]
 
@@ -226,7 +225,7 @@ def get_tf_buckets(buckets, qubit_count):
         dict(zip(
             output_names, outputs))
     )
-    
+
     # Create tf buckets from unordered buckets
     tf_buckets = []
     for bucket in buckets:
@@ -240,12 +239,12 @@ def get_tf_buckets(buckets, qubit_count):
             tf_bucket.append(
                 (
                     tf.transpose(placeholder_dict[label],
-                              perm=transpose_order),
+                                 perm=transpose_order),
                     variables
                 )
             )
         tf_buckets.append(tf_bucket)
-    
+
     return tf_buckets, placeholder_dict
 
 
@@ -316,34 +315,37 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
     values_dict = ops.operator_matrices_dict
 
     # Fill all common gate's placeholders
-    feed_dict = {placeholder_dict[key]: values_dict[key] for key in values_dict.keys()}
+    feed_dict = {placeholder_dict[key]: values_dict[key]
+                 for key in values_dict.keys()}
 
     # Fill placeholders for the input layer
     input_dict = {}
     for ii, bc_state in enumerate(
             qubit_vector_generator(0, n_qubits)):
         input_dict.update({
-            'I{}'.format(ii+1) : bc_state @ values_dict['H'] #numeration starts at 1!
-            })
-    input_feed_dict = {placeholder_dict[key] : val for key, val in input_dict.items()}
+            # numeration starts at 1!
+            'I{}'.format(ii+1): bc_state @ values_dict['H']
+        })
+    input_feed_dict = {placeholder_dict[key]                       : val for key, val in input_dict.items()}
 
     feed_dict.update(input_feed_dict)
-    
+
     # fill placeholders for the output layer
     output_dict = {}
     for ii, bc_state in enumerate(
             qubit_vector_generator(target_state, n_qubits)):
         output_dict.update({
-            'O{}'.format(ii+1) : values_dict['H'] @ bc_state #numeration starts at 1!
-            })
-    output_feed_dict = {placeholder_dict[key] : val for key, val in output_dict.items()}
-    
+            # numeration starts at 1!
+            'O{}'.format(ii+1): values_dict['H'] @ bc_state
+        })
+    output_feed_dict = {placeholder_dict[key]                        : val for key, val in output_dict.items()}
+
     feed_dict.update(output_feed_dict)
 
     return feed_dict
 
 
-def slice_tf_buckets(tf_buckets, pdict, idx_parallel):
+def slice_tf_buckets(tf_buckets, old_pdict, idx_parallel):
     """
     Takes (symbolic) slices of the Tensorflow buckets
     over the variables in idx_parallel. Updates the placeholder
@@ -353,7 +355,7 @@ def slice_tf_buckets(tf_buckets, pdict, idx_parallel):
     ----------
     tf_buckets : list of lists
               Buckets containing Tensorflow tensors and variables
-    pdict : dict
+    old_pdict : dict
               Placeholder dictionary
     idx_parallel : list
               Indices to parallelize over
@@ -363,14 +365,17 @@ def slice_tf_buckets(tf_buckets, pdict, idx_parallel):
     sliced_buckets : list of lists
               buckets with (symbolically) sliced gates
     pdict : dict
-              updated placeholder dictionary    
+              updated placeholder dictionary
     """
+    # import pdb
+    # pdb.set_trace()
 
+    pdict = {key: val for key, val in old_pdict.items()}
     # Define slice variables
-    slice_var_dict = {'q_{}'.format(var) :
-                 tf.placeholder(dtype=tf.int32,
-                                shape=[], name='q_{}'.format(var))
-                 for var in idx_parallel}
+    slice_var_dict = {'q_{}'.format(var):
+                      tf.placeholder(dtype=tf.int32,
+                                     shape=[], name='q_{}'.format(var))
+                      for var in idx_parallel}
     pdict.update(slice_var_dict)
 
     # Create tf buckets from unordered buckets
@@ -415,12 +420,12 @@ def slice_values_generator(comm_size, rank, idx_parallel):
             dictionary of {idx_parallel : value} pairs
     """
     var_names = ["q_{}".format(var) for var in idx_parallel]
-    
+
     # iterate over all possible values of variables idx_parallel
     for ii in range(rank, 2**len(idx_parallel), comm_size):
         bitstring = int_to_bitstring(integer=ii, width=len(idx_parallel))
         yield dict(zip(var_names, bitstring))
-        
+
 
 def run_tf_session(tf_variable, feed_dict):
     """
@@ -465,7 +470,7 @@ def num_to_alpha(integer):
     else:
         raise ValueError('Too large index for einsum')
 
-    
+
 def get_einsum_expr(idx1, idx2):
     """
     Takes two tuples of indice and returns an einsum expression
@@ -487,7 +492,7 @@ def get_einsum_expr(idx1, idx2):
     result_indices = sorted(list(set(idx1 + idx2)))
     # remap indices to reduce their order, as einsum does not like
     # large numbers
-    idx_to_least_idx = {old_idx : new_idx for new_idx, old_idx
+    idx_to_least_idx = {old_idx: new_idx for new_idx, old_idx
                         in enumerate(result_indices)}
 
     str1 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in idx1)
@@ -514,7 +519,7 @@ def process_bucket(bucket):
            array and a list of its indices
     """
     result, variables = bucket[0]
-    
+
     for tensor, variables_current in bucket[1:]:
         expr = get_einsum_expr(variables, variables_current)
         result = tf.einsum(expr, result, tensor)
@@ -526,7 +531,7 @@ def process_bucket(bucket):
         variables = []
 
     # reduce
-    return tf.reduce_sum(result, axis=0), variables            
+    return tf.reduce_sum(result, axis=0), variables
 
 
 def bucket_elimination(buckets):
@@ -559,4 +564,3 @@ def bucket_elimination(buckets):
                 else:
                     result = tensor
     return result
-

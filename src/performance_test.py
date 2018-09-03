@@ -9,8 +9,10 @@ import time
 from mpi4py import MPI
 import tensorflow as tf
 from src.cirq_test import extract_placeholder_dict
-import numpy as np
 import pandas as pd
+import trace
+import sys
+
 
 def time_single_amplitude(
         filename, target_state,
@@ -70,7 +72,7 @@ def time_single_amplitude_mpi(
 
         # Run quickBB and get contraction order
         (peo, max_mem,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_random(
+         idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
              graph, n_var_parallel)
 
         # Start time measurement
@@ -81,6 +83,9 @@ def time_single_amplitude_mpi(
             buckets, peo + idx_parallel)
 
         # Transform tensor labels in buckets to tensorflow placeholders
+        # Reset Tensorflow graph as it may store
+        # all tensors ever used before
+        tf.reset_default_graph()
         tf_buckets, placeholder_dict = opt.get_tf_buckets(
             perm_buckets, n_qubits)
 
@@ -97,8 +102,8 @@ def time_single_amplitude_mpi(
         env = dict(
             n_qubits=n_qubits,
             idx_parallel=idx_parallel,
-            tf_graph_def=tf.get_default_graph().as_graph_def(),
-            input_names=list(placeholder_dict.keys())
+            input_names=list(pdict_sliced.keys()),
+            tf_graph_def=tf.get_default_graph().as_graph_def()
         )
     else:
         env = None
@@ -107,6 +112,7 @@ def time_single_amplitude_mpi(
     env = comm.bcast(env, root=0)
 
     # restore tensorflow graph, extract inputs and outputs
+    tf.reset_default_graph()
     tf.import_graph_def(env['tf_graph_def'], name='')
     placeholder_dict = extract_placeholder_dict(
         tf.get_default_graph(),
@@ -146,7 +152,6 @@ def time_single_amplitude_mpi(
 
 
 def collect_timings(
-        timing_function,
         out_filename,
         grid_sizes=[4, 5],
         depths=list(range(10, 15)),
@@ -162,23 +167,31 @@ def collect_timings(
     except FileNotFoundError:
         data = pd.DataFrame()
 
-    log.info('Will run {} tests'.format(len(grid_sizes)*len(depths)))
+    total_tests = len(grid_sizes)*len(depths)
+    log.info(f'Will run {total_tests} tests')
 
-    test_id = 2  # suffix of the test case. Should we make it random?
-    for grid_size in grid_sizes:
-        for depth in depths:
+    # suffix of the test case file. Should we make it random?
+    test_id = 2
+    for n_grid, grid_size in enumerate(grid_sizes):
+        log.info('Running grid = {}, [{}/{}]'.format(
+            grid_size, n_grid+1, len(grid_sizes)))
+
+        for n_depth, depth in enumerate(depths):
+            log.info('Running depth = {}, [{}/{}]'.format(
+                depth, n_depth+1, len(depths)))
+
             testfile = '/'.join((
                 path_to_testcases,
                 f'{grid_size}x{grid_size}',
                 f'inst_{grid_size}x{grid_size}_{depth}_{test_id}.txt'
-                ))
+            ))
 
-            # Will calculate with "all up" target state
+            # Will calculate "1111...1" target amplitude
             target_state = 2**(grid_size**2) - 1
 
             # Measure time
             start_time = time.time()
-            exec_time = timing_function(testfile, target_state)
+            exec_time = time_single_amplitude(testfile, target_state)
             end_time = time.time()
             total_time = end_time - start_time
 
@@ -200,6 +213,89 @@ def collect_timings(
     return data
 
 
+def collect_timings_mpi(
+        out_filename,
+        grid_sizes=[4, 5],
+        depths=list(range(10, 15)),
+        path_to_testcases='./test_circuits/inst/cz_v2'):
+    """
+    Runs timings for test circuits with grid size equal to grid_sizes
+    and outputs results to a pandas.DataFrame, and saves to out_filename
+    (as pickle).
+    This version supports execution by mpiexec. Running
+    mpiexec -n 1 python <:py:meth:`collect_timings_mpi`>
+    will produce different timings than :py:meth:`collect_timings`
+    """
+
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    if rank == 0:
+        try:
+            data = pd.read_pickle(out_filename)
+        except FileNotFoundError:
+            data = pd.DataFrame()
+
+        total_tests = len(grid_sizes)*len(depths)
+        log.info(f'Will run {total_tests} tests')
+        log.info(f'Will run {comm_size} paralell processes')
+    else:
+        data = None
+
+    # suffix of the test case file. Should we make it random?
+    test_id = 2
+    for n_grid, grid_size in enumerate(grid_sizes):
+        if rank == 0:
+            log.info('Running grid = {}, [{}/{}]'.format(
+                grid_size, n_grid+1, len(grid_sizes)))
+
+        for n_depth, depth in enumerate(depths):
+            if rank == 0:
+                log.info('Running depth = {}, [{}/{}]'.format(
+                    depth, n_depth+1, len(depths)))
+
+            testfile = '/'.join((
+                path_to_testcases,
+                f'{grid_size}x{grid_size}',
+                f'inst_{grid_size}x{grid_size}_{depth}_{test_id}.txt'
+            ))
+
+            # Will calculate "1111...1" target amplitude
+            target_state = 2**(grid_size**2) - 1
+
+            # Set the number of parallelized variables ~ number of threads
+
+            # Synchronize processes
+            comm.bcast(testfile, root=0)
+            comm.bcast(target_state, root=0)
+
+            # Measure time
+            start_time = time.time()
+            exec_time = time_single_amplitude_mpi(testfile, target_state)
+            end_time = time.time()
+            total_time = end_time - start_time
+
+            if rank == 0:  # Parent process. Store results
+                # Turn result into a pandas.Dataframe for storing
+                col_index = pd.MultiIndex.from_product(
+                    [[grid_size], [depth]],
+                    names=['grid size', 'depth'])
+
+                res = pd.DataFrame([exec_time, total_time],
+                                   index=['exec_time', 'total_time'],
+                                   columns=col_index)
+
+                # Merge current result with the rest
+                data = pd.merge(data, res,
+                                left_index=True, right_index=True)
+
+    if rank == 0:
+        # Save result
+        data.to_pickle(out_filename)
+
+    return data
+
+
 if __name__ == "__main__":
-    time_single_amplitude('inst_4x4_10_2.txt', 1)
-    collect_timings(time_single_amplitude, 'test.p')
+    collect_timings_mpi('test.p')

@@ -113,6 +113,8 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
         buckets, peo + idx_parallel)
 
     # Transform tensor labels in buckets to tensorflow placeholders
+    # Reset Tensorflow graph as it may store all tensors ever used before
+    tf.reset_default_graph()
     tf_buckets, placeholder_dict = opt.get_tf_buckets(
         perm_buckets, n_qubits)
 
@@ -129,8 +131,8 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     environment = dict(
         n_qubits=n_qubits,
         idx_parallel=idx_parallel,
-        tf_graph_def=tf.get_default_graph().as_graph_def(),
-        input_names=list(placeholder_dict.keys())
+        input_names=list(pdict_sliced.keys()),
+        tf_graph_def=tf.get_default_graph().as_graph_def()
     )
 
     return environment
@@ -172,6 +174,7 @@ def eval_circuit_parallel_mpi(filename):
     env = comm.bcast(env, root=0)
 
     # restore tensorflow graph, extract inputs and outputs
+    tf.reset_default_graph()
     tf.import_graph_def(env['tf_graph_def'], name='')
     placeholder_dict = extract_placeholder_dict(
         tf.get_default_graph(),

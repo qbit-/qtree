@@ -33,19 +33,19 @@ def relabel_graph_nodes(graph, label_dict=None):
             {new : old} dictionary for inverse relabeling
     """
     if label_dict is None:
-        label_dict = {old : num for num, old in
+        label_dict = {old: num for num, old in
                       enumerate(graph.nodes(data=False), 1)}
         new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
     else:
         new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
 
     # invert the dictionary
-    label_dict = {val : key for key, val in label_dict.items()}
+    label_dict = {val: key for key, val in label_dict.items()}
 
     return new_graph, label_dict
 
 
-def get_peo(graph):
+def get_peo(old_graph):
     """
     Calculates the elimination order for an undirected
     graphical model of the circuit. Optionally finds `n_qubit_parralel`
@@ -58,7 +58,7 @@ def get_peo(graph):
     ----------
     graph : networkx.Graph
             graph of the undirected graphical model to decompose
-    
+
     Returns
     -------
     peo : list
@@ -68,20 +68,38 @@ def get_peo(graph):
     """
 
     cnffile = 'output/quickbb.cnf'
-    graph, label_dict = relabel_graph_nodes(graph)
+    initial_indices = old_graph.nodes()
+    graph, label_dict = relabel_graph_nodes(old_graph)
 
     gen_cnf(cnffile, graph)
     out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
 
     # Extract order
     m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
-                      out_bytes, flags=re.MULTILINE | re.DOTALL )
+                  out_bytes, flags=re.MULTILINE | re.DOTALL)
 
     peo = [int(ii) for ii in m['peo'].split()]
 
     # Map peo back to original indices
     peo = [label_dict[pp] for pp in peo]
-    
+
+    # find the rest of indices which quickBB did not spit out.
+    # Those include isolated nodes (don't affect
+    # scaling and may be added to the end of the variables list)
+    # and something else
+
+    isolated_nodes = nx.isolates(old_graph)
+    peo = peo + sorted(isolated_nodes)
+
+    # assert(set(initial_indices) - set(peo) == set())
+    missing_indices = set(initial_indices)-set(peo)
+    # The next line needs review. Why quickBB misses some indices?
+    # It is here to make program work, but is it an optimal order?
+    peo = peo + sorted(list(missing_indices))
+
+    assert(sorted(peo) == sorted(initial_indices))
+    log.info('Final peo from quickBB:\n{}'.format(peo))
+
     treewidth = int(m['treewidth'])
 
     return peo, 2**treewidth
@@ -124,13 +142,6 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
 
     peo, max_mem = get_peo(graph)
 
-    # find isolated nodes as they may emerge after split
-    # and are not accounted by quickbb. They don't affect
-    # scaling and may be added to the end of the variables list
-
-    isolated_nodes = nx.isolates(graph)    
-    peo = peo + sorted(isolated_nodes)
-    
     return peo, max_mem, sorted(idx_parallel), graph
 
 
@@ -160,7 +171,10 @@ def get_peo_parallel_degree(old_graph, n_var_parallel=0):
     """
     graph = copy.deepcopy(old_graph)
 
-    nodes_by_degree = sorted([(node, degree) for node, degree in graph.degree()], key=lambda pair: pair[1])
+    # get nodes by degree in descending order
+    nodes_by_degree = list((node, degree) for
+                       node, degree in graph.degree())
+    nodes_by_degree.sort(key=lambda pair: pair[1], reverse=True)
 
     idx_parallel = []
     for ii in range(n_var_parallel):
@@ -174,11 +188,4 @@ def get_peo_parallel_degree(old_graph, n_var_parallel=0):
 
     peo, max_mem = get_peo(graph)
 
-    # find isolated nodes as they may emerge after split
-    # and are not accounted by quickbb. They don't affect
-    # scaling and may be added to the end of the variables list
-
-    isolated_nodes = nx.isolates(graph)    
-    peo = peo + sorted(isolated_nodes)
-    
     return peo, max_mem, sorted(idx_parallel), graph
