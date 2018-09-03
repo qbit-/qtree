@@ -51,6 +51,37 @@ def time_single_amplitude(
     return end_time - start_time
 
 
+def time_single_amplitude_numpy(
+        filename, target_state,
+        quickbb_command='./quickbb/run_quickbb_64.sh'):
+    """
+    Returns the time of a single amplitude evaluation.
+    The circuit is loaded from the filename and the
+    amplitude of the state is calculated. The time excludes
+    file loading and quickbb operation.
+    """
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    # Convert circuit to buckets
+    buckets, graph = opt.circ2buckets(circuit)
+
+    # Calculate eleimination order with QuickBB
+    peo, max_mem = gm.get_peo(graph)
+
+    # Start measurement
+    start_time = time.time()
+
+    perm_buckets = opt.transform_buckets(buckets, peo)
+
+    np_buckets = opt.get_np_buckets(perm_buckets, n_qubits, target_state)
+    amplitude = opt.bucket_elimination(
+        np_buckets, opt.process_bucket_np)
+
+    end_time = time.time()
+
+    return end_time - start_time
+
+
 def time_single_amplitude_mpi(
         filename, target_state, n_var_parallel=2,
         quickbb_command='./quickbb/run_quickbb_64.sh'):
@@ -199,7 +230,8 @@ def collect_timings(
 
             # Measure time
             start_time = time.time()
-            exec_time = time_single_amplitude(testfile, target_state)
+            exec_time = time_single_amplitude(
+                testfile, target_state)
             end_time = time.time()
             total_time = end_time - start_time
 
@@ -338,7 +370,7 @@ def extract_parallel_efficiency(seq_filename,
     par_times = []
     efficiencies = []
     for n_proc in n_processes:
-        filename = par_filename_base + str(n_proc) + '.p'
+        filename = par_filename_base + '_' + str(n_proc) + '.p'
         par_data = pd.read_pickle(filename)
         par_time = par_data[(grid_size, depth)][time_id]
 
@@ -399,13 +431,13 @@ def plot_time_vs_depth(filename,
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
                              figsize=(12, 6))
 
-    for grid_size, ax in zip(grid_sizes, axes):
+    for n, grid_size in enumerate(grid_sizes):
         time, depths = extract_timings_vs_depth(
             filename, depths, grid_size)
-        ax.semilogy(depths, time)
-        ax.set_xlabel(
+        axes[n].semilogy(depths, time)
+        axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
-        ax.set_ylabel('log(time in seconds)')
+        axes[n].set_ylabel('log(time in seconds)')
 
     if interactive:
         fig.show()
@@ -422,6 +454,9 @@ def plot_par_efficiency(
     """
     grid_size = 4
     depth = 10
+
+    if not interactive:
+        plt.switch_backend('agg')
 
     efficiency, n_proc = extract_parallel_efficiency(
         seq_filename, par_filename_base,
@@ -443,7 +478,7 @@ def plot_par_efficiency(
 
 
 if __name__ == "__main__":
-    collect_timings('output/test.p', [4, 5], list(range(10, 21)))
-    collect_timings_for_multiple_processes(
-        'output/test', [1, 2, 4], [[4, 5], list(range(10, 21))])
-    plot_time_vs_depth('output/test.p', interactive=True)
+    # collect_timings('output/test_numpy.p', [4, 5], list(range(10, 21)))
+    # collect_timings_for_multiple_processes(
+    #     'output/test', [1, 2, 4], [[4, 5], list(range(10, 21))])
+    # plot_time_vs_depth('output/test.p', interactive=True)
