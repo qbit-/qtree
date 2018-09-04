@@ -106,7 +106,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
 
     # Run quickBB and get contraction order
     (peo, max_mem,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_random(
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
          graph, n_var_parallel)
 
     # Permute buckets to the order of optimal contraction
@@ -269,7 +269,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
 
     # Run quickBB and get contraction order
     (peo, max_mem,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_random(
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
          graph, n_var_parallel)
 
     # Permute buckets to the order of optimal contraction
@@ -326,7 +326,7 @@ def eval_circuit_np_parallel_mpi(filename):
                 comm_size, rank, idx_parallel):
             sliced_buckets = opt.slice_np_buckets(
                 np_buckets, slice_dict, idx_parallel)
-            amplitude = opt.bucket_elimination(
+            amplitude += opt.bucket_elimination(
                 sliced_buckets, opt.process_bucket_np)
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
@@ -342,6 +342,6 @@ def eval_circuit_np_parallel_mpi(filename):
 
 if __name__ == "__main__":
     # eval_circuit('inst_2x2_7_0.txt')
-    eval_circuit_np('inst_2x2_7_0.txt')
+    # eval_circuit_np('inst_2x2_7_0.txt')
     # eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')

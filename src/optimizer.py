@@ -467,7 +467,8 @@ def slice_tf_buckets(tf_buckets, old_pdict, idx_parallel):
                     slice_bounds.append(slice(None))
                     new_shape.append(2)
             sliced_bucket.append(
-                (tf.reshape(tensor[slice_bounds], new_shape), variables)
+                (tf.reshape(tensor[tuple(slice_bounds)], new_shape),
+                 variables)
             )
         sliced_buckets.append(sliced_bucket)
 
@@ -511,7 +512,10 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
                     slice_bounds.append(slice(None))
                     new_shape.append(2)
             sliced_bucket.append(
-                (np.reshape(tensor[slice_bounds], new_shape), variables)
+                (np.reshape(
+                    tensor[tuple(slice_bounds)],
+                    new_shape),
+                 variables)
             )
         sliced_buckets.append(sliced_bucket)
 
@@ -542,7 +546,8 @@ def slice_values_generator(comm_size, rank, idx_parallel):
     # iterate over all possible values of variables idx_parallel
     for ii in range(rank, 2**len(idx_parallel), comm_size):
         bitstring = int_to_bitstring(integer=ii, width=len(idx_parallel))
-        yield dict(zip(var_names, bitstring))
+        int_sequence = map(int, bitstring)
+        yield dict(zip(var_names, int_sequence))
 
 
 def run_tf_session(tf_variable, feed_dict):
