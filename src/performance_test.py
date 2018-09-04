@@ -355,12 +355,10 @@ def collect_timings_for_multiple_processes(
         process.communicate()
 
 
-def extract_parallel_efficiency(seq_filename,
-                                par_filename_base,
-                                n_processes=[1, 2],
-                                grid_size=4,
-                                depth=10,
-                                time_id='exec_time'):
+def extract_parallel_efficiency(
+        seq_filename, par_filename_base,
+        n_processes=[1, 2], grid_size=4,
+        depth=10, time_id='exec_time'):
     """
     Calculates parallel efficiency from collected data
     """
@@ -375,7 +373,7 @@ def extract_parallel_efficiency(seq_filename,
         par_time = par_data[(grid_size, depth)][time_id]
 
         par_times.append(par_time)
-        efficiencies.append(par_time * n_proc / seq_time)
+        efficiencies.append(seq_time / (par_time * n_proc))
 
     return efficiencies, n_processes
 
@@ -438,6 +436,47 @@ def plot_time_vs_depth(filename,
         axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('log(time in seconds)')
+    fig.suptitle('Evaluation time vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_par_vs_depth_multiple(
+        seq_filename, par_filename_base,
+        n_processes=[1, 2], fig_filename='time_vs_depth_multiple.png',
+        interactive=False):
+    """
+    Plots time vs depth for sequential and multiple MPI
+    runs
+    """
+    grid_size = 5
+    depths = list(range(10, 21))
+
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(n_processes)+1, sharey=True,
+                             figsize=(12, 6))
+
+    filenames = [seq_filename] + [par_filename_base + '_' +
+                                  str(n_proc) + '.p'
+                                  for n_proc in n_processes]
+    titles = ['Sequential'] + ['n = {}'.format(n_proc)
+                               for n_proc in n_processes]
+
+    for n, (filename, title) in enumerate(zip(filenames, titles)):
+        time, depths = extract_timings_vs_depth(
+            filename, depths, grid_size)
+        axes[n].semilogy(depths, time)
+        axes[n].set_xlabel('depth')
+        axes[n].set_ylabel('log(time in seconds)')
+        axes[n].set_title(title)
+
+    fig.suptitle('Evaluation time vs depth of the circuit')
 
     if interactive:
         fig.show()
@@ -466,10 +505,11 @@ def plot_par_efficiency(
     # Create empty canvas
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
-    ax.semilogy(n_proc, efficiency)
+    ax.plot(n_proc, efficiency)
     ax.set_xlabel(
             'number of processes')
     ax.set_ylabel('Efficiency')
+    ax.set_title('Efficiency of MPI parallel code')
 
     if interactive:
         fig.show()
@@ -480,5 +520,6 @@ def plot_par_efficiency(
 if __name__ == "__main__":
     # collect_timings('output/test_numpy.p', [4, 5], list(range(10, 21)))
     # collect_timings_for_multiple_processes(
-    #     'output/test', [1, 2, 4], [[4, 5], list(range(10, 21))])
+    #      'output/test', [8], [[4, 5], list(range(10, 21))])
     # plot_time_vs_depth('output/test.p', interactive=True)
+    plot_par_vs_depth_multiple('output/test.p', 'output/test', [1, 2, 4, 8], interactive=True)
