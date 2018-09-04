@@ -602,17 +602,28 @@ def plot_par_efficiency(
 
 
 if __name__ == "__main__":
-    collect_timings('test_np.p', [4], list(range(10, 11)),
+    collect_timings('test_np.p', [4, 5], list(range(10, 21)),
                     timing_fn=time_single_amplitude_np)
-    collect_timings('test_tf.p', [4], list(range(10, 11)),
+    collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
                     timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('test_np_mpi.p', [4], list(range(10, 11)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi)
-    collect_timings_mpi('test_tf_mpi.p', [4], list(range(10, 11)),
-                        timing_fn_mpi=time_single_amplitude_tf_mpi)
-    # collect_timings_for_multiple_processes(
-    #     'output/test_numpy', [1, 2, 4, 8],
-    #     extra_args=[[4, 5], list(range(10, 21))]
-    # )
-    # plot_time_vs_depth('output/test.p', interactive=True)
-    # plot_par_vs_depth_multiple('output/test.p', 'output/test', [1, 2, 4, 8], interactive=True)
+    # collect_timings_mpi('test_np_mpi.p', [4], list(range(10, 11)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('test_tf_mpi.p', [4], list(range(10, 11)),
+    #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
+    collect_timings_for_multiple_processes(
+        'output/test_np', [1, 2, 4, 8],
+        extra_args=[[4, 5], list(range(10, 21))]
+    )
+    plot_time_vs_depth('output/test_numpy.p',
+                       fig_filename='time_vs_depth_np.png',
+                       interactive=True)
+    plot_par_vs_depth_multiple(
+        'output/test_numpy.p',
+        'output/test_numpy',
+        n_processes=[1, 2, 4, 8],
+        fig_filename='time_vs_depth_multiple_np.png',
+        interactive=True)
+    plot_par_efficiency('output/test_numpy.p', 'output/test_numpy',
+                        n_processes=[1, 2, 4, 8],
+                        fig_filename='efficiency_np.png',
+                        interactive=True)
