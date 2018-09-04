@@ -51,7 +51,8 @@ def get_optimal_graphical_model(
     # filename = 'inst_2x2_1_1.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
 
-    graph, buckets = opt.circ2buckets(circuit)
+    buckets, graph = opt.circ2buckets(circuit)
+
     cnffile = 'quickbb.cnf'
     gen_cnf(cnffile, graph)
     run_quickbb(cnffile, quickbb_command)

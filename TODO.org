@@ -2,6 +2,6 @@
  - [X] Performance plotting
  - [X] Separate tf interface
  - [ ] Read directly into buckets
- - [ ] Buckets to graph function
+ - [X] Buckets to graph function
  - [ ] Cost function evaluation
  - [X] Numpy interface

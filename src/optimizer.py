@@ -3,9 +3,12 @@ Operations to load/contract quantum circuits. All functions
 operating on Buckets (without any specific framework) should
 go here.
 """
+
+import itertools
 import networkx as nx
-from src.logger_setup import log
 import src.operators as ops
+
+from src.logger_setup import log
 
 
 def circ2buckets(circuit):
@@ -125,6 +128,32 @@ def circ2buckets(circuit):
     # nx.draw(g, with_labels=True)
     # plt.savefig('graph.eps')
     return buckets, g
+
+
+def buckets2graph(buckets):
+    """
+    Takes buckets and produces a corresponding graph
+
+    Parameters
+    ----------
+    buckets : list of lists
+
+    Returns
+    -------
+    graph : networkx.Graph
+            contraction graph of the circuit
+    """
+    graph = nx.Graph()
+
+    # Let's build an undirected graph for variables
+    for n, bucket in enumerate(buckets):
+        for element in bucket:
+            tensor, variables = element
+            graph.add_nodes_from(variables)
+            edges = itertools.combinations(variables, 2)
+            graph.add_edges_from(edges)
+
+    return graph
 
 
 def transform_buckets(old_buckets, permutation):
