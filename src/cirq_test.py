@@ -254,7 +254,94 @@ def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
     print(np.round(amplitudes_reference, 3))
 
 
+def prepare_parallel_evaluation_np(filename, n_var_parallel):
+    """
+    Prepares for parallel evaluation of the quantum circuit.
+    Some of the variables in the circuit are parallelized over.
+    Unsliced Numpy buckets in the optimal order of elimination
+    are returned
+    """
+    # filename = 'inst_2x2_7_0.txt'
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    # Prepare graphical model
+    buckets, graph = opt.circ2buckets(circuit)
+
+    # Run quickBB and get contraction order
+    (peo, max_mem,
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_random(
+         graph, n_var_parallel)
+
+    # Permute buckets to the order of optimal contraction
+    perm_buckets = opt.transform_buckets(
+        buckets, peo + idx_parallel)
+
+    environment = dict(
+        n_qubits=n_qubits,
+        idx_parallel=idx_parallel,
+        buckets=perm_buckets
+    )
+
+    return environment
+
+
+def eval_circuit_np_parallel_mpi(filename):
+    """
+    Evaluate quantum circuit using MPI to parallelize
+    over some of the variables.
+    """
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    # number of variables to split by parallelization
+    # this should be adjusted by the algorithm from memory/cpu
+    # requirements
+    n_var_parallel = 2 
+    if rank == 0:
+        env = prepare_parallel_evaluation_np(filename, n_var_parallel)
+    else:
+        env = None
+
+    env = comm.bcast(env, root=0)
+
+    # restore buckets
+    buckets = env['buckets']
+
+    # restore other parts of the environment
+    n_qubits = env['n_qubits']
+    idx_parallel = env['idx_parallel']
+
+    # Loop over all amplitudes
+    amplitudes = []
+    for target_state in range(2**n_qubits):
+        np_buckets = opt.get_np_buckets(
+            buckets, n_qubits, target_state)
+
+        # main computation loop. Populate respective slices
+        # and do contraction
+
+        amplitude = 0
+        for slice_dict in opt.slice_values_generator(
+                comm_size, rank, idx_parallel):
+            sliced_buckets = opt.slice_np_buckets(
+                np_buckets, slice_dict, idx_parallel)
+            amplitude = opt.bucket_elimination(
+                sliced_buckets, opt.process_bucket_np)
+
+        amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+        amplitudes.append(amplitude)
+
+    if rank == 0:
+        amplitudes_reference = get_amplitudes_from_cirq(filename)
+        print('Result:')
+        print(np.round(np.array(amplitudes), 3))
+        print('Reference:')
+        print(np.round(amplitudes_reference, 3))
+
+
 if __name__ == "__main__":
-    eval_circuit('inst_2x2_7_0.txt')
+    # eval_circuit('inst_2x2_7_0.txt')
     eval_circuit_np('inst_2x2_7_0.txt')
-    # eval_circuit_parallel_mpi('inst_4x4_11_2.txt')
+    # eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')

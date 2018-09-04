@@ -474,6 +474,50 @@ def slice_tf_buckets(tf_buckets, old_pdict, idx_parallel):
     return sliced_buckets, pdict
 
 
+def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
+    """
+    Takes slices of the tensors in Numpy buckets
+    over the variables in idx_parallel.
+
+    Parameters
+    ----------
+    np_buckets : list of lists
+              Buckets containing Numpy tensors
+    slice_var_dict : dict
+              Current values of the sliced variables
+    idx_parallel : list
+              Indices to parallelize over
+
+    Returns
+    -------
+    sliced_buckets : list of lists
+              buckets with sliced gates
+    """
+    # import pdb
+    # pdb.set_trace()
+
+    # Create tf buckets from unordered buckets
+    sliced_buckets = []
+    for bucket in np_buckets:
+        sliced_bucket = []
+        for tensor, variables in bucket:
+            slice_bounds = []
+            new_shape = []
+            for var in variables:
+                if var in idx_parallel:
+                    slice_bounds.append(slice_var_dict[f'q_{var}'])
+                    new_shape.append(1)
+                else:
+                    slice_bounds.append(slice(None))
+                    new_shape.append(2)
+            sliced_bucket.append(
+                (np.reshape(tensor[slice_bounds], new_shape), variables)
+            )
+        sliced_buckets.append(sliced_bucket)
+
+    return sliced_buckets
+
+
 def slice_values_generator(comm_size, rank, idx_parallel):
     """
     Generates dictionaries containing consequtive values for
