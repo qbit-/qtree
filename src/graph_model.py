@@ -145,10 +145,35 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
     return peo, max_mem, sorted(idx_parallel), graph
 
 
-def get_peo_parallel_degree(old_graph, n_var_parallel=0):
+def get_node_by_degree(graph):
     """
-    Parallel-splitted version of :py:meth:`get_peo` with greedy
-    choice of nodes to split.
+    Returns a list of pairs (node : degree) for the
+    provided graph
+    """
+    nodes_by_degree = list((node, degree) for
+                           node, degree in graph.degree())
+    return nodes_by_degree
+
+
+def get_node_by_betweenness(graph):
+    """
+    Returns a list of pairs (node : betweenness) for the
+    provided graph
+    """
+    nodes_by_beteenness = list(
+        nx.betweenness_centrality(
+            graph, normalized=False, endpoints=True).items())
+
+    return nodes_by_beteenness
+
+
+def get_peo_parallel_by_metric(
+        old_graph, n_var_parallel=0, metric_fn=get_node_by_degree):
+    """
+    Parallel-splitted version of :py:meth:`get_peo` with nodes
+    to split chosed according to the metric function. Metric
+    function should take a graph and return a list of pairs
+    (node : metric_value)
 
     Parameters
     ----------
@@ -157,6 +182,8 @@ def get_peo_parallel_degree(old_graph, n_var_parallel=0):
                 are parallelized over)
     n_var_parallel : int
                 number of variables to eliminate by parallelization
+    metric_fn : function
+                function to evaluate node metric
 
     Returns
     -------
@@ -171,14 +198,13 @@ def get_peo_parallel_degree(old_graph, n_var_parallel=0):
     """
     graph = copy.deepcopy(old_graph)
 
-    # get nodes by degree in descending order
-    nodes_by_degree = list((node, degree) for
-                       node, degree in graph.degree())
-    nodes_by_degree.sort(key=lambda pair: pair[1], reverse=True)
+    # get nodes by metric in descending order
+    nodes_by_metric = metric_fn(graph)
+    nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
 
     idx_parallel = []
     for ii in range(n_var_parallel):
-        node, degree = nodes_by_degree[ii]
+        node, degree = nodes_by_metric[ii]
         idx_parallel.append(node)
 
     for idx in idx_parallel:
@@ -189,3 +215,5 @@ def get_peo_parallel_degree(old_graph, n_var_parallel=0):
     peo, max_mem = get_peo(graph)
 
     return peo, max_mem, sorted(idx_parallel), graph
+
+

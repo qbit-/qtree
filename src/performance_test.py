@@ -109,7 +109,7 @@ def time_single_amplitude_tf_mpi(
 
         # Run quickBB and get contraction order
         (peo, max_mem,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
+         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
         # Start time measurement
@@ -211,7 +211,7 @@ def time_single_amplitude_np_mpi(
 
         # Run quickBB and get contraction order
         (peo, max_mem,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
+         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
         # Start time measurement
@@ -614,16 +614,17 @@ if __name__ == "__main__":
         'output/test_np', [1, 2, 4, 8],
         extra_args=[[4, 5], list(range(10, 21))]
     )
-    plot_time_vs_depth('output/test_numpy.p',
-                       fig_filename='time_vs_depth_np.png',
+    plot_time_vs_depth('output/test_np.p',
+                       fig_filename='time_vs_depth_np_hachiko.png',
                        interactive=True)
     plot_par_vs_depth_multiple(
-        'output/test_numpy.p',
-        'output/test_numpy',
-        n_processes=[1, 2, 4, 8],
-        fig_filename='time_vs_depth_multiple_np.png',
+        'output/test_np.p',
+        'output/test_np',
+        n_processes=[1, 2, 4, 8, 16, 24, 32],
+        fig_filename='time_vs_depth_multiple_np_hachiko.png',
         interactive=True)
-    plot_par_efficiency('output/test_numpy.p', 'output/test_numpy',
-                        n_processes=[1, 2, 4, 8],
-                        fig_filename='efficiency_np.png',
+
+    plot_par_efficiency('output/test_np.p', 'output/test_np',
+                        n_processes=[1, 2, 4, 8, 16, 24, 32],
+                        fig_filename='efficiency_np_hachiko.png',
                         interactive=True)

@@ -113,7 +113,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
 
     # Run quickBB and get contraction order
     (peo, max_mem,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
          graph, n_var_parallel)
 
     # Permute buckets to the order of optimal contraction
@@ -261,7 +261,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
 
     # Run quickBB and get contraction order
     (peo, max_mem,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
          graph, n_var_parallel)
 
     # Permute buckets to the order of optimal contraction
