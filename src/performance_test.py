@@ -184,15 +184,93 @@ def time_single_amplitude_mpi(
     return elapsed_time
 
 
+def time_single_amplitude_mpi_numpy(
+        filename, target_state, n_var_parallel=2,
+        quickbb_command='./quickbb/run_quickbb_64.sh'):
+    """
+    Returns the time of a single amplitude evaluation.
+    The circuit is loaded from the filename and the
+    amplitude of the state is calculated. The time excludes
+    file loading and quickbb operation.
+    """
+
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    if rank == 0:
+        # filename = 'inst_2x2_7_0.txt'
+        n_qubits, circuit = ops.read_circuit_file(filename)
+
+        # Prepare graphical model
+        buckets, graph = opt.circ2buckets(circuit)
+
+        # Run quickBB and get contraction order
+        (peo, max_mem,
+         idx_parallel, reduced_graph) = gm.get_peo_parallel_degree(
+             graph, n_var_parallel)
+
+        # Start time measurement
+        start_time = time.time()
+
+        # Permute buckets to the order of optimal contraction
+        perm_buckets = opt.transform_buckets(
+            buckets, peo + idx_parallel)
+
+        env = dict(
+            n_qubits=n_qubits,
+            idx_parallel=idx_parallel,
+            buckets=perm_buckets
+        )
+    else:
+        env = None
+        start_time = None
+
+    # Synchronize processes
+    env = comm.bcast(env, root=0)
+    start_time = comm.bcast(start_time, root=0)
+
+    # restore buckets
+    buckets = env['buckets']
+
+    # restore other parts of the environment
+    n_qubits = env['n_qubits']
+    idx_parallel = env['idx_parallel']
+
+    # Transform label buckets to Numpy buckets
+    np_buckets = opt.get_np_buckets(
+        buckets, n_qubits, target_state)
+
+    amplitude = 0
+    for slice_dict in opt.slice_values_generator(
+                comm_size, rank, idx_parallel):
+        # Slice Numpy buckets along the parallelized vars
+        sliced_buckets = opt.slice_np_buckets(
+            np_buckets, slice_dict, idx_parallel)
+        amplitude += opt.bucket_elimination(
+            sliced_buckets, opt.process_bucket_np)
+
+    amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    comm.bcast(elapsed_time, root=0)
+
+    return elapsed_time
+
+
 def collect_timings(
         out_filename,
         grid_sizes=[4, 5],
         depths=list(range(10, 15)),
-        path_to_testcases='./test_circuits/inst/cz_v2'):
+        path_to_testcases='./test_circuits/inst/cz_v2',
+        timing_fn=time_single_amplitude):
     """
     Runs timings for test circuits with grid size equal to grid_sizes
     and outputs results to a pandas.DataFrame, and saves to out_filename
     (as pickle).
+    timing_fn is a sequential (non-MPI) function
     """
 
     try:
@@ -230,7 +308,7 @@ def collect_timings(
 
             # Measure time
             start_time = time.time()
-            exec_time = time_single_amplitude(
+            exec_time = timing_fn(
                 testfile, target_state)
             end_time = time.time()
             total_time = end_time - start_time
@@ -248,7 +326,8 @@ def collect_timings_mpi(
         out_filename,
         grid_sizes=[4, 5],
         depths=list(range(10, 15)),
-        path_to_testcases='./test_circuits/inst/cz_v2'):
+        path_to_testcases='./test_circuits/inst/cz_v2',
+        timing_fn_mpi=time_single_amplitude_mpi_numpy):
     """
     Runs timings for test circuits with grid size equal to grid_sizes
     and outputs results to a pandas.DataFrame, and saves to out_filename
@@ -256,6 +335,7 @@ def collect_timings_mpi(
     This version supports execution by mpiexec. Running
     mpiexec -n 1 python <:py:meth:`collect_timings_mpi`>
     will produce different timings than :py:meth:`collect_timings`
+    timing_fn_mpi should be MPI-friendly timing function
     """
 
     comm = MPI.COMM_WORLD
@@ -310,7 +390,7 @@ def collect_timings_mpi(
 
             # Measure time
             start_time = time.time()
-            exec_time = time_single_amplitude_mpi(
+            exec_time = timing_fn_mpi(
                 testfile, target_state, n_var_parallel)
             end_time = time.time()
             total_time = end_time - start_time
@@ -518,8 +598,11 @@ def plot_par_efficiency(
 
 
 if __name__ == "__main__":
-    # collect_timings('output/test_numpy.p', [4, 5], list(range(10, 21)))
-    # collect_timings_for_multiple_processes(
-    #      'output/test', [8], [[4, 5], list(range(10, 21))])
+    # collect_timings('output/test_numpy.p', [4, 5], list(range(10, 21)),
+    #                 timing_fn=time_single_amplitude_numpy)
+    collect_timings_for_multiple_processes(
+        'output/test_numpy', [1, 2, 4, 8],
+        extra_args=[[4, 5], list(range(10, 21))]
+    )
     # plot_time_vs_depth('output/test.p', interactive=True)
-    plot_par_vs_depth_multiple('output/test.p', 'output/test', [1, 2, 4, 8], interactive=True)
+    # plot_par_vs_depth_multiple('output/test.p', 'output/test', [1, 2, 4, 8], interactive=True)

@@ -1,6 +1,7 @@
 """
 Test programs to demonstrate various use cases of the
-Qtree quantum circuit simulator.
+Qtree quantum circuit simulator. Functions in this file
+can be used as main functions in the final simulator program
 """
 import src.operators as ops
 import cirq
