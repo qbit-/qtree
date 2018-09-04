@@ -8,10 +8,12 @@ from src.logger_setup import log
 from math import sqrt, pi
 from cmath import exp
 
+
 class qOperation:
     """
     Factory class for quantum gates.
     """
+
     def factory(self, arg):
         """
         Creates appropriate gates from strings of the form:
@@ -28,7 +30,7 @@ class qOperation:
             return self._create_from_string(arg)
 
     def _create_from_string(sefl, s):
-        #log.debug("creating op from '{}'".format(s))
+        # log.debug("creating op from '{}'".format(s))
         m = re.search(
             r'(?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', s)
         if m is None:
@@ -69,22 +71,24 @@ class qOperation:
 
     def __repr__(self):
         return self.__str__()
+
     def apply(self, vec):
         return np.dot(self.matr, vec)
+
 
 class H(qOperation):
     """
     Hadamard gate
     """
-    matrix = 1/sqrt(2) * np.array([[ 1j,  1j],
-                                   [ 1j, -1j]])
+    matrix = 1/sqrt(2) * np.array([[1j,  1j],
+                                   [1j, -1j]])
     name = 'H'
     cirq_op = cirq.H
     diagonal = False
     n_qubit = 1
 
     cirq_op = cirq.H
-    
+
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = qubits
@@ -94,10 +98,10 @@ class cZ(qOperation):
     """
     Controlled :math:`Z` gate
     """
-    matrix = np.array([[ 1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
-                       [ 0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  1,  0.+0.j],
-                       [ 0.+0.j,  0.+0.j,  0.+0.j, -1]])
+    matrix = np.array([[1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
+                       [0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
+                       [0.+0.j,  0.+0.j,  1,  0.+0.j],
+                       [0.+0.j,  0.+0.j,  0.+0.j, -1]])
     name = 'cZ'
     diagonal = True
     n_qubit = 2
@@ -148,8 +152,8 @@ class Y_1_2(qOperation):
     r"""
     :math:`Y^{1/2}` gate
     """
-    matrix = 1/sqrt(2) * np.array([[ 1, 1],
-                                   [ -1,  1]])
+    matrix = 1/sqrt(2) * np.array([[1, 1],
+                                   [-1,  1]])
     name = 'Y_1_2'
     diagonal = False
     n_qubit = 1
@@ -203,7 +207,7 @@ def read_circuit_file(filename, max_depth=None):
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
-    
+
     with open(filename, "r") as fp:
         qubit_count = int(fp.readline())
         log.info("There are {:d} qubits in circuit".format(qubit_count))
@@ -230,20 +234,21 @@ def read_circuit_file(filename, max_depth=None):
             op = qOperation().factory(op_str)
             circuit_layer.append(op)
 
-        circuit.append(circuit_layer) # last layer
+        circuit.append(circuit_layer)  # last layer
 
         if n_ignored_layers > 0:
             log.info("Ignored {} layers".format(n_ignored_layers))
 
     return qubit_count, circuit
 
+
 # Dictionary containing (compressed) entries of all operators
 # in this module. Only nonzero entries are listed, which means diagonal
 # for diagonal matrices or double diagonal for diagonal fourth order tensors
 operator_matrices_dict = {
-    'H' : H(1).matrix,
-    'X_1_2' : X_1_2(1).matrix,
-    'Y_1_2' : Y_1_2(1).matrix,
-    'T' : np.diag(T(1).matrix),
-    'cZ' : np.diag(cZ(1, 1).matrix).reshape([2, 2])
+    'H': H(1).matrix,
+    'X_1_2': X_1_2(1).matrix,
+    'Y_1_2': Y_1_2(1).matrix,
+    'T': np.diag(T(1).matrix),
+    'cZ': np.diag(cZ(1, 1).matrix).reshape([2, 2])
 }

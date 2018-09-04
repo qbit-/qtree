@@ -3,14 +3,19 @@ Test programs to demonstrate various use cases of the
 Qtree quantum circuit simulator. Functions in this file
 can be used as main functions in the final simulator program
 """
-import src.operators as ops
-import cirq
-import src.optimizer as opt
-from src.quickbb_api import gen_cnf, run_quickbb
-import src.graph_model as gm
 import numpy as np
-from mpi4py import MPI
 import tensorflow as tf
+import cirq
+
+import src.operators as ops
+import src.optimizer as opt
+import src.graph_model as gm
+import src.np_framework as npfr
+import src.tf_framework as tffr
+import src.utils as utils
+
+from mpi4py import MPI
+from src.quickbb_api import gen_cnf, run_quickbb
 
 
 def get_amplitudes_from_cirq(filename):
@@ -72,21 +77,21 @@ def eval_circuit(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
         print('QuickBB skipped')
         perm_buckets = buckets
 
-    tf_buckets, placeholder_dict = opt.get_tf_buckets(perm_buckets, n_qubits)
+    tf_buckets, placeholder_dict = tffr.get_tf_buckets(perm_buckets, n_qubits)
     comput_graph = opt.bucket_elimination(
-        tf_buckets, opt.process_bucket_tf)
+        tf_buckets, tffr.process_bucket_tf)
 
     amplitudes = []
     for target_state in range(2**n_qubits):
-        feed_dict = opt.assign_placeholder_values(
+        feed_dict = tffr.assign_placeholder_values(
             placeholder_dict,
             target_state, n_qubits)
-        amplitude = opt.run_tf_session(comput_graph, feed_dict)
+        amplitude = tffr.run_tf_session(comput_graph, feed_dict)
         amplitudes.append(amplitude)
 
     amplitudes_reference = get_amplitudes_from_cirq(filename)
     print('Result:')
-    print(np.round(np.array(amplitudes), 3))    
+    print(np.round(np.array(amplitudes), 3))
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
 
@@ -117,19 +122,19 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     # Transform tensor labels in buckets to tensorflow placeholders
     # Reset Tensorflow graph as it may store all tensors ever used before
     tf.reset_default_graph()
-    tf_buckets, placeholder_dict = opt.get_tf_buckets(
+    tf_buckets, placeholder_dict = tffr.get_tf_buckets(
         perm_buckets, n_qubits)
 
     # Apply slicing as we parallelize over some variables
-    sliced_tf_buckets, pdict_sliced = opt.slice_tf_buckets(
+    sliced_tf_buckets, pdict_sliced = tffr.slice_tf_buckets(
         tf_buckets, placeholder_dict, idx_parallel)
 
     # Do symbolic computation of the result
     result = tf.identity(
         opt.bucket_elimination(
-            sliced_tf_buckets, opt.process_bucket_tf),
+            sliced_tf_buckets, tffr.process_bucket_tf),
         name='result'
-        )
+    )
 
     environment = dict(
         n_qubits=n_qubits,
@@ -139,21 +144,6 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     )
 
     return environment
-
-
-def extract_placeholder_dict(tf_graph, variable_names):
-    """
-    Extract placeholders from the tensorflow computation Graph.
-
-    Returns
-    -------
-    pdict : dict
-        List containing {label : tensorflow placeholder} pairs
-    """
-    return {
-        name: tf_graph.get_tensor_by_name(name + ':0') for
-        name in variable_names
-    }
 
 
 def eval_circuit_parallel_mpi(filename):
@@ -168,7 +158,7 @@ def eval_circuit_parallel_mpi(filename):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 2 
+    n_var_parallel = 2
     if rank == 0:
         env = prepare_parallel_evaluation(filename, n_var_parallel)
     else:
@@ -179,7 +169,7 @@ def eval_circuit_parallel_mpi(filename):
     # restore tensorflow graph, extract inputs and outputs
     tf.reset_default_graph()
     tf.import_graph_def(env['tf_graph_def'], name='')
-    placeholder_dict = extract_placeholder_dict(
+    placeholder_dict = tffr.extract_placeholder_dict(
         tf.get_default_graph(),
         env['input_names']
     )
@@ -192,7 +182,7 @@ def eval_circuit_parallel_mpi(filename):
     # Loop over all amplitudes
     amplitudes = []
     for target_state in range(2**n_qubits):
-        feed_dict = opt.assign_placeholder_values(
+        feed_dict = tffr.assign_placeholder_values(
             placeholder_dict,
             target_state, n_qubits)
 
@@ -200,14 +190,14 @@ def eval_circuit_parallel_mpi(filename):
         # and do contraction
 
         amplitude = 0
-        for slice_dict in opt.slice_values_generator(
+        for slice_dict in utils.slice_values_generator(
                 comm_size, rank, idx_parallel):
             parallel_vars_feed = {
                 placeholder_dict[key]: val for key, val
                 in slice_dict.items()}
 
             feed_dict.update(parallel_vars_feed)
-            amplitude += opt.run_tf_session(result, feed_dict)
+            amplitude += tffr.run_tf_session(result, feed_dict)
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         amplitudes.append(amplitude)
@@ -215,7 +205,7 @@ def eval_circuit_parallel_mpi(filename):
     if rank == 0:
         amplitudes_reference = get_amplitudes_from_cirq(filename)
         print('Result:')
-        print(np.round(np.array(amplitudes), 3))    
+        print(np.round(np.array(amplitudes), 3))
         print('Reference:')
         print(np.round(amplitudes_reference, 3))
 
@@ -242,15 +232,15 @@ def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
 
     amplitudes = []
     for target_state in range(2**n_qubits):
-        np_buckets = opt.get_np_buckets(
+        np_buckets = npfr.get_np_buckets(
             perm_buckets, n_qubits, target_state)
         amplitude = opt.bucket_elimination(
-            np_buckets, opt.process_bucket_np)
+            np_buckets, npfr.process_bucket_np)
         amplitudes.append(amplitude)
 
     amplitudes_reference = get_amplitudes_from_cirq(filename)
     print('Result:')
-    print(np.round(np.array(amplitudes), 3))    
+    print(np.round(np.array(amplitudes), 3))
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
 
@@ -298,7 +288,7 @@ def eval_circuit_np_parallel_mpi(filename):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 2 
+    n_var_parallel = 2
     if rank == 0:
         env = prepare_parallel_evaluation_np(filename, n_var_parallel)
     else:
@@ -316,19 +306,19 @@ def eval_circuit_np_parallel_mpi(filename):
     # Loop over all amplitudes
     amplitudes = []
     for target_state in range(2**n_qubits):
-        np_buckets = opt.get_np_buckets(
+        np_buckets = npfr.get_np_buckets(
             buckets, n_qubits, target_state)
 
         # main computation loop. Populate respective slices
         # and do contraction
 
         amplitude = 0
-        for slice_dict in opt.slice_values_generator(
+        for slice_dict in utils.slice_values_generator(
                 comm_size, rank, idx_parallel):
-            sliced_buckets = opt.slice_np_buckets(
+            sliced_buckets = npfr.slice_np_buckets(
                 np_buckets, slice_dict, idx_parallel)
             amplitude += opt.bucket_elimination(
-                sliced_buckets, opt.process_bucket_np)
+                sliced_buckets, npfr.process_bucket_np)
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         amplitudes.append(amplitude)
@@ -342,7 +332,7 @@ def eval_circuit_np_parallel_mpi(filename):
 
 
 if __name__ == "__main__":
-    # eval_circuit('inst_2x2_7_0.txt')
-    # eval_circuit_np('inst_2x2_7_0.txt')
-    # eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit('inst_2x2_7_0.txt')
+    eval_circuit_np('inst_2x2_7_0.txt')
+    eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
