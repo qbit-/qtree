@@ -132,7 +132,9 @@ def circ2buckets(circuit):
 
 def buckets2graph(buckets):
     """
-    Takes buckets and produces a corresponding graph
+    Takes buckets and produces a corresponding graph. Single
+    variable tensors are coded as self loops and there may be
+    multiple parallel edges
 
     Parameters
     ----------
@@ -140,20 +142,88 @@ def buckets2graph(buckets):
 
     Returns
     -------
-    graph : networkx.Graph
+    graph : networkx.MultiGraph
             contraction graph of the circuit
     """
-    graph = nx.Graph()
+    graph = nx.MultiGraph()
 
     # Let's build an undirected graph for variables
     for n, bucket in enumerate(buckets):
         for element in bucket:
             tensor, variables = element
             graph.add_nodes_from(variables)
-            edges = itertools.combinations(variables, 2)
-            graph.add_edges_from(edges)
+            if len(variables) > 1:
+                edges = itertools.combinations(variables, 2)
+            else:
+                # If this is a single variable tensor, add self loop
+                var = variables[0]
+                edges = [[var, var]]
+            graph.add_edges_from(
+                edges, tensor=tensor,
+                hash_tag=hash(
+                    (tensor, tuple(variables))
+                )
+            )
 
     return graph
+
+
+def graph2buckets(graph):
+    """
+    Takes a Networkx graph and produces a corresponding
+    bucket list. This is an inverse of the :py:meth:`buckets2graph`
+
+    Parameters
+    ----------
+    graph : networkx.MultiGraph
+            contraction graph of the circuit. Has to support self loops
+            and parallel edges
+
+    Returns
+    -------
+    buckets : list of lists
+    """
+    buckets = []
+    variables = sorted(graph.nodes)
+
+    # Add buckets with sorted variables
+    for n, variable in enumerate(variables):
+        tensors_of_variable = list(graph.edges(variable, data=True))
+
+        # First collect all unique tensors (they may be elements of
+        # the current bucket)
+
+        candidate_elements = {}
+
+        # go over pairs of variables.
+        # The first variable in pair is this variable
+        for edge in tensors_of_variable:
+            _, other_variable, edge_data = edge
+            hash_tag = edge_data['hash_tag']
+            tensor = edge_data['tensor']
+
+            element = candidate_elements.get(hash_tag, None)
+            if element is None:
+                element = [tensor, [variable, other_variable]]
+            else:
+                element[1].append(other_variable)
+            candidate_elements[hash_tag] = element
+
+        # Now we have all unique tensors in bucket format.
+        # Drop tensors where current variable is not the lowest in order
+
+        # bucket = candidate_elements
+        bucket = []
+        for element in candidate_elements.values():
+            tensor, variables = element
+            # Sort variables and also remove self loops used for single
+            # variable tensors
+            sorted_variables = sorted(set(variables))
+            if sorted_variables[0] == variable:
+                bucket.append([tensor, sorted_variables])
+        buckets.append(bucket)
+
+    return buckets
 
 
 def transform_buckets(old_buckets, permutation):

@@ -5,3 +5,4 @@
  - [X] Buckets to graph function
  - [ ] Cost function evaluation
  - [X] Numpy interface
+ - [X] Graph to buckets function
