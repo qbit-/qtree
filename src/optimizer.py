@@ -132,9 +132,9 @@ def circ2buckets(circuit):
 
 def buckets2graph(buckets):
     """
-    Takes buckets and produces a corresponding graph. Single
+    Takes buckets and produces a corresponding undirected graph. Single
     variable tensors are coded as self loops and there may be
-    multiple parallel edges
+    multiple parallel edges.
 
     Parameters
     ----------
@@ -170,7 +170,7 @@ def buckets2graph(buckets):
 
 def graph2buckets(graph):
     """
-    Takes a Networkx graph and produces a corresponding
+    Takes a Networkx MultiGraph and produces a corresponding
     bucket list. This is an inverse of the :py:meth:`buckets2graph`
 
     Parameters

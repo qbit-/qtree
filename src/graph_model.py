@@ -148,10 +148,11 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
 def get_node_by_degree(graph):
     """
     Returns a list of pairs (node : degree) for the
-    provided graph
+    provided graph. Self loops in the graph are removed (if any)
+    before the calculation of degree
     """
     nodes_by_degree = list((node, degree) for
-                           node, degree in graph.degree())
+                           node, degree in nx.Graph(graph).degree())
     return nodes_by_degree
 
 
@@ -162,7 +163,8 @@ def get_node_by_betweenness(graph):
     """
     nodes_by_beteenness = list(
         nx.betweenness_centrality(
-            graph, normalized=False, endpoints=True).items())
+            nx.Graph(graph),
+            normalized=False, endpoints=True).items())
 
     return nodes_by_beteenness
 
@@ -177,7 +179,7 @@ def get_peo_parallel_by_metric(
 
     Parameters
     ----------
-    old_graph : networkx.Graph
+    old_graph : networkx.Graph or networkx.MultiGraph
                 graph to contract (after eliminating variables which
                 are parallelized over)
     n_var_parallel : int
@@ -193,7 +195,7 @@ def get_peo_parallel_by_metric(
           leading memory order needed to perform the contraction (in floats)
     idx_parallel : list
           variables removed by parallelization
-    graph : networkx.Graph
+    graph : networkx.Graph or networkx.MultiGraph
           new graph without parallelized variables
     """
     graph = copy.deepcopy(old_graph)
@@ -215,5 +217,3 @@ def get_peo_parallel_by_metric(
     peo, max_mem = get_peo(graph)
 
     return peo, max_mem, sorted(idx_parallel), graph
-
-
