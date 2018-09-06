@@ -385,8 +385,8 @@ def collect_timings_mpi(
             # Will calculate "1111...1" target amplitude
             target_state = 2**(grid_size**2) - 1
 
-            # Set the number of parallelized variables ~ number of threads
-            n_var_parallel = int(np.floor(np.log2(comm_size)))
+            # Set the number of parallelized variables=5 (max 32 threads)
+            n_var_parallel = 5
 
             # Synchronize processes
             comm.bcast(testfile, root=0)
@@ -606,25 +606,25 @@ if __name__ == "__main__":
                     timing_fn=time_single_amplitude_np)
     collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
                     timing_fn=time_single_amplitude_tf)
-    # collect_timings_mpi('test_np_mpi.p', [4], list(range(10, 11)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('test_tf_mpi.p', [4], list(range(10, 11)),
-    #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
+    collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 11)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 11)),
+                        timing_fn_mpi=time_single_amplitude_tf_mpi)
     collect_timings_for_multiple_processes(
-        'output/test_np', [1, 2, 4, 8],
+        'output/test_np', [1, 2, 4, 8, 16, 24, 32],
         extra_args=[[4, 5], list(range(10, 21))]
     )
-    plot_time_vs_depth('output/test_np.p',
-                       fig_filename='time_vs_depth_np_hachiko.png',
-                       interactive=True)
-    plot_par_vs_depth_multiple(
-        'output/test_np.p',
-        'output/test_np',
-        n_processes=[1, 2, 4, 8, 16, 24, 32],
-        fig_filename='time_vs_depth_multiple_np_hachiko.png',
-        interactive=True)
+    # plot_time_vs_depth('output/test_np.p',
+    #                    fig_filename='time_vs_depth_np_hachiko.png',
+    #                    interactive=True)
+    # plot_par_vs_depth_multiple(
+    #     'output/test_np.p',
+    #     'output/test_np',
+    #     n_processes=[1, 2, 4, 8, 16, 24, 32],
+    #     fig_filename='time_vs_depth_multiple_np_hachiko.png',
+    #     interactive=True)
 
-    plot_par_efficiency('output/test_np.p', 'output/test_np',
-                        n_processes=[1, 2, 4, 8, 16, 24, 32],
-                        fig_filename='efficiency_np_hachiko.png',
-                        interactive=True)
+    # plot_par_efficiency('output/test_np.p', 'output/test_np',
+    #                     n_processes=[1, 2, 4, 8, 16, 24, 32],
+    #                     fig_filename='efficiency_np_hachiko.png',
+    #                     interactive=True)
