@@ -73,17 +73,23 @@ def get_peo(old_graph):
     initial_indices = old_graph.nodes()
     graph, label_dict = relabel_graph_nodes(old_graph)
 
-    gen_cnf(cnffile, graph)
-    out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
+    if graph.number_of_edges() - graph.number_of_selfloops() > 0:
+        gen_cnf(cnffile, graph)
+        out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
 
-    # Extract order
-    m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
-                  out_bytes, flags=re.MULTILINE | re.DOTALL)
+        # Extract order
+        m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
+                      out_bytes, flags=re.MULTILINE | re.DOTALL)
 
-    peo = [int(ii) for ii in m['peo'].split()]
+        peo = [int(ii) for ii in m['peo'].split()]
 
-    # Map peo back to original indices
-    peo = [label_dict[pp] for pp in peo]
+        # Map peo back to original indices
+        peo = [label_dict[pp] for pp in peo]
+
+        treewidth = int(m['treewidth'])
+    else:
+        peo = []
+        treewidth = 1
 
     # find the rest of indices which quickBB did not spit out.
     # Those include isolated nodes (don't affect
@@ -101,8 +107,6 @@ def get_peo(old_graph):
 
     assert(sorted(peo) == sorted(initial_indices))
     log.info('Final peo from quickBB:\n{}'.format(peo))
-
-    treewidth = int(m['treewidth'])
 
     return peo, 2**treewidth
 
@@ -257,9 +261,11 @@ def cost_estimator(old_graph):
             edges = [[neighbors[0], neighbors[0]]]
         else:
             # This node had no neighbors
-            pass
+            edges = None
 
         graph.remove_node(node)
-        graph.add_edges_from(edges, tensor=f'E{n}')
 
+        if edges is not None:
+            graph.add_edges_from(edges, tensor=f'E{n}')
+            
     return tuple(zip(*results))

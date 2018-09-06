@@ -14,7 +14,7 @@ from src.logger_setup import log
 from matplotlib import pyplot as plt
 
 
-def get_cost_vs_parallel_size(filename):
+def get_cost_vs_parallel_size(filename, step_by=1):
     """
     Calculates memory cost (per node) vs the number of parallelized
     variables for a given circuit.
@@ -34,9 +34,10 @@ def get_cost_vs_parallel_size(filename):
 
     buckets, _ = opt.circ2buckets(circuit)
     graph_raw = opt.buckets2graph(buckets)
+    n_var_total = graph_raw.number_of_nodes()
 
     results = []
-    for n_var_parallel in range(n_qubits):
+    for n_var_parallel in range(0, n_var_total, step_by):
         (peo, mem,
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph_raw, n_var_parallel)
@@ -60,12 +61,12 @@ def get_cost_vs_parallel_size(filename):
 
 def plot_cost_vs_n_var_parallel(
         filename,
-        fig_filename='memory_vs_parallelized_vars.png'):
+        fig_filename='memory_vs_parallelized_vars.png', step_by=5):
     """
     Plots memory requirement with respect to the number of
     parallelized variables
     """
-    costs = get_cost_vs_parallel_size(filename)
+    costs = get_cost_vs_parallel_size(filename, step_by)
     fig, axes = plt.subplots(1, 2, sharey=True, figsize=(12, 6))
     axes[0].semilogy(costs[0], label='per node')
     axes[0].semilogy(costs[2], label='total')
@@ -87,10 +88,12 @@ def plot_cost_vs_n_var_parallel(
 if __name__ == "__main__":
     plot_cost_vs_n_var_parallel(
         'test_circuits/inst/cz_v2/4x4/inst_4x4_11_2.txt',
-        fig_filename='memory_vs_parallelized_vars_4x4_11.png'
+        fig_filename='memory_vs_parallelized_vars_4x4_11.png',
+        step_by=2
     )
 
     plot_cost_vs_n_var_parallel(
         'test_circuits/inst/cz_v2/5x5/inst_5x5_20_2.txt',
-        fig_filename='memory_vs_parallelized_vars_5x5_20.png'
+        fig_filename='memory_vs_parallelized_vars_5x5_20.png',
+        step_by=2
     )
