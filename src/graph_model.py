@@ -233,29 +233,33 @@ def cost_estimator(old_graph):
                Graph containing the information about the contraction
     Returns
     -------
-    cost : list
-              List of (memory, flops) pairs in order of the
-              bucket elimination algorithm
+    memory : list
+              Memory cost for steps of the bucket elimination algorithm
+    flops : list
+              Flop cost for steps of the bucket elimination algorithm
     """
     graph = copy.deepcopy(old_graph)
     nodes = sorted(graph.nodes)
 
-    cost = []
+    results = []
     for n, node in enumerate(nodes):
         neighbors = list(graph[node])
 
         memory = 2**(len(neighbors))
         flops  = 2**(len(neighbors) + 1)
 
-        cost.append((memory, flops))
+        results.append((memory, flops))
 
         if len(neighbors) > 1:
             edges = itertools.combinations(neighbors, 2)
-        else:
-            # If this is a single variable tensor, add self loop
+        elif len(neighbors) == 1:
+            # This node had a single neighbor, add self loop to it
             edges = [[neighbors[0], neighbors[0]]]
+        else:
+            # This node had no neighbors
+            pass
 
         graph.remove_node(node)
         graph.add_edges_from(edges, tensor=f'E{n}')
 
-    return cost
+    return tuple(zip(*results))

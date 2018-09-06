@@ -339,34 +339,37 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     Loads circuit from file, evaluates contraction cost
     with and without optimization
     """
-    # filename = 'inst_2x2_7_0.txt'
+    # load circuit
     n_qubits, circuit = ops.read_circuit_file(filename)
 
+    # get contraction graph (node order is arbitrary)
     buckets, _ = opt.circ2buckets(circuit)
     graph_raw = opt.buckets2graph(buckets)
 
-    stats = gm.cost_estimator(graph_raw)
-    mem_raw = np.sum(np.array(stats)[:, 0])
+    # estimate cost
+    mem_cost, _ = gm.cost_estimator(graph_raw)
+    mem_raw = sum(mem_cost)
 
+    # optimize node order
     peo, max_mem = gm.get_peo(graph_raw)
 
+    # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(
         graph_raw, dict(zip(range(1, len(peo)+1), peo))
     )
-    stats = gm.cost_estimator(graph)
-    mem_opt = np.sum(np.array(stats)[:, 0])
+    mem_cost, _ = gm.cost_estimator(graph)
+    mem_opt = sum(mem_cost)
 
+    # split graph and relabel in optimized way
     n_var_parallel = 3
-    (peo, max_mem,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
-         graph_raw, n_var_parallel)
-
+    peo, _, _, reduced_graph = gm.get_peo_parallel_by_metric(
+        graph_raw, n_var_parallel)
     graph_parallel, label_dict = gm.relabel_graph_nodes(
         reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
     )
 
-    stats = gm.cost_estimator(graph_parallel)
-    mem_par = np.sum(np.array(stats)[:, 0])
+    mem_cost, _ = gm.cost_estimator(graph_parallel)
+    mem_par = sum(mem_cost)
 
     print('Memory (in doubles):\n raw: {} optimized: {}'.format(
         mem_raw, mem_opt))
@@ -381,3 +384,4 @@ if __name__ == "__main__":
     eval_circuit_np('inst_2x2_7_0.txt')
     eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
+    eval_contraction_cost('inst_2x2_7_0.txt')
