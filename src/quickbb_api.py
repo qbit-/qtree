@@ -1,28 +1,40 @@
+"""
+This module implements interface to QuickBB program.
+QuickBB is quite cranky to its input
+"""
 import networkx as nx
 import subprocess
-from src.logger_setup import log
-
 import os
 
+from src.logger_setup import log
 
-def gen_cnf(filename, g):
+
+def gen_cnf(filename, old_graph):
     """
-    Genarate QuickBB input file for the graph g
+    Genarate QuickBB input file for the graph.
+    We always convert MultiGraph's to Graph' and remove self loops,
+    because QuickBB does not understand these situations.
 
     Parameters
     ----------
     filename : str
            Output file name
-    g : networkx.Graph
+    graph : networkx.Graph or networkx.MultiGraph
            Undirected graphical model
     """
-    v = g.number_of_nodes()
-    e = g.number_of_edges()
+    graph = nx.Graph(old_graph)
+    v = graph.number_of_nodes()
+    e = graph.number_of_edges() - graph.number_of_selfloops()
     log.info(f"generating config file {filename}")
     cnf = "c a configuration of -qtree simulator\n"
     cnf += f"p cnf {v} {e}\n"
-    for line in nx.generate_edgelist(g):
-        cnf += line.replace("{}", ' 0\n')
+
+    # Convert possible MultiGraph to Graph (avoid repeated edges)
+    for edge in graph.edges():
+        u, v = edge
+        # print only if this is not a self-loop
+        if u != v:
+            cnf += '{} {} 0\n'.format(u, v)
 
     # print("cnf file:",cnf)
     with open(filename, 'w+') as fp:

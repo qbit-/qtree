@@ -17,6 +17,8 @@ import src.utils as utils
 from mpi4py import MPI
 from src.quickbb_api import gen_cnf, run_quickbb
 
+QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
+
 
 def get_amplitudes_from_cirq(filename):
     """
@@ -43,7 +45,7 @@ def get_amplitudes_from_cirq(filename):
 
 def get_optimal_graphical_model(
         filename,
-        quickbb_command='./quickbb/run_quickbb_64.sh'):
+        quickbb_command=QUICKBB_COMMAND):
     """
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
@@ -58,7 +60,7 @@ def get_optimal_graphical_model(
     run_quickbb(cnffile, quickbb_command)
 
 
-def eval_circuit(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with tensorflow tensors).
@@ -211,7 +213,7 @@ def eval_circuit_parallel_mpi(filename):
         print(np.round(amplitudes_reference, 3))
 
 
-def eval_circuit_np(filename, quickbb_command='./quickbb/run_quickbb_64.sh'):
+def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with Numpy tensors).
@@ -330,6 +332,48 @@ def eval_circuit_np_parallel_mpi(filename):
         print(np.round(np.array(amplitudes), 3))
         print('Reference:')
         print(np.round(amplitudes_reference, 3))
+
+
+def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
+    """
+    Loads circuit from file, evaluates contraction cost
+    with and without optimization
+    """
+    # filename = 'inst_2x2_7_0.txt'
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    buckets, _ = opt.circ2buckets(circuit)
+    graph_raw = opt.buckets2graph(buckets)
+
+    stats = gm.cost_estimator(graph_raw)
+    mem_raw = np.sum(np.array(stats)[:, 0])
+
+    peo, max_mem = gm.get_peo(graph_raw)
+
+    graph, label_dict = gm.relabel_graph_nodes(
+        graph_raw, dict(zip(range(1, len(peo)+1), peo))
+    )
+    stats = gm.cost_estimator(graph)
+    mem_opt = np.sum(np.array(stats)[:, 0])
+
+    n_var_parallel = 3
+    (peo, max_mem,
+     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
+         graph_raw, n_var_parallel)
+
+    graph_parallel, label_dict = gm.relabel_graph_nodes(
+        reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
+    )
+
+    stats = gm.cost_estimator(graph_parallel)
+    mem_par = np.sum(np.array(stats)[:, 0])
+
+    print('Memory (in doubles):\n raw: {} optimized: {}'.format(
+        mem_raw, mem_opt))
+    print(' parallel:\n  node: {} total: {} n_tasks: {}'.format(
+        mem_par, mem_par*2**(n_var_parallel),
+        2**(n_var_parallel)
+    ))
 
 
 if __name__ == "__main__":

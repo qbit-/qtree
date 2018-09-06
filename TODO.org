@@ -3,6 +3,8 @@
  - [X] Separate tf interface
  - [ ] Read directly into buckets
  - [X] Buckets to graph function
- - [ ] Cost function evaluation
+ - [X] Cost function evaluation
  - [X] Numpy interface
  - [X] Graph to buckets function
+ - [ ] Efficient evaluation of einsum (without forming full intermediate)
+ - [ ] PEO using memory cost function (same as Chinese article)

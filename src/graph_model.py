@@ -6,6 +6,8 @@ import numpy as np
 import re
 import copy
 import networkx as nx
+import itertools
+
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
@@ -217,3 +219,43 @@ def get_peo_parallel_by_metric(
     peo, max_mem = get_peo(graph)
 
     return peo, max_mem, sorted(idx_parallel), graph
+
+
+def cost_estimator(old_graph):
+    """
+    Estimates the cost of the bucket elimination algorithm.
+    The order of elimination is defined by node order (if ints are
+    used as nodes then it will be the number of integers).
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+               Graph containing the information about the contraction
+    Returns
+    -------
+    cost : list
+              List of (memory, flops) pairs in order of the
+              bucket elimination algorithm
+    """
+    graph = copy.deepcopy(old_graph)
+    nodes = sorted(graph.nodes)
+
+    cost = []
+    for n, node in enumerate(nodes):
+        neighbors = list(graph[node])
+
+        memory = 2**(len(neighbors))
+        flops  = 2**(len(neighbors) + 1)
+
+        cost.append((memory, flops))
+
+        if len(neighbors) > 1:
+            edges = itertools.combinations(neighbors, 2)
+        else:
+            # If this is a single variable tensor, add self loop
+            edges = [[neighbors[0], neighbors[0]]]
+
+        graph.remove_node(node)
+        graph.add_edges_from(edges, tensor=f'E{n}')
+
+    return cost
