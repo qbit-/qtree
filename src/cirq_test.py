@@ -74,7 +74,7 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
 
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
-        peo, max_mem = gm.get_peo(graph)
+        peo, treewidth = gm.get_peo(graph)
         perm_buckets = opt.transform_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
@@ -114,7 +114,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     buckets, graph = opt.circ2buckets(circuit)
 
     # Run quickBB and get contraction order
-    (peo, max_mem,
+    (peo, treewidth,
      idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
          graph, n_var_parallel)
 
@@ -227,7 +227,7 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
 
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
-        peo, max_mem = gm.get_peo(graph)
+        peo, treewidth = gm.get_peo(graph)
         perm_buckets = opt.transform_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
@@ -262,7 +262,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     buckets, graph = opt.circ2buckets(circuit)
 
     # Run quickBB and get contraction order
-    (peo, max_mem,
+    (peo, treewidth,
      idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
          graph, n_var_parallel)
 
@@ -351,7 +351,7 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     mem_raw = sum(mem_cost)
 
     # optimize node order
-    peo, max_mem = gm.get_peo(graph_raw)
+    peo, treewidth = gm.get_peo(graph_raw)
 
     # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(

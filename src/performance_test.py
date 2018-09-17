@@ -6,6 +6,7 @@ import tensorflow as tf
 import time
 import pandas as pd
 import subprocess
+import cProfile
 
 import src.operators as ops
 import src.optimizer as opt
@@ -17,6 +18,25 @@ import src.utils as utils
 from src.logger_setup import log
 from mpi4py import MPI
 from matplotlib import pyplot as plt
+
+
+def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename + ".{}".format(comm.rank)
+                pr.dump_stats(filename_r)
+
+            return result
+        return wrap_f
+    return prof_decorator
 
 
 def time_single_amplitude_tf(
@@ -34,24 +54,28 @@ def time_single_amplitude_tf(
     buckets, graph = opt.circ2buckets(circuit)
 
     # Calculate eleimination order with QuickBB
-    peo, max_mem = gm.get_peo(graph)
+    peo, treewidth = gm.get_peo(graph)
+
+    @profile_decorator(filename='sequential_tf_cprof')
+    def computational_core(buckets, peo):
+        perm_buckets = opt.transform_buckets(buckets, peo)
+
+        tf_buckets, placeholder_dict = tffr.get_tf_buckets(
+            perm_buckets, n_qubits)
+
+        comput_graph = opt.bucket_elimination(
+            tf_buckets, tffr.process_bucket_tf)
+
+        feed_dict = tffr.assign_placeholder_values(
+            placeholder_dict,
+            target_state, n_qubits)
+        amplitude = tffr.run_tf_session(comput_graph, feed_dict)
+        return amplitude
 
     # Start measurement
     start_time = time.time()
-
-    perm_buckets = opt.transform_buckets(buckets, peo)
-
-    tf_buckets, placeholder_dict = tffr.get_tf_buckets(perm_buckets, n_qubits)
-    comput_graph = opt.bucket_elimination(
-        tf_buckets, tffr.process_bucket_tf)
-
-    feed_dict = tffr.assign_placeholder_values(
-        placeholder_dict,
-        target_state, n_qubits)
-    amplitude = tffr.run_tf_session(comput_graph, feed_dict)
-
+    amplitude = computational_core(buckets, peo)
     end_time = time.time()
-
     return end_time - start_time
 
 
@@ -70,24 +94,29 @@ def time_single_amplitude_np(
     buckets, graph = opt.circ2buckets(circuit)
 
     # Calculate eleimination order with QuickBB
-    peo, max_mem = gm.get_peo(graph)
+    peo, treewidth = gm.get_peo(graph)
+
+    @profile_decorator(filename='sequential_np_cprof')
+    def computational_core(buckets, peo):
+        perm_buckets = opt.transform_buckets(buckets, peo)
+
+        np_buckets = npfr.get_np_buckets(
+            perm_buckets, n_qubits, target_state)
+
+        amplitude = opt.bucket_elimination(
+            np_buckets, npfr.process_bucket_np)
+        return amplitude
 
     # Start measurement
     start_time = time.time()
-
-    perm_buckets = opt.transform_buckets(buckets, peo)
-
-    np_buckets = npfr.get_np_buckets(perm_buckets, n_qubits, target_state)
-    amplitude = opt.bucket_elimination(
-        np_buckets, npfr.process_bucket_np)
-
+    amplitude = computational_core(buckets, peo)
     end_time = time.time()
 
     return end_time - start_time
 
 
 def time_single_amplitude_tf_mpi(
-        filename, target_state, n_var_parallel=2,
+        filename, target_state, n_var_parallel=5,
         quickbb_command='./quickbb/run_quickbb_64.sh'):
     """
     Returns the time of a single amplitude evaluation.
@@ -108,7 +137,7 @@ def time_single_amplitude_tf_mpi(
         buckets, graph = opt.circ2buckets(circuit)
 
         # Run quickBB and get contraction order
-        (peo, max_mem,
+        (peo, treewidth,
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
@@ -147,39 +176,43 @@ def time_single_amplitude_tf_mpi(
         env = None
         start_time = None
 
-    # Synchronize processes
-    env = comm.bcast(env, root=0)
-    start_time = comm.bcast(start_time, root=0)
+    @profile_decorator(filename='parallel_tf_cprof')
+    def computational_core(env, start_time):
+        # Synchronize processes
+        env = comm.bcast(env, root=0)
+        start_time = comm.bcast(start_time, root=0)
 
-    # restore tensorflow graph, extract inputs and outputs
-    tf.reset_default_graph()
-    tf.import_graph_def(env['tf_graph_def'], name='')
-    placeholder_dict = tffr.extract_placeholder_dict(
-        tf.get_default_graph(),
-        env['input_names']
-    )
-    result = tf.get_default_graph().get_tensor_by_name('result:0')
+        # restore tensorflow graph, extract inputs and outputs
+        tf.reset_default_graph()
+        tf.import_graph_def(env['tf_graph_def'], name='')
+        placeholder_dict = tffr.extract_placeholder_dict(
+            tf.get_default_graph(),
+            env['input_names']
+        )
+        result = tf.get_default_graph().get_tensor_by_name('result:0')
 
-    # restore other parts of the environment
-    n_qubits = env['n_qubits']
-    idx_parallel = env['idx_parallel']
+        # restore other parts of the environment
+        n_qubits = env['n_qubits']
+        idx_parallel = env['idx_parallel']
 
-    feed_dict = tffr.assign_placeholder_values(
-        placeholder_dict,
-        target_state, n_qubits)
+        feed_dict = tffr.assign_placeholder_values(
+            placeholder_dict,
+            target_state, n_qubits)
 
-    amplitude = 0
-    for slice_dict in utils.slice_values_generator(
-            comm_size, rank, idx_parallel):
-        parallel_vars_feed = {
-            placeholder_dict[key]: val for key, val
-            in slice_dict.items()}
+        amplitude = 0
+        for slice_dict in utils.slice_values_generator(
+                comm_size, rank, idx_parallel):
+            parallel_vars_feed = {
+                placeholder_dict[key]: val for key, val
+                in slice_dict.items()}
 
-        feed_dict.update(parallel_vars_feed)
-        amplitude += tffr.run_tf_session(result, feed_dict)
+            feed_dict.update(parallel_vars_feed)
+            amplitude += tffr.run_tf_session(result, feed_dict)
 
-    amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+            amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+        return amplitude
 
+    amplitude = computational_core(env, start_time)
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -210,7 +243,7 @@ def time_single_amplitude_np_mpi(
         buckets, graph = opt.circ2buckets(circuit)
 
         # Run quickBB and get contraction order
-        (peo, max_mem,
+        (peo, treewidth,
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
@@ -230,32 +263,36 @@ def time_single_amplitude_np_mpi(
         env = None
         start_time = None
 
-    # Synchronize processes
-    env = comm.bcast(env, root=0)
-    start_time = comm.bcast(start_time, root=0)
+    @profile_decorator(filename='parallel_np_cprof')
+    def computational_core(env, start_time):
+        # Synchronize processes
+        env = comm.bcast(env, root=0)
+        start_time = comm.bcast(start_time, root=0)
 
-    # restore buckets
-    buckets = env['buckets']
+        # restore buckets
+        buckets = env['buckets']
 
-    # restore other parts of the environment
-    n_qubits = env['n_qubits']
-    idx_parallel = env['idx_parallel']
+        # restore other parts of the environment
+        n_qubits = env['n_qubits']
+        idx_parallel = env['idx_parallel']
 
-    # Transform label buckets to Numpy buckets
-    np_buckets = npfr.get_np_buckets(
-        buckets, n_qubits, target_state)
+        # Transform label buckets to Numpy buckets
+        np_buckets = npfr.get_np_buckets(
+            buckets, n_qubits, target_state)
 
-    amplitude = 0
-    for slice_dict in utils.slice_values_generator(
-            comm_size, rank, idx_parallel):
-        # Slice Numpy buckets along the parallelized vars
-        sliced_buckets = npfr.slice_np_buckets(
-            np_buckets, slice_dict, idx_parallel)
-        amplitude += opt.bucket_elimination(
-            sliced_buckets, npfr.process_bucket_np)
+        amplitude = 0
+        for slice_dict in utils.slice_values_generator(
+                comm_size, rank, idx_parallel):
+            # Slice Numpy buckets along the parallelized vars
+            sliced_buckets = npfr.slice_np_buckets(
+                np_buckets, slice_dict, idx_parallel)
+            amplitude += opt.bucket_elimination(
+                sliced_buckets, npfr.process_bucket_np)
 
-    amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+        amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+        return amplitude
 
+    amplitude = computational_core(env, start_time)
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -560,7 +597,9 @@ def plot_par_vs_depth_multiple(
         axes[n].set_ylabel('log(time in seconds)')
         axes[n].set_title(title)
 
-    fig.suptitle('Evaluation time vs depth of the circuit')
+    fig.suptitle('Evaluation time vs depth of the {}x{} circuit\n'.format(
+        grid_size, grid_size)
+    )
 
     if interactive:
         fig.show()
@@ -593,7 +632,9 @@ def plot_par_efficiency(
     ax.set_xlabel(
         'number of processes')
     ax.set_ylabel('Efficiency')
-    ax.set_title('Efficiency of MPI parallel code')
+    ax.set_title('Efficiency of MPI parallel code\n' +
+                 ' for {}x{} qubits, {} layers'.format(
+                     grid_size, grid_size, depth))
 
     if interactive:
         fig.show()
@@ -602,18 +643,33 @@ def plot_par_efficiency(
 
 
 if __name__ == "__main__":
-    collect_timings('test_np.p', [4, 5], list(range(10, 21)),
-                    timing_fn=time_single_amplitude_np)
-    collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
-                    timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 11)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi)
-    collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 11)),
-                        timing_fn_mpi=time_single_amplitude_tf_mpi)
-    collect_timings_for_multiple_processes(
-        'output/test_np', [1, 2, 4, 8, 16, 24, 32],
-        extra_args=[[4, 5], list(range(10, 21))]
-    )
+    # collect_timings('test_np.p', [4, 5], list(range(10, 21)),
+    #                 timing_fn=time_single_amplitude_np)
+    # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
+    #                 timing_fn=time_single_amplitude_tf)
+    # collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 11)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 11)),
+    #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
+    # collect_timings_for_multiple_processes(
+    #     'output/test_np', [1, 2, 4, 8, 16, 24, 32],
+    #     extra_args=[[4, 5], list(range(10, 21))]
+    # )
+
+    # time_single_amplitude_tf(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0)
+
+    # time_single_amplitude_np(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0)
+
+    time_single_amplitude_tf_mpi(
+        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
+        n_var_parallel=3)
+
+    time_single_amplitude_np_mpi(
+        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
+        n_var_parallel=3)
+
     # plot_time_vs_depth('output/test_np.p',
     #                    fig_filename='time_vs_depth_np_hachiko.png',
     #                    interactive=True)
@@ -624,7 +680,7 @@ if __name__ == "__main__":
     #     fig_filename='time_vs_depth_multiple_np_hachiko.png',
     #     interactive=True)
 
-    # plot_par_efficiency('output/test_np.p', 'output/test_np',
-    #                     n_processes=[1, 2, 4, 8, 16, 24, 32],
+    # plot_par_efficiency('output/test_np_1.p', 'output/test_np',
+    #                     n_processes=[1, 2, 4, 8, 24, 32],
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)

@@ -177,7 +177,9 @@ def graph2buckets(graph):
     ----------
     graph : networkx.MultiGraph
             contraction graph of the circuit. Has to support self loops
-            and parallel edges
+            and parallel edges. Parallel edges are needed to support
+            multiple qubit operators on same qubits
+            (which can be collapsed in one operation)
 
     Returns
     -------

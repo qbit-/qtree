@@ -65,8 +65,8 @@ def get_peo(old_graph):
     -------
     peo : list
           list containing indices in loptimal order of elimination
-    max_mem : int
-          leading memory order needed to perform the contraction (in floats)
+    treewidth : int
+          treewidth of the decomposition
     """
 
     cnffile = 'output/quickbb.cnf'
@@ -108,7 +108,7 @@ def get_peo(old_graph):
     assert(sorted(peo) == sorted(initial_indices))
     log.info('Final peo from quickBB:\n{}'.format(peo))
 
-    return peo, 2**treewidth
+    return peo, treewidth
 
 
 def get_peo_parallel_random(old_graph, n_var_parallel=0):
@@ -146,16 +146,23 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
 
-    peo, max_mem = get_peo(graph)
+    peo, treewidth = get_peo(graph)
 
-    return peo, max_mem, sorted(idx_parallel), graph
+    return peo, treewidth, sorted(idx_parallel), graph
 
 
-def get_node_by_degree(graph):
+def get_node_by_degree(old_graph):
     """
     Returns a list of pairs (node : degree) for the
-    provided graph. Self loops in the graph are removed (if any)
-    before the calculation of degree
+    provided graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph without self-loops and parallel edges
+
+    Returns
+    -------
+    nodes_by_degree : dict
     """
     nodes_by_degree = list((node, degree) for
                            node, degree in nx.Graph(graph).degree())
@@ -166,10 +173,18 @@ def get_node_by_betweenness(graph):
     """
     Returns a list of pairs (node : betweenness) for the
     provided graph
+
+    Parameters
+    ----------
+    graph : networkx.Graph without self-loops and parallel edges
+
+    Returns
+    -------
+    nodes_by_beteenness : dict
     """
     nodes_by_beteenness = list(
         nx.betweenness_centrality(
-            nx.Graph(graph),
+            graph,
             normalized=False, endpoints=True).items())
 
     return nodes_by_beteenness
@@ -186,8 +201,12 @@ def get_peo_parallel_by_metric(
     Parameters
     ----------
     old_graph : networkx.Graph or networkx.MultiGraph
-                graph to contract (after eliminating variables which
-                are parallelized over)
+                graph to split by parallelizing over variables
+                and to contract
+
+                Parallel edges and self-loops in the graph are
+                removed (if any) before the calculation of metric
+
     n_var_parallel : int
                 number of variables to eliminate by parallelization
     metric_fn : function
@@ -204,7 +223,8 @@ def get_peo_parallel_by_metric(
     graph : networkx.Graph or networkx.MultiGraph
           new graph without parallelized variables
     """
-    graph = copy.deepcopy(old_graph)
+    graph = nx.Graph(copy.deepcopy(old_graph))
+    graph.remove_edges_from(graph.selfloop_edges())
 
     # get nodes by metric in descending order
     nodes_by_metric = metric_fn(graph)
@@ -220,9 +240,9 @@ def get_peo_parallel_by_metric(
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
 
-    peo, max_mem = get_peo(graph)
+    peo, treewidth = get_peo(graph)
 
-    return peo, max_mem, sorted(idx_parallel), graph
+    return peo, treewidth, sorted(idx_parallel), graph
 
 
 def cost_estimator(old_graph):
@@ -249,8 +269,24 @@ def cost_estimator(old_graph):
     for n, node in enumerate(nodes):
         neighbors = list(graph[node])
 
+        # We have to find all unique tensors which will be contracted
+        # in this bucket. They label the edges coming from
+        # the current node (may be multiple edges between
+        # the node and its neighbor).
+        # Then we have to count only the number of unique tensors.
+        edges_from_node = [list(graph[node][neighbor].values())
+                           for neighbor in neighbors]
+        tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
+                            in edges_from_node
+                            for edge in edges_of_neighbor]
+        n_unique_tensors = len(set(tensor_hash_tags))
+
         memory = 2**(len(neighbors))
-        flops  = 2**(len(neighbors) + 1)
+
+        # there are number_of_terms - 1 multiplications and 1 addition
+        # repeated size_of_the_result*size_of_contracted_variables
+        # times for each contraction
+        flops = 2**(len(neighbors) + 1)*n_unique_tensors
 
         results.append((memory, flops))
 
@@ -266,6 +302,8 @@ def cost_estimator(old_graph):
         graph.remove_node(node)
 
         if edges is not None:
-            graph.add_edges_from(edges, tensor=f'E{n}')
-            
+            graph.add_edges_from(
+                edges, tensor=f'E{n}',
+                hash_tag=hash((f'E{n}', tuple(neighbors))))
+
     return tuple(zip(*results))

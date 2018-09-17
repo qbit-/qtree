@@ -9,3 +9,5 @@
  - [ ] Efficient evaluation of einsum (without forming full intermediate)
  - [ ] PEO using memory cost function (same as Chinese article)
  - [ ] Actually delete parallelized variables in slicing
+ - [ ] Experiment with different metrics for variable parallelization
+ - [ ] Plot predicted time, treewidth, memory vs number of parallelized variables/number of parallel processors 

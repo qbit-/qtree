@@ -29,6 +29,7 @@ def get_cost_vs_parallel_size(filename, step_by=1):
           min_mem - minimal possible memory for the algorithm
           total_max_mem - maximal memory of all tasks combined
           total_min_mem - minimal memory of all tasks combined
+          treewidth - treewidth returned by quickBB
     """
     n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -38,7 +39,7 @@ def get_cost_vs_parallel_size(filename, step_by=1):
 
     results = []
     for n_var_parallel in range(0, n_var_total, step_by):
-        (peo, mem,
+        (peo, treewidth,
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph_raw, n_var_parallel)
 
@@ -54,7 +55,7 @@ def get_cost_vs_parallel_size(filename, step_by=1):
         total_min_mem = min_mem * (2**n_var_parallel)
 
         results.append((max_mem, min_mem,
-                        total_mem_max, total_min_mem))
+                        total_mem_max, total_min_mem, treewidth))
 
     return tuple(zip(*results))
 
@@ -84,6 +85,15 @@ def plot_cost_vs_n_var_parallel(
 
     fig.savefig(fig_filename)
 
+    fig, ax = plt.subplots(1, 1, sharey=True, figsize=(12, 6))
+
+    ax.plot(costs[4], label='treewidth')
+    ax.set_xlabel('parallelized variables')
+    ax.set_ylabel('treewidth')
+    ax.set_title('Graph treewdth')
+    ax.legend()
+
+    fig.savefig('treewidth.png')
 
 if __name__ == "__main__":
     plot_cost_vs_n_var_parallel(
@@ -92,8 +102,8 @@ if __name__ == "__main__":
         step_by=2
     )
 
-    plot_cost_vs_n_var_parallel(
-        'test_circuits/inst/cz_v2/5x5/inst_5x5_20_2.txt',
-        fig_filename='memory_vs_parallelized_vars_5x5_20.png',
-        step_by=2
-    )
+    # plot_cost_vs_n_var_parallel(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_20_2.txt',
+    #     fig_filename='memory_vs_parallelized_vars_5x5_20.png',
+    #     step_by=2
+    # )
