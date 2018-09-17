@@ -194,7 +194,7 @@ def get_peo_parallel_by_metric(
         old_graph, n_var_parallel=0, metric_fn=get_node_by_degree):
     """
     Parallel-splitted version of :py:meth:`get_peo` with nodes
-    to split chosed according to the metric function. Metric
+    to split chosen according to the metric function. Metric
     function should take a graph and return a list of pairs
     (node : metric_value)
 
@@ -274,11 +274,16 @@ def cost_estimator(old_graph):
         # the current node (may be multiple edges between
         # the node and its neighbor).
         # Then we have to count only the number of unique tensors.
-        edges_from_node = [list(graph[node][neighbor].values())
-                           for neighbor in neighbors]
-        tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-                            in edges_from_node
-                            for edge in edges_of_neighbor]
+        if graph.is_multigraph():
+            edges_from_node = [list(graph[node][neighbor].values())
+                               for neighbor in neighbors]
+            tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
+                                in edges_from_node
+                                for edge in edges_of_neighbor]
+        else:
+            tensor_hash_tags = [graph[node][neighbor]['hash_tag']
+                                for neighbor in neighbors]
+
         n_unique_tensors = len(set(tensor_hash_tags))
 
         memory = 2**(len(neighbors))
