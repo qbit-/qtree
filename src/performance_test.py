@@ -56,7 +56,7 @@ def time_single_amplitude_tf(
     # Calculate eleimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
 
-    @profile_decorator(filename='sequential_tf_cprof')
+    #@profile_decorator(filename='sequential_tf_cprof')
     def computational_core(buckets, peo):
         perm_buckets = opt.transform_buckets(buckets, peo)
 
@@ -96,7 +96,7 @@ def time_single_amplitude_np(
     # Calculate eleimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
 
-    @profile_decorator(filename='sequential_np_cprof')
+    #@profile_decorator(filename='sequential_np_cprof')
     def computational_core(buckets, peo):
         perm_buckets = opt.transform_buckets(buckets, peo)
 
@@ -141,9 +141,6 @@ def time_single_amplitude_tf_mpi(
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
-        # Start time measurement
-        start_time = time.time()
-
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
             buckets, peo + idx_parallel)
@@ -174,13 +171,9 @@ def time_single_amplitude_tf_mpi(
         )
     else:
         env = None
-        start_time = None
 
-    @profile_decorator(filename='parallel_tf_cprof')
-    def computational_core(env, start_time):
-        # Synchronize processes
-        env = comm.bcast(env, root=0)
-        start_time = comm.bcast(start_time, root=0)
+    #@profile_decorator(filename='parallel_tf_cprof')
+    def computational_core(env):
 
         # restore tensorflow graph, extract inputs and outputs
         tf.reset_default_graph()
@@ -209,10 +202,20 @@ def time_single_amplitude_tf_mpi(
             feed_dict.update(parallel_vars_feed)
             amplitude += tffr.run_tf_session(result, feed_dict)
 
-            amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         return amplitude
 
-    amplitude = computational_core(env, start_time)
+    # Start time measurement
+    start_time = time.time()
+
+    # Synchronize processes
+    env = comm.bcast(env, root=0)
+
+    # Do main calculation
+    amplitude = computational_core(env)
+
+    # Collect results from all workers
+    amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -247,9 +250,6 @@ def time_single_amplitude_np_mpi(
          idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
              graph, n_var_parallel)
 
-        # Start time measurement
-        start_time = time.time()
-
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
             buckets, peo + idx_parallel)
@@ -261,13 +261,9 @@ def time_single_amplitude_np_mpi(
         )
     else:
         env = None
-        start_time = None
 
-    @profile_decorator(filename='parallel_np_cprof')
-    def computational_core(env, start_time):
-        # Synchronize processes
-        env = comm.bcast(env, root=0)
-        start_time = comm.bcast(start_time, root=0)
+    #@profile_decorator(filename='parallel_np_cprof')
+    def computational_core(env):
 
         # restore buckets
         buckets = env['buckets']
@@ -289,10 +285,20 @@ def time_single_amplitude_np_mpi(
             amplitude += opt.bucket_elimination(
                 sliced_buckets, npfr.process_bucket_np)
 
-        amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         return amplitude
 
-    amplitude = computational_core(env, start_time)
+    # Start time measurement
+    start_time = time.time()
+
+    # Synchronize processes
+    env = comm.bcast(env, root=0)
+
+    # Do main calculation
+    amplitude = computational_core(env)
+
+    # Collect results from all workers
+    amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+
     end_time = time.time()
     elapsed_time = end_time - start_time
 

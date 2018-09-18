@@ -151,7 +151,7 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
     return peo, treewidth, sorted(idx_parallel), graph
 
 
-def get_node_by_degree(old_graph):
+def get_node_by_degree(graph):
     """
     Returns a list of pairs (node : degree) for the
     provided graph.
@@ -165,7 +165,7 @@ def get_node_by_degree(old_graph):
     nodes_by_degree : dict
     """
     nodes_by_degree = list((node, degree) for
-                           node, degree in nx.Graph(graph).degree())
+                           node, degree in graph.degree())
     return nodes_by_degree
 
 
@@ -285,13 +285,18 @@ def cost_estimator(old_graph):
                                 for neighbor in neighbors]
 
         n_unique_tensors = len(set(tensor_hash_tags))
+        if n_unique_tensors == 0:
+            n_multiplications = 0
+        else:
+            n_multiplications = n_unique_tensors - 1
 
         memory = 2**(len(neighbors))
 
         # there are number_of_terms - 1 multiplications and 1 addition
         # repeated size_of_the_result*size_of_contracted_variables
         # times for each contraction
-        flops = 2**(len(neighbors) + 1)*n_unique_tensors
+        flops = (2**(len(neighbors) + 1)       # this is addition
+                 + 2**(len(neighbors) + 1)*n_multiplications)
 
         results.append((memory, flops))
 
