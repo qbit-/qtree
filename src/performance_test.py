@@ -53,7 +53,7 @@ def time_single_amplitude_tf(
     # Convert circuit to buckets
     buckets, graph = opt.circ2buckets(circuit)
 
-    # Calculate eleimination order with QuickBB
+    # Calculate elimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
 
     #@profile_decorator(filename='sequential_tf_cprof')
@@ -93,7 +93,7 @@ def time_single_amplitude_np(
     # Convert circuit to buckets
     buckets, graph = opt.circ2buckets(circuit)
 
-    # Calculate eleimination order with QuickBB
+    # Calculate elimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
 
     #@profile_decorator(filename='sequential_np_cprof')
@@ -136,10 +136,12 @@ def time_single_amplitude_tf_mpi(
         # Prepare graphical model
         buckets, graph = opt.circ2buckets(circuit)
 
-        # Run quickBB and get contraction order
-        (peo, treewidth,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
-             graph, n_var_parallel)
+        # Split graphical model to parallelize
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+            graph, n_var_parallel)
+
+        # Calculate elimination order with QuickBB
+        peo, treewidth = gm.get_peo(reduced_graph)
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
@@ -245,10 +247,12 @@ def time_single_amplitude_np_mpi(
         # Prepare graphical model
         buckets, graph = opt.circ2buckets(circuit)
 
-        # Run quickBB and get contraction order
-        (peo, treewidth,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
-             graph, n_var_parallel)
+        # Split the graph to parallelize
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+            graph, n_var_parallel)
+
+        # Calculate elimination order with QuickBB
+        peo, treewidth = gm.get_peo(reduced_graph)
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(

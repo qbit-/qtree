@@ -114,9 +114,9 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     buckets, graph = opt.circ2buckets(circuit)
 
     # Run quickBB and get contraction order
-    (peo, treewidth,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
+    idx_parallel, reduced_graph = gm.split_graph_by_metric(
          graph, n_var_parallel)
+    peo, treewidth = gm.get_peo(reduced_graph)
 
     # Permute buckets to the order of optimal contraction
     perm_buckets = opt.transform_buckets(
@@ -262,9 +262,9 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     buckets, graph = opt.circ2buckets(circuit)
 
     # Run quickBB and get contraction order
-    (peo, treewidth,
-     idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
-         graph, n_var_parallel)
+    idx_parallel, reduced_graph = gm.split_graph_by_metric(
+        graph, n_var_parallel)
+    peo, treewidth = gm.get_peo(reduced_graph)
 
     # Permute buckets to the order of optimal contraction
     perm_buckets = opt.transform_buckets(
@@ -362,8 +362,10 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
 
     # split graph and relabel in optimized way
     n_var_parallel = 3
-    peo, _, _, reduced_graph = gm.get_peo_parallel_by_metric(
+    _, reduced_graph = gm.split_graph_by_metric(
         graph_raw, n_var_parallel)
+    peo, treewidth = gm.get_peo(reduced_graph)
+
     graph_parallel, label_dict = gm.relabel_graph_nodes(
         reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
     )

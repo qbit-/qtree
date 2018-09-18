@@ -41,9 +41,10 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
 
     results = []
     for n_var_parallel in range(start_at, stop_at, step_by):
-        (peo, treewidth,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
              graph_raw, n_var_parallel)
+
+        peo, treewidth = gm.get_peo(reduced_graph)
 
         graph_parallel, label_dict = gm.relabel_graph_nodes(
             reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
@@ -91,9 +92,9 @@ def get_treewidth_vs_parallel_size(filename, metric_function,
 
     results = []
     for n_var_parallel in range(start_at, stop_at, step_by):
-        (peo, treewidth,
-         idx_parallel, reduced_graph) = gm.get_peo_parallel_by_metric(
-             graph_raw, n_var_parallel, metric_fn=metric_function)
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+            graph_raw, n_var_parallel, metric_fn=metric_function)
+        peo, treewidth = gm.get_peo(reduced_graph)
 
         results.append(treewidth)
 

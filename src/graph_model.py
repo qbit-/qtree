@@ -111,9 +111,9 @@ def get_peo(old_graph):
     return peo, treewidth
 
 
-def get_peo_parallel_random(old_graph, n_var_parallel=0):
+def split_graph_random(old_graph, n_var_parallel=0):
     """
-    Same as :py:meth:`get_peo`, but with randomly chosen nodes
+    Splits a graphical model with randomly chosen nodes
     to parallelize over.
 
     Parameters
@@ -126,10 +126,6 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
 
     Returns
     -------
-    peo : list
-          list containing indices in loptimal order of elimination
-    max_mem : int
-          leading memory order needed to perform the contraction (in floats)
     idx_parallel : list
           variables removed by parallelization
     graph : networkx.Graph
@@ -148,7 +144,7 @@ def get_peo_parallel_random(old_graph, n_var_parallel=0):
 
     peo, treewidth = get_peo(graph)
 
-    return peo, treewidth, sorted(idx_parallel), graph
+    return sorted(idx_parallel), graph
 
 
 def get_node_by_degree(graph):
@@ -190,7 +186,25 @@ def get_node_by_betweenness(graph):
     return nodes_by_beteenness
 
 
-def get_peo_parallel_by_metric(
+def get_node_by_degree(graph):
+    """
+    Returns a list of pairs (node : degree) for the
+    provided graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph without self-loops and parallel edges
+
+    Returns
+    -------
+    nodes_by_degree : dict
+    """
+    nodes_by_degree = list((node, degree) for
+                           node, degree in graph.degree())
+    return nodes_by_degree
+
+
+def split_graph_by_metric(
         old_graph, n_var_parallel=0, metric_fn=get_node_by_degree):
     """
     Parallel-splitted version of :py:meth:`get_peo` with nodes
@@ -214,10 +228,6 @@ def get_peo_parallel_by_metric(
 
     Returns
     -------
-    peo : list
-          list containing indices in loptimal order of elimination
-    max_mem : int
-          leading memory order needed to perform the contraction (in floats)
     idx_parallel : list
           variables removed by parallelization
     graph : networkx.Graph or networkx.MultiGraph
@@ -240,9 +250,7 @@ def get_peo_parallel_by_metric(
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
 
-    peo, treewidth = get_peo(graph)
-
-    return peo, treewidth, sorted(idx_parallel), graph
+    return sorted(idx_parallel), graph
 
 
 def cost_estimator(old_graph):
