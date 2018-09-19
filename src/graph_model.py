@@ -186,10 +186,10 @@ def get_node_by_betweenness(graph):
     return nodes_by_beteenness
 
 
-def get_node_by_degree(graph):
+def get_node_by_mem_reduction(old_graph):
     """
-    Returns a list of pairs (node : degree) for the
-    provided graph.
+    Returns a list of pairs (node : reduction_in_flop_cost) for the
+    provided graph. This is the algorithm Alibaba used
 
     Parameters
     ----------
@@ -199,9 +199,39 @@ def get_node_by_degree(graph):
     -------
     nodes_by_degree : dict
     """
-    nodes_by_degree = list((node, degree) for
-                           node, degree in graph.degree())
-    return nodes_by_degree
+    # First find the initial flop cost
+    # Find elimination order
+    peo, treewidth = get_peo(old_graph)
+    number_of_nodes = len(peo)
+
+    # Transform graph to this order
+    graph, label_dict = relabel_graph_nodes(
+        old_graph, dict(zip(range(1, number_of_nodes+1), peo))
+    )
+
+    # Get flop cost of the bucket elimination
+    initial_mem, initial_flop = cost_estimator(graph)
+
+    nodes_by_flop_reduction = []
+    for node in graph.nodes(data=False):
+        reduced_graph = copy.deepcopy(graph)
+        # Take out one node
+        reduced_graph.remove_node(node)
+        # Renumerate graph nodes to be consequtive ints (may be redundant)
+        order = (list(range(1, node))
+                 + list(range(node + 1, number_of_nodes + 1)))
+        reduced_graph, _ = relabel_graph_nodes(
+            reduced_graph, dict(zip(range(1, number_of_nodes), order))
+        )
+        mem, flop = cost_estimator(reduced_graph)
+        delta = np.sum(initial_mem) - np.sum(mem)
+
+        # Get original node number for this node
+        old_node = label_dict[node]
+
+        nodes_by_flop_reduction.append((old_node, delta))
+
+    return nodes_by_flop_reduction
 
 
 def split_graph_by_metric(

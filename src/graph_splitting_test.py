@@ -175,7 +175,8 @@ def plot_compare_parallelization_strategies(
     """
     metric_functions = {
         'degree': gm.get_node_by_degree,
-        'betweenness': gm.get_node_by_betweenness
+        'betweenness': gm.get_node_by_betweenness,
+        'bruteforce (Alibaba)': gm.get_node_by_mem_reduction
     }
 
     results = {}
@@ -187,7 +188,7 @@ def plot_compare_parallelization_strategies(
 
     x_range = list(
         range(
-            start_at, len(results.values().__iter__())*step_by, step_by))
+            start_at, len(next(iter(results.values())))*step_by, step_by))
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     for name in sorted(results.keys()):
