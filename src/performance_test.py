@@ -51,10 +51,21 @@ def time_single_amplitude_tf(
     n_qubits, circuit = ops.read_circuit_file(filename)
 
     # Convert circuit to buckets
-    buckets, graph = opt.circ2buckets(circuit)
+    buckets, _ = opt.circ2buckets(circuit)
+    graph = opt.buckets2graph(buckets)
 
     # Calculate elimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
+
+    # Transform graph to the elimination order
+    graph_optimal, label_dict = gm.relabel_graph_nodes(
+        graph, dict(zip(range(1, len(peo) + 1), peo))
+    )
+
+    # Calculate costs
+    mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
+    mem_max = np.sum(mem_costs)
+    flop = np.sum(flop_costs)
 
     #@profile_decorator(filename='sequential_tf_cprof')
     def computational_core(buckets, peo):
@@ -76,7 +87,8 @@ def time_single_amplitude_tf(
     start_time = time.time()
     amplitude = computational_core(buckets, peo)
     end_time = time.time()
-    return end_time - start_time
+
+    return end_time - start_time, mem_max, flop
 
 
 def time_single_amplitude_np(
@@ -91,10 +103,21 @@ def time_single_amplitude_np(
     n_qubits, circuit = ops.read_circuit_file(filename)
 
     # Convert circuit to buckets
-    buckets, graph = opt.circ2buckets(circuit)
+    buckets, _ = opt.circ2buckets(circuit)
+    graph = opt.buckets2graph(buckets)
 
     # Calculate elimination order with QuickBB
     peo, treewidth = gm.get_peo(graph)
+
+    # Transform graph to the elimination order
+    graph_optimal, label_dict = gm.relabel_graph_nodes(
+        graph, dict(zip(range(1, len(peo) + 1), peo))
+    )
+
+    # Calculate costs
+    mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
+    mem_max = np.sum(mem_costs)
+    flop = np.sum(flop_costs)
 
     #@profile_decorator(filename='sequential_np_cprof')
     def computational_core(buckets, peo):
@@ -112,7 +135,7 @@ def time_single_amplitude_np(
     amplitude = computational_core(buckets, peo)
     end_time = time.time()
 
-    return end_time - start_time
+    return end_time - start_time, mem_max, flop
 
 
 def time_single_amplitude_tf_mpi(
@@ -134,7 +157,8 @@ def time_single_amplitude_tf_mpi(
         n_qubits, circuit = ops.read_circuit_file(filename)
 
         # Prepare graphical model
-        buckets, graph = opt.circ2buckets(circuit)
+        buckets, _ = opt.circ2buckets(circuit)
+        graph = opt.buckets2graph(buckets)
 
         # Split graphical model to parallelize
         idx_parallel, reduced_graph = gm.split_graph_by_metric(
@@ -142,6 +166,17 @@ def time_single_amplitude_tf_mpi(
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
+
+        # Transform graph to the elimination order
+        graph_optimal, label_dict = gm.relabel_graph_nodes(
+            reduced_graph,
+            dict(zip(range(1, len(peo) + 1), peo))
+        )
+
+        # Estimate cost
+        mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
+        mem_max = np.sum(mem_costs) * 2**n_var_parallel
+        flop = np.sum(flop_costs) * 2**n_var_parallel
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
@@ -169,7 +204,8 @@ def time_single_amplitude_tf_mpi(
             n_qubits=n_qubits,
             idx_parallel=idx_parallel,
             input_names=list(pdict_sliced.keys()),
-            tf_graph_def=tf.get_default_graph().as_graph_def()
+            tf_graph_def=tf.get_default_graph().as_graph_def(),
+            costs=(mem_max, flop)
         )
     else:
         env = None
@@ -223,7 +259,9 @@ def time_single_amplitude_tf_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    return elapsed_time
+    mem_max, flop = env['costs']
+
+    return elapsed_time, mem_max, flop
 
 
 def time_single_amplitude_np_mpi(
@@ -245,7 +283,8 @@ def time_single_amplitude_np_mpi(
         n_qubits, circuit = ops.read_circuit_file(filename)
 
         # Prepare graphical model
-        buckets, graph = opt.circ2buckets(circuit)
+        buckets, _ = opt.circ2buckets(circuit)
+        graph = opt.buckets2graph(buckets)
 
         # Split the graph to parallelize
         idx_parallel, reduced_graph = gm.split_graph_by_metric(
@@ -254,6 +293,17 @@ def time_single_amplitude_np_mpi(
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
 
+        # Transform graph to the elimination order
+        graph_optimal, label_dict = gm.relabel_graph_nodes(
+            reduced_graph,
+            dict(zip(range(1, len(peo) + 1), peo))
+        )
+
+        # Estimate cost
+        mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
+        mem_max = np.sum(mem_costs) * 2**n_var_parallel
+        flop = np.sum(flop_costs) * 2**n_var_parallel
+
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
             buckets, peo + idx_parallel)
@@ -261,7 +311,8 @@ def time_single_amplitude_np_mpi(
         env = dict(
             n_qubits=n_qubits,
             idx_parallel=idx_parallel,
-            buckets=perm_buckets
+            buckets=perm_buckets,
+            costs=(mem_max, flop)
         )
     else:
         env = None
@@ -308,7 +359,9 @@ def time_single_amplitude_np_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    return elapsed_time
+    mem_max, flop = env['costs']
+
+    return elapsed_time, mem_max, flop
 
 
 def collect_timings(
@@ -330,7 +383,8 @@ def collect_timings(
         # lays down the structure of data
         data = pd.DataFrame(
             [],
-            index=['exec_time', 'total_time'],
+            index=['exec_time', 'total_time',
+                   'mem_max', 'flop'],
             columns=pd.MultiIndex.from_product(
                 [[], []],
                 names=['grid size', 'depth']))
@@ -357,15 +411,19 @@ def collect_timings(
             # Will calculate "1111...1" target amplitude
             target_state = 2**(grid_size**2) - 1
 
-            # Measure time
+            # Measure time and get predicted costs
             start_time = time.time()
-            exec_time = timing_fn(
+            exec_time, *costs = timing_fn(
                 testfile, target_state)
             end_time = time.time()
             total_time = end_time - start_time
 
+            # Extract cost information
+            mem_max, flop = costs
+
             # Merge current result with the rest
-            data[grid_size, depth] = [exec_time, total_time]
+            data[grid_size, depth] = [exec_time, total_time,
+                                      mem_max, flop]
 
     # Save result
     data.to_pickle(out_filename)
@@ -400,7 +458,8 @@ def collect_timings_mpi(
             # lays down the structure of data
             data = pd.DataFrame(
                 [],
-                index=['exec_time', 'total_time'],
+                index=['exec_time', 'total_time',
+                       'mem_max', 'flop'],
                 columns=pd.MultiIndex.from_product(
                     [[], []],
                     names=['grid size', 'depth']))
@@ -441,10 +500,11 @@ def collect_timings_mpi(
 
             # Measure time
             start_time = time.time()
-            exec_time = timing_fn_mpi(
+            exec_time, *costs = timing_fn_mpi(
                 testfile, target_state, n_var_parallel)
             end_time = time.time()
             total_time = end_time - start_time
+            mem_max, flop = costs
 
             # Get maximal time as it determines overall time
             comm.reduce(exec_time, op=MPI.MAX, root=0)
@@ -452,7 +512,8 @@ def collect_timings_mpi(
 
             if rank == 0:  # Parent process. Store results
                 # Merge current result with the rest
-                data[grid_size, depth] = [exec_time, total_time]
+                data[grid_size, depth] = [exec_time, total_time,
+                                          mem_max, flop]
 
     if rank == 0:
         # Save result
@@ -478,7 +539,7 @@ def collect_timings_for_multiple_processes(
     for n_proc in n_processes:
         filename = filename_base + '_' + str(n_proc) + '.p'
         sh = "mpiexec -n {} ".format(n_proc)
-        sh += "python -c 'from src.performance_test import collect_timings_mpi;collect_timings_mpi(\"{}\",{})'".format(
+        sh += "python -c 'from src.performance_test import collect_timings_mpi,time_single_amplitude_tf_mpi,time_single_amplitude_np_mpi;collect_timings_mpi(\"{}\",{})'".format(
             filename, ','.join(map(str, extra_args)))
         print(sh)
 
@@ -541,6 +602,44 @@ def extract_timings_vs_depth(
         times.append(time)
 
     return times, depths
+
+
+def extract_flops_per_sec_vs_depth(
+        filename, depths,
+        grid_size=4, time_id='exec_time'):
+    """
+    Extracts flops per second vs depth from the timings data file
+    for a fixed grid_size
+    """
+    data = pd.read_pickle(filename)
+
+    flops_per_sec = []
+    for depth in depths:
+        time = data[(grid_size, depth)][time_id]
+        flop = data[(grid_size, depth)]['flop']
+        flops_per_sec.append(flop / time)
+
+    return flops_per_sec, depths
+
+
+def extract_flops_per_sec_vs_nprocesses(
+        par_filename_base,
+        n_processes=[1, 2], grid_size=4,
+        depth=10, time_id='exec_time'):
+    """
+    Calculates flops per second vs the number
+    of parallel processes from collected data
+    """
+
+    flops_per_sec = []
+    for n_proc in n_processes:
+        filename = par_filename_base + '_' + str(n_proc) + '.p'
+        data = pd.read_pickle(filename)
+        time = data[(grid_size, depth)][time_id]
+        flop = data[(grid_size, depth)]['flop']
+        flops_per_sec.append(flop / time)
+
+    return flops_per_sec, n_processes
 
 
 def plot_time_vs_depth(filename,
@@ -652,18 +751,51 @@ def plot_par_efficiency(
     fig.savefig(fig_filename)
 
 
+def plot_flops_per_sec_vs_depth(
+        filename,
+        fig_filename='fps_vs_depth.png',
+        interactive=False):
+    """
+    Plots flops per second vs depth for some number of grid sizes
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    grid_sizes = [4, 5]
+    depths = range(10, 20)
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
+                             figsize=(12, 6))
+
+    for n, grid_size in enumerate(grid_sizes):
+        flops_per_sec, depths = extract_flops_per_sec_vs_depth(
+            filename, depths, grid_size)
+        axes[n].plot(depths, flops_per_sec)
+        axes[n].set_xlabel(
+            'depth of {}x{} circuit'.format(grid_size, grid_size))
+        axes[n].set_ylabel('flops per second')
+    fig.suptitle('Flops per second vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 if __name__ == "__main__":
     # collect_timings('test_np.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    # collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 11)),
+    # collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 11)),
+    # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
     # collect_timings_for_multiple_processes(
-    #     'output/test_np', [1, 2, 4, 8, 16, 24, 32],
-    #     extra_args=[[4, 5], list(range(10, 21))]
+    #     'output/test_np', [1, 2, 4],
+    #     extra_args=[[4, 5], list(range(10, 21)), 'timing_fn_mpi=time_single_amplitude_tf_mpi']
     # )
 
     # time_single_amplitude_tf(
@@ -672,13 +804,13 @@ if __name__ == "__main__":
     # time_single_amplitude_np(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0)
 
-    time_single_amplitude_tf_mpi(
-        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
-        n_var_parallel=3)
+    # time_single_amplitude_tf_mpi(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
+    #     n_var_parallel=3)
 
-    time_single_amplitude_np_mpi(
-        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
-        n_var_parallel=3)
+    # time_single_amplitude_np_mpi(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
+    #     n_var_parallel=3)
 
     # plot_time_vs_depth('output/test_np.p',
     #                    fig_filename='time_vs_depth_np_hachiko.png',
@@ -694,3 +826,5 @@ if __name__ == "__main__":
     #                     n_processes=[1, 2, 4, 8, 24, 32],
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
+
+    plot_flops_per_sec_vs_depth('output/test_np_1.p')
