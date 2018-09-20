@@ -11,6 +11,8 @@ import itertools
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
+QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
+
 
 def relabel_graph_nodes(graph, label_dict=None):
     """
@@ -75,7 +77,7 @@ def get_peo(old_graph):
 
     if graph.number_of_edges() - graph.number_of_selfloops() > 0:
         gen_cnf(cnffile, graph)
-        out_bytes = run_quickbb(cnffile, './quickbb/run_quickbb_64.sh')
+        out_bytes = run_quickbb(cnffile, QUICKBB_COMMAND)
 
         # Extract order
         m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',

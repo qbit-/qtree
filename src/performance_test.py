@@ -19,6 +19,8 @@ from src.logger_setup import log
 from mpi4py import MPI
 from matplotlib import pyplot as plt
 
+QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
+
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
     def prof_decorator(f):
@@ -41,7 +43,7 @@ def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
 
 def time_single_amplitude_tf(
         filename, target_state,
-        quickbb_command='./quickbb/run_quickbb_64.sh'):
+        quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -93,7 +95,7 @@ def time_single_amplitude_tf(
 
 def time_single_amplitude_np(
         filename, target_state,
-        quickbb_command='./quickbb/run_quickbb_64.sh'):
+        quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -140,7 +142,7 @@ def time_single_amplitude_np(
 
 def time_single_amplitude_tf_mpi(
         filename, target_state, n_var_parallel=5,
-        quickbb_command='./quickbb/run_quickbb_64.sh'):
+        quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -266,7 +268,7 @@ def time_single_amplitude_tf_mpi(
 
 def time_single_amplitude_np_mpi(
         filename, target_state, n_var_parallel=2,
-        quickbb_command='./quickbb/run_quickbb_64.sh'):
+        quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
