@@ -20,7 +20,7 @@ from mpi4py import MPI
 from matplotlib import pyplot as plt
 
 QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
-
+MAXIMAL_MEMORY = 100000000   # 100000000 64bit complex numbers
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
     def prof_decorator(f):
@@ -163,8 +163,8 @@ def time_single_amplitude_tf_mpi(
         graph = opt.buckets2graph(buckets)
 
         # Split graphical model to parallelize
-        idx_parallel, reduced_graph = gm.split_graph_by_metric(
-            graph, n_var_parallel)
+        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
+            graph, mem_constraint=MAXIMAL_MEMORY)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -289,8 +289,8 @@ def time_single_amplitude_np_mpi(
         graph = opt.buckets2graph(buckets)
 
         # Split the graph to parallelize
-        idx_parallel, reduced_graph = gm.split_graph_by_metric(
-            graph, n_var_parallel)
+        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
+            graph, MAXIMAL_MEMORY)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)

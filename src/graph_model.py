@@ -149,6 +149,80 @@ def split_graph_random(old_graph, n_var_parallel=0):
     return sorted(idx_parallel), graph
 
 
+def cost_estimator(old_graph):
+    """
+    Estimates the cost of the bucket elimination algorithm.
+    The order of elimination is defined by node order (if ints are
+    used as nodes then it will be the number of integers).
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+               Graph containing the information about the contraction
+    Returns
+    -------
+    memory : list
+              Memory cost for steps of the bucket elimination algorithm
+    flops : list
+              Flop cost for steps of the bucket elimination algorithm
+    """
+    graph = copy.deepcopy(old_graph)
+    nodes = sorted(graph.nodes)
+
+    results = []
+    for n, node in enumerate(nodes):
+        neighbors = list(graph[node])
+
+        # We have to find all unique tensors which will be contracted
+        # in this bucket. They label the edges coming from
+        # the current node (may be multiple edges between
+        # the node and its neighbor).
+        # Then we have to count only the number of unique tensors.
+        if graph.is_multigraph():
+            edges_from_node = [list(graph[node][neighbor].values())
+                               for neighbor in neighbors]
+            tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
+                                in edges_from_node
+                                for edge in edges_of_neighbor]
+        else:
+            tensor_hash_tags = [graph[node][neighbor]['hash_tag']
+                                for neighbor in neighbors]
+
+        n_unique_tensors = len(set(tensor_hash_tags))
+        if n_unique_tensors == 0:
+            n_multiplications = 0
+        else:
+            n_multiplications = n_unique_tensors - 1
+
+        memory = 2**(len(neighbors))
+
+        # there are number_of_terms - 1 multiplications and 1 addition
+        # repeated size_of_the_result*size_of_contracted_variables
+        # times for each contraction
+        flops = (2**(len(neighbors) + 1)       # this is addition
+                 + 2**(len(neighbors) + 1)*n_multiplications)
+
+        results.append((memory, flops))
+
+        if len(neighbors) > 1:
+            edges = itertools.combinations(neighbors, 2)
+        elif len(neighbors) == 1:
+            # This node had a single neighbor, add self loop to it
+            edges = [[neighbors[0], neighbors[0]]]
+        else:
+            # This node had no neighbors
+            edges = None
+
+        graph.remove_node(node)
+
+        if edges is not None:
+            graph.add_edges_from(
+                edges, tensor=f'E{n}',
+                hash_tag=hash((f'E{n}', tuple(neighbors))))
+
+    return tuple(zip(*results))
+
+
 def get_node_by_degree(graph):
     """
     Returns a list of pairs (node : degree) for the
@@ -285,75 +359,48 @@ def split_graph_by_metric(
     return sorted(idx_parallel), graph
 
 
-def cost_estimator(old_graph):
+def split_graph_with_mem_constraint(
+        old_graph,
+        mem_constraint,
+        metric_function=get_node_by_degree,
+        step_by=5):
     """
-    Estimates the cost of the bucket elimination algorithm.
-    The order of elimination is defined by node order (if ints are
-    used as nodes then it will be the number of integers).
+    Calculates memory cost vs the number of parallelized
+    variables for a given graph.
 
     Parameters
     ----------
-    old_graph : networkx.Graph or networkx.MultiGraph
-               Graph containing the information about the contraction
+    old_graph : networkx.Graph()
+           initial contraction graph
+    mem_constraint : int
+           Upper limit on memory
+    metric_function : function, optional
+           function to rank nodes for elimination
+    step_by : int, optional
+           scan the metric function with this step
     Returns
     -------
-    memory : list
-              Memory cost for steps of the bucket elimination algorithm
-    flops : list
-              Flop cost for steps of the bucket elimination algorithm
+    n_var_parallel : int
+           number of the variables to parallelize
     """
-    graph = copy.deepcopy(old_graph)
-    nodes = sorted(graph.nodes)
 
-    results = []
-    for n, node in enumerate(nodes):
-        neighbors = list(graph[node])
+    n_var_total = old_graph.number_of_nodes()
 
-        # We have to find all unique tensors which will be contracted
-        # in this bucket. They label the edges coming from
-        # the current node (may be multiple edges between
-        # the node and its neighbor).
-        # Then we have to count only the number of unique tensors.
-        if graph.is_multigraph():
-            edges_from_node = [list(graph[node][neighbor].values())
-                               for neighbor in neighbors]
-            tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-                                in edges_from_node
-                                for edge in edges_of_neighbor]
-        else:
-            tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                                for neighbor in neighbors]
+    for n_var_parallel in range(0, n_var_total, step_by):
+        idx_parallel, reduced_graph = split_graph_by_metric(
+             old_graph, n_var_parallel, metric_fn=metric_function)
 
-        n_unique_tensors = len(set(tensor_hash_tags))
-        if n_unique_tensors == 0:
-            n_multiplications = 0
-        else:
-            n_multiplications = n_unique_tensors - 1
+        peo, treewidth = get_peo(reduced_graph)
 
-        memory = 2**(len(neighbors))
+        graph_parallel, label_dict = relabel_graph_nodes(
+            reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
+        )
 
-        # there are number_of_terms - 1 multiplications and 1 addition
-        # repeated size_of_the_result*size_of_contracted_variables
-        # times for each contraction
-        flops = (2**(len(neighbors) + 1)       # this is addition
-                 + 2**(len(neighbors) + 1)*n_multiplications)
+        mem_cost, flop_cost = cost_estimator(graph_parallel)
 
-        results.append((memory, flops))
+        max_mem = sum(mem_cost)
 
-        if len(neighbors) > 1:
-            edges = itertools.combinations(neighbors, 2)
-        elif len(neighbors) == 1:
-            # This node had a single neighbor, add self loop to it
-            edges = [[neighbors[0], neighbors[0]]]
-        else:
-            # This node had no neighbors
-            edges = None
+        if max_mem < mem_constraint:
+            break
 
-        graph.remove_node(node)
-
-        if edges is not None:
-            graph.add_edges_from(
-                edges, tensor=f'E{n}',
-                hash_tag=hash((f'E{n}', tuple(neighbors))))
-
-    return tuple(zip(*results))
+    return idx_parallel, reduced_graph

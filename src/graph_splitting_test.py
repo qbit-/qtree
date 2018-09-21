@@ -5,6 +5,7 @@ of the tensor contraction
 """
 import numpy as np
 import pandas as pd
+import itertools
 
 import src.operators as ops
 import src.optimizer as opt
@@ -16,7 +17,7 @@ from matplotlib import pyplot as plt
 
 def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
     """
-    Calculates memory cost (per node) vs the number of parallelized
+    Calculates memory cost vs the number of parallelized
     variables for a given circuit.
 
     Parameters
@@ -103,13 +104,15 @@ def get_treewidth_vs_parallel_size(filename, metric_function,
 
 def plot_cost_vs_n_var_parallel(
         filename,
-        fig_filename='memory_vs_parallelized_vars.png', step_by=5):
+        fig_filename='memory_vs_parallelized_vars.png',
+        start_at=0, stop_at=None, step_by=5):
     """
     Plots memory requirement with respect to the number of
     parallelized variables
     """
-    costs = get_cost_vs_parallel_size(filename, step_by)
-    x_range = list(range(0, len(costs[0])*step_by, step_by))
+    costs = get_cost_vs_parallel_size(filename, start_at=start_at,
+                                      stop_at=stop_at, step_by=step_by)
+    x_range = list(range(start_at, start_at+len(costs[0])*step_by, step_by))
     fig, axes = plt.subplots(1, 3, sharey=True, figsize=(12, 6))
 
     axes[0].semilogy(x_range, costs[0], label='per node')
@@ -188,7 +191,8 @@ def plot_compare_parallelization_strategies(
 
     x_range = list(
         range(
-            start_at, len(next(iter(results.values())))*step_by, step_by))
+            start_at,
+            start_at+len(next(iter(results.values())))*step_by, step_by))
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     for name in sorted(results.keys()):
@@ -201,19 +205,61 @@ def plot_compare_parallelization_strategies(
     fig.savefig(fig_filename)
 
 
-if __name__ == "__main__":
-    n = 6
-    d = 20
-    idx = 2
-    step_by = 5
+def plot_compare_step(
+        filename, fig_filename='compare_step.png',
+        steps=[1, 5],
+        start_at=0, stop_at=None):
+    """
+    Compares treewidth reduction with different step
+    """
+    metric_function = gm.get_node_by_degree
 
-    # plot_cost_vs_n_var_parallel(
-    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-    #     fig_filename=f'memory_vs_parallelized_vars_{n}x{n}_{d}.png',
-    #     step_by=step_by
-    # )
-    plot_compare_parallelization_strategies(
+    results = {}
+    for step_by in steps:
+        treewdth_vs_n_var = get_treewidth_vs_parallel_size(
+            filename, metric_function=metric_function,
+            start_at=start_at, stop_at=stop_at, step_by=step_by)
+        results.update({step_by: treewdth_vs_n_var})
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+    for step_by, marker in zip(
+            sorted(results.keys()),
+            itertools.cycle(
+                ('.', '*', '+', 'x', '1', '2', '3', '4'))):
+        x_range = list(
+            range(
+                start_at,
+                start_at+len(results[step_by])*step_by,
+                step_by))
+        ax.plot(x_range, results[step_by],
+                label='step by {}'.format(step_by), marker=marker)
+    ax.set_xlabel('Number of parallelized variables')
+    ax.set_ylabel('treewidth')
+    ax.set_title('Step size influence')
+    ax.legend()
+
+    fig.savefig(fig_filename)
+
+
+if __name__ == "__main__":
+    n = 10
+    d = 27
+    idx = 2
+    step_by = 10
+
+    plot_cost_vs_n_var_parallel(
         filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-        fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
-        start_at=0, stop_at=55, step_by=1
+        fig_filename=f'memory_vs_parallelized_vars_{n}x{n}_{d}.png',
+        start_at=5, stop_at=300, step_by=step_by
     )
+    # plot_compare_parallelization_strategies(
+    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+    #     fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
+    #     start_at=0, stop_at=None, step_by=1
+    # )
+
+    # plot_compare_step(
+    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+    #     fig_filename=f'compare_step_{n}x{n}_{d}.png',
+    #     start_at=0, stop_at=24, steps=[1, 3]
+    # )
