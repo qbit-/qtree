@@ -243,7 +243,7 @@ def plot_compare_step(
 
 if __name__ == "__main__":
     n = 10
-    d = 27
+    d = 32
     idx = 2
     step_by = 10
 

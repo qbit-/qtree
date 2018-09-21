@@ -400,7 +400,10 @@ def split_graph_with_mem_constraint(
 
         max_mem = sum(mem_cost)
 
-        if max_mem < mem_constraint:
+        if max_mem <= mem_constraint:
             break
+
+    if max_mem > mem_constraint:
+        raise ValueError('Maximal memory constraint is not met')
 
     return idx_parallel, reduced_graph
