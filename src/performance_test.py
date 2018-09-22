@@ -17,10 +17,11 @@ import src.utils as utils
 
 from src.logger_setup import log
 from mpi4py import MPI
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 
-QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
-MAXIMAL_MEMORY = 100000000   # 100000000 64bit complex numbers
+QUICKBB_COMMAND = './quickbb/quickbb_64'
+MAXIMAL_MEMORY = 10000000   # 100000000 64bit complex numbers
+
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
     def prof_decorator(f):
@@ -386,11 +387,9 @@ def collect_timings(
         # lays down the structure of data
         data = pd.DataFrame(
             [],
-            index=['exec_time', 'total_time',
-                   'mem_max', 'flop'],
+            index=['exec_time', 'total_time', 'mem_max', 'flop'],
             columns=pd.MultiIndex.from_product(
-                [[], []],
-                names=['grid size', 'depth']))
+                [[], []], names=['grid size', 'depth']))
 
     total_tests = len(grid_sizes)*len(depths)
     log.info(f'Will run {total_tests} tests')
@@ -427,9 +426,8 @@ def collect_timings(
             # Merge current result with the rest
             data[grid_size, depth] = [exec_time, total_time,
                                       mem_max, flop]
-
-    # Save result
-    data.to_pickle(out_filename)
+            # Save result at every iteration
+            data.to_pickle(out_filename)
 
     return data
 
@@ -517,10 +515,8 @@ def collect_timings_mpi(
                 # Merge current result with the rest
                 data[grid_size, depth] = [exec_time, total_time,
                                           mem_max, flop]
-
-    if rank == 0:
-        # Save result
-        data.to_pickle(out_filename)
+                # Save result at each iteration
+                data.to_pickle(out_filename)
 
     return data
 
@@ -541,7 +537,7 @@ def collect_timings_for_multiple_processes(
     """
     for n_proc in n_processes:
         filename = filename_base + '_' + str(n_proc) + '.p'
-        sh = "mpiexec -n {} ".format(n_proc)
+        sh = "mpiexec -n {} -binding -bind-to:core ".format(n_proc)
         sh += "python -c 'from src.performance_test import collect_timings_mpi,time_single_amplitude_tf_mpi,time_single_amplitude_np_mpi;collect_timings_mpi(\"{}\",{})'".format(
             filename, ','.join(map(str, extra_args)))
         print(sh)
@@ -792,8 +788,12 @@ if __name__ == "__main__":
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    # collect_timings_mpi('test_np_mpi.p', [4, 5], list(range(10, 21)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(40, 48)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(41, 46)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
     # collect_timings_for_multiple_processes(

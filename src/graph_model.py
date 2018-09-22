@@ -355,6 +355,7 @@ def split_graph_by_metric(
         graph.remove_node(idx)
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
+    log.info("Removed {} variables".format(len(idx_parallel)))
 
     return sorted(idx_parallel), graph
 
