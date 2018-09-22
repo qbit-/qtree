@@ -95,11 +95,9 @@ def num_to_alpha(integer):
     a : str
         alpha-numeric representation of the integer
     """
-    ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
-    if integer < 26:
-        return ascii_lowercase[integer]
-    elif integer < 261:
-        return ascii_lowercase[integer % 25 - 1] + str(integer // 25)
+    ascii = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    if integer < 52:
+        return ascii[integer]
     else:
         raise ValueError('Too large index for einsum')
 
