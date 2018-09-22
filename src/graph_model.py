@@ -143,7 +143,7 @@ def split_graph_random(old_graph, n_var_parallel=0):
         graph.remove_node(idx)
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
-
+    log.info("Removed {} variables".format(len(idx_parallel)))
     peo, treewidth = get_peo(graph)
 
     return sorted(idx_parallel), graph

@@ -141,7 +141,8 @@ def time_single_amplitude_np(
 
 
 def time_single_amplitude_tf_mpi(
-        filename, target_state, n_var_parallel=5,
+        filename, target_state,
+        mem_constraint=MAXIMAL_MEMORY,
         quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
@@ -164,7 +165,7 @@ def time_single_amplitude_tf_mpi(
 
         # Split graphical model to parallelize
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-            graph, mem_constraint=MAXIMAL_MEMORY)
+            graph, mem_constraint=mem_constraint)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -177,8 +178,8 @@ def time_single_amplitude_tf_mpi(
 
         # Estimate cost
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-        mem_max = np.sum(mem_costs) * 2**n_var_parallel
-        flop = np.sum(flop_costs) * 2**n_var_parallel
+        mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
+        flop = np.sum(flop_costs) * 2**len(idx_parallel)
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
@@ -267,7 +268,7 @@ def time_single_amplitude_tf_mpi(
 
 
 def time_single_amplitude_np_mpi(
-        filename, target_state, n_var_parallel=2,
+        filename, target_state, mem_constraint=MAXIMAL_MEMORY,
         quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
@@ -303,8 +304,8 @@ def time_single_amplitude_np_mpi(
 
         # Estimate cost
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-        mem_max = np.sum(mem_costs) * 2**n_var_parallel
-        flop = np.sum(flop_costs) * 2**n_var_parallel
+        mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
+        flop = np.sum(flop_costs) * 2**len(idx_parallel)
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
@@ -494,7 +495,7 @@ def collect_timings_mpi(
             target_state = 2**(grid_size**2) - 1
 
             # Set the number of parallelized variables=5 (max 32 threads)
-            n_var_parallel = 5
+            # n_var_parallel = 5
 
             # Synchronize processes
             comm.bcast(testfile, root=0)
@@ -503,7 +504,7 @@ def collect_timings_mpi(
             # Measure time
             start_time = time.time()
             exec_time, *costs = timing_fn_mpi(
-                testfile, target_state, n_var_parallel)
+                testfile, target_state, MAXIMAL_MEMORY)
             end_time = time.time()
             total_time = end_time - start_time
             mem_max, flop = costs
