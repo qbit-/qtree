@@ -241,17 +241,59 @@ def plot_compare_step(
     fig.savefig(fig_filename)
 
 
-if __name__ == "__main__":
-    n = 10
-    d = 32
-    idx = 2
-    step_by = 10
+def test_split_with_mem_constraint(filename, constraints, step_by=1):
+    """
+    Test the mem constraint contraction splitting. Input is read
+    from filename, for each constraint the treewidth and attained
+    cost is printed
+    """
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, _ = opt.circ2buckets(circuit)
+    graph_raw = opt.buckets2graph(buckets)
+    n_var_total = graph_raw.number_of_nodes()
 
-    plot_cost_vs_n_var_parallel(
-        filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-        fig_filename=f'memory_vs_parallelized_vars_{n}x{n}_{d}.png',
-        start_at=5, stop_at=300, step_by=step_by
-    )
+    results = []
+    for mem_constraint in constraints:
+        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
+             graph_raw, mem_constraint, step_by=step_by)
+
+        peo, treewidth = gm.get_peo(reduced_graph)
+
+        mem_cost, flop_cost = gm.cost_estimator(reduced_graph)
+        max_mem = sum(mem_cost)
+        flops = sum(flop_cost)
+
+        total_mem_max = max_mem * (2**len(idx_parallel))
+        total_flops = flops * (2**len(idx_parallel))
+
+        results.append([max_mem, total_mem_max, flops, total_flops])
+
+    for mem_constraint, res in zip(constraints, results):
+        max_mem, total_mem_max, flops, total_flops = res
+        log.info('Set memory constraint per node: {:e}'.format(
+            mem_constraint))
+        log.info('Attained values:')
+        log.info(' total:')
+        log.info(' memory: {:e} flop: {:e}'.format(
+            total_mem_max, total_flops))
+        log.info(' per node:')
+        log.info(' memory: {:e} flop: {:e}'.format(
+            max_mem, flops))
+
+    return results
+
+
+if __name__ == "__main__":
+    n = 4
+    d = 20
+    idx = 2
+    step_by = 1
+
+    # plot_cost_vs_n_var_parallel(
+    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+    #     fig_filename=f'memory_vs_parallelized_vars_{n}x{n}_{d}.png',
+    #     start_at=5, stop_at=300, step_by=step_by
+    # )
     # plot_compare_parallelization_strategies(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
@@ -263,3 +305,7 @@ if __name__ == "__main__":
     #     fig_filename=f'compare_step_{n}x{n}_{d}.png',
     #     start_at=0, stop_at=24, steps=[1, 3]
     # )
+    constraints = [1e2, 1e3, 1e4]
+    test_split_with_mem_constraint(
+        filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+        constraints=constraints, step_by=5)

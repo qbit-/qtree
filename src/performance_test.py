@@ -69,6 +69,8 @@ def time_single_amplitude_tf(
     mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
     mem_max = np.sum(mem_costs)
     flop = np.sum(flop_costs)
+    log.info('Evaluation cost:\n memory: {:e} flop: {:e}'.format(
+        mem_max, flop))
 
     #@profile_decorator(filename='sequential_tf_cprof')
     def computational_core(buckets, peo):
@@ -121,6 +123,8 @@ def time_single_amplitude_np(
     mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
     mem_max = np.sum(mem_costs)
     flop = np.sum(flop_costs)
+    log.info('Evaluation cost:\n memory: {:e} flop: {:e}'.format(
+        mem_max, flop))
 
     #@profile_decorator(filename='sequential_np_cprof')
     def computational_core(buckets, peo):
@@ -181,6 +185,11 @@ def time_single_amplitude_tf_mpi(
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
         mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
         flop = np.sum(flop_costs) * 2**len(idx_parallel)
+        log.info('Evaluation cost:')
+        log.info(' total:\n  memory: {:e} flop: {:e}'.format(
+            mem_max, flop))
+        log.info(' per node:\n  memory: {:e} flop: {:e}'.format(
+            np.sum(mem_costs), np.sum(flop_costs)))
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
@@ -307,6 +316,11 @@ def time_single_amplitude_np_mpi(
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
         mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
         flop = np.sum(flop_costs) * 2**len(idx_parallel)
+        log.info('Evaluation cost:')
+        log.info(' total:\n  memory: {:e} flop: {:e}'.format(
+            mem_max, flop))
+        log.info(' per node:\n  memory: {:e} flop: {:e}'.format(
+            np.sum(mem_costs), np.sum(flop_costs)))
 
         # Permute buckets to the order of optimal contraction
         perm_buckets = opt.transform_buckets(
