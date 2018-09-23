@@ -155,12 +155,7 @@ def time_single_amplitude_tf_mpi(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-
-    comm = MPI.COMM_WORLD
-    comm_size = comm.size
-    rank = comm.rank
-
-    if rank == 0:
+    def prepare_mpi_environment(filename, mem_constraint):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -220,8 +215,7 @@ def time_single_amplitude_tf_mpi(
             tf_graph_def=tf.get_default_graph().as_graph_def(),
             costs=(mem_max, flop)
         )
-    else:
-        env = None
+        return env
 
     #@profile_decorator(filename='parallel_tf_cprof')
     def computational_core(env):
@@ -255,6 +249,15 @@ def time_single_amplitude_tf_mpi(
 
         return amplitude
 
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    if rank == 0:
+        env = prepare_mpi_environment(filename, mem_constraint)
+    else:
+        env = None
+
     # Start time measurement
     start_time = time.time()
 
@@ -286,12 +289,7 @@ def time_single_amplitude_np_mpi(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-
-    comm = MPI.COMM_WORLD
-    comm_size = comm.size
-    rank = comm.rank
-
-    if rank == 0:
+    def prepare_mpi_environment(filename, mem_constraint):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -301,7 +299,7 @@ def time_single_amplitude_np_mpi(
 
         # Split the graph to parallelize
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-            graph, MAXIMAL_MEMORY)
+            graph, mem_constraint=mem_constraint)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -332,8 +330,7 @@ def time_single_amplitude_np_mpi(
             buckets=perm_buckets,
             costs=(mem_max, flop)
         )
-    else:
-        env = None
+        return env
 
     #@profile_decorator(filename='parallel_np_cprof')
     def computational_core(env):
@@ -359,6 +356,15 @@ def time_single_amplitude_np_mpi(
                 sliced_buckets, npfr.process_bucket_np)
 
         return amplitude
+
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    if rank == 0:
+        env = prepare_mpi_environment(filename, mem_constraint)
+    else:
+        env = None
 
     # Start time measurement
     start_time = time.time()
@@ -802,11 +808,11 @@ if __name__ == "__main__":
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(40, 48)),
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(20, 28)),
                         timing_fn_mpi=time_single_amplitude_np_mpi)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(41, 46)),
+    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(16, 24)),
                         timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
