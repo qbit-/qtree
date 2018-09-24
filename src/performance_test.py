@@ -93,7 +93,7 @@ def time_single_amplitude_tf(
     amplitude = computational_core(buckets, peo)
     end_time = time.time()
 
-    return end_time - start_time, mem_max, flop
+    return end_time - start_time, mem_max, flop, treewidth
 
 
 def time_single_amplitude_np(
@@ -142,7 +142,7 @@ def time_single_amplitude_np(
     amplitude = computational_core(buckets, peo)
     end_time = time.time()
 
-    return end_time - start_time, mem_max, flop
+    return end_time - start_time, mem_max, flop, treewidth
 
 
 def time_single_amplitude_tf_mpi(
@@ -213,7 +213,7 @@ def time_single_amplitude_tf_mpi(
             idx_parallel=idx_parallel,
             input_names=list(pdict_sliced.keys()),
             tf_graph_def=tf.get_default_graph().as_graph_def(),
-            costs=(mem_max, flop)
+            costs=(mem_max, flop, treewidth)
         )
         return env
 
@@ -275,9 +275,9 @@ def time_single_amplitude_tf_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    mem_max, flop = env['costs']
+    mem_max, flop, treewidth = env['costs']
 
-    return elapsed_time, mem_max, flop
+    return elapsed_time, mem_max, flop, treewidth
 
 
 def time_single_amplitude_np_mpi(
@@ -299,7 +299,7 @@ def time_single_amplitude_np_mpi(
 
         # Split the graph to parallelize
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-            graph, mem_constraint=mem_constraint)
+            graph, mem_constraint=mem_constraint, step_by=3)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -328,7 +328,7 @@ def time_single_amplitude_np_mpi(
             n_qubits=n_qubits,
             idx_parallel=idx_parallel,
             buckets=perm_buckets,
-            costs=(mem_max, flop)
+            costs=(mem_max, flop, treewidth)
         )
         return env
 
@@ -383,9 +383,9 @@ def time_single_amplitude_np_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    mem_max, flop = env['costs']
+    mem_max, flop, treewidth = env['costs']
 
-    return elapsed_time, mem_max, flop
+    return elapsed_time, mem_max, flop, treewidth
 
 
 def collect_timings(
@@ -407,7 +407,7 @@ def collect_timings(
         # lays down the structure of data
         data = pd.DataFrame(
             [],
-            index=['exec_time', 'total_time', 'mem_max', 'flop'],
+            index=['exec_time', 'total_time', 'mem_max', 'flop', 'treewidth'],
             columns=pd.MultiIndex.from_product(
                 [[], []], names=['grid size', 'depth']))
 
@@ -441,11 +441,11 @@ def collect_timings(
             total_time = end_time - start_time
 
             # Extract cost information
-            mem_max, flop = costs
+            mem_max, flop, treewidth = costs
 
             # Merge current result with the rest
             data[grid_size, depth] = [exec_time, total_time,
-                                      mem_max, flop]
+                                      mem_max, flop, treewidth]
             # Save result at every iteration
             data.to_pickle(out_filename)
 
@@ -480,7 +480,7 @@ def collect_timings_mpi(
             data = pd.DataFrame(
                 [],
                 index=['exec_time', 'total_time',
-                       'mem_max', 'flop'],
+                       'mem_max', 'flop', 'treewidth'],
                 columns=pd.MultiIndex.from_product(
                     [[], []],
                     names=['grid size', 'depth']))
@@ -525,7 +525,7 @@ def collect_timings_mpi(
                 testfile, target_state, MAXIMAL_MEMORY)
             end_time = time.time()
             total_time = end_time - start_time
-            mem_max, flop = costs
+            mem_max, flop, treewidth = costs
 
             # Get maximal time as it determines overall time
             comm.reduce(exec_time, op=MPI.MAX, root=0)
@@ -534,7 +534,7 @@ def collect_timings_mpi(
             if rank == 0:  # Parent process. Store results
                 # Merge current result with the rest
                 data[grid_size, depth] = [exec_time, total_time,
-                                          mem_max, flop]
+                                          mem_max, flop, treewidth]
                 # Save result at each iteration
                 data.to_pickle(out_filename)
 
@@ -808,7 +808,7 @@ if __name__ == "__main__":
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(20, 28)),
+    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(10, 18)),
                         timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
     #                     timing_fn_mpi=time_single_amplitude_np_mpi)
