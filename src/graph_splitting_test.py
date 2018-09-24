@@ -148,7 +148,7 @@ def plot_flops_vs_n_var_parallel(
         fig_filename='treewidth_vs_parallelized_vars.png',
         step_by=5):
     """
-    Plots treewdth and flop count with respect to the number of
+    Plots treewidth and flop count with respect to the number of
     parallelized variables
     """
     costs = get_cost_vs_parallel_size(filename, step_by)
@@ -184,10 +184,10 @@ def plot_compare_parallelization_strategies(
 
     results = {}
     for name, metric_function in metric_functions.items():
-        treewdth_vs_n_var = get_treewidth_vs_parallel_size(
+        treewidth_vs_n_var = get_treewidth_vs_parallel_size(
             filename, metric_function=metric_function,
             start_at=start_at, stop_at=stop_at, step_by=step_by)
-        results.update({name: treewdth_vs_n_var})
+        results.update({name: treewidth_vs_n_var})
 
     x_range = list(
         range(
@@ -216,10 +216,10 @@ def plot_compare_step(
 
     results = {}
     for step_by in steps:
-        treewdth_vs_n_var = get_treewidth_vs_parallel_size(
+        treewidth_vs_n_var = get_treewidth_vs_parallel_size(
             filename, metric_function=metric_function,
             start_at=start_at, stop_at=stop_at, step_by=step_by)
-        results.update({step_by: treewdth_vs_n_var})
+        results.update({step_by: treewidth_vs_n_var})
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     for step_by, marker in zip(
@@ -283,6 +283,130 @@ def test_split_with_mem_constraint(filename, constraints, step_by=1):
     return results
 
 
+def collect_costs(
+        out_filename,
+        grid_sizes=[4, 5],
+        depths=list(range(10, 15)),
+        path_to_testcases='./test_circuits/inst/cz_v2',
+        n_var_parallel=0):
+    """
+    Calculates costs for test circuits with grid size equal to grid_sizes
+    and outputs results to a pandas.DataFrame, and saves to out_filename
+    (as pickle). This is a symbolic equivalent (no real evaluation is
+    done) of the :py:meth:`collect_timings`.
+    """
+
+    try:
+        data = pd.read_pickle(out_filename)
+    except FileNotFoundError:
+        # lays down the structure of data
+        data = pd.DataFrame(
+            [],
+            index=['mem_min', 'mem_max', 'flop', 'treewidth'],
+            columns=pd.MultiIndex.from_product(
+                [[], []], names=['grid size', 'depth']))
+
+    total_tests = len(grid_sizes)*len(depths)
+    log.info(f'Will run {total_tests} tests')
+
+    # suffix of the test case file. Should we make it random?
+    test_id = 2
+    for n_grid, grid_size in enumerate(grid_sizes):
+        log.info('Running grid = {}, [{}/{}]'.format(
+            grid_size, n_grid+1, len(grid_sizes)))
+
+        for n_depth, depth in enumerate(depths):
+            log.info('Running depth = {}, [{}/{}]'.format(
+                depth, n_depth+1, len(depths)))
+
+            testfile = '/'.join((
+                path_to_testcases,
+                f'{grid_size}x{grid_size}',
+                f'inst_{grid_size}x{grid_size}_{depth}_{test_id}.txt'
+            ))
+
+            n_qubits, circuit = ops.read_circuit_file(testfile)
+            buckets, _ = opt.circ2buckets(circuit)
+            graph_raw = opt.buckets2graph(buckets)
+
+            idx_parallel, reduced_graph = gm.split_graph_by_metric(
+                graph_raw, n_var_parallel,
+                metric_fn=gm.get_node_by_degree)
+
+            peo, treewidth = gm.get_peo(reduced_graph)
+            mem_cost, flop_cost = gm.cost_estimator(reduced_graph)
+
+            mem_min = max(mem_cost)
+            mem_max = sum(mem_cost)
+            flops = sum(flop_cost)
+
+            # Merge current result with the rest
+            data[grid_size, depth] = [mem_min, mem_max, flops, treewidth]
+            # Save result at every iteration
+            data.to_pickle(out_filename)
+
+    return data
+
+
+def extract_costs_vs_depth(
+        filename, depths,
+        grid_size=4, rec_id='mi'):
+    """
+    Extracts timings vs depth from the timings data file
+    for a fixed grid_size
+    """
+    data = pd.read_pickle(filename)
+
+    values = []
+    for depth in depths:
+        time = data[(grid_size, depth)][rec_id]
+        values.append(time)
+
+    return values, depths
+
+
+def plot_cost_vs_depth(filename,
+                       fig_filename='cost_vs_depth.png',
+                       interactive=False):
+    """
+    Plots cost estimates vs depth for some number of grid sizes
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    grid_sizes = [4, 5]
+    depths = range(10, 50)
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
+                             figsize=(12, 6))
+
+    for n, grid_size in enumerate(grid_sizes):
+        flop, depths = extract_costs_vs_depth(
+            filename, depths, grid_size, rec_id='flop')
+        axes[n].semilogy(depths, flop, 'b-', label='flops')
+        axes[n].set_xlabel(
+            'depth')
+        axes[n].set_title('{}x{} circuit'.format(grid_size, grid_size))
+        axes[n].set_ylabel('flops')
+        axes[n].legend(loc='upper left')
+
+        right_ax = axes[n].twinx()
+        treewidth, depths = extract_costs_vs_depth(
+            filename, depths, grid_size, rec_id='treewidth')
+        right_ax.plot(depths, treewidth, 'r-', label='treewidth')
+        right_ax.set_ylabel('treewidth')
+        right_ax.legend(loc='lower right')
+
+    fig.suptitle('Evaluation cost vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 if __name__ == "__main__":
     n = 4
     d = 20
@@ -305,7 +429,17 @@ if __name__ == "__main__":
     #     fig_filename=f'compare_step_{n}x{n}_{d}.png',
     #     start_at=0, stop_at=24, steps=[1, 3]
     # )
-    constraints = [1e2, 1e3, 1e4]
-    test_split_with_mem_constraint(
-        filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-        constraints=constraints, step_by=5)
+    # constraints = [1e2, 1e3, 1e4]
+    # test_split_with_mem_constraint(
+    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+    #     constraints=constraints, step_by=5)
+
+    n_var_parallel = 0
+    collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
+                  grid_sizes=[6, 7],
+                  depths=list(range(10, 50)),
+                  n_var_parallel=n_var_parallel,
+    )
+    plot_cost_vs_depth(f'output/cost_estimate_{n_var_parallel}.p',
+                       fig_filename=f'cost_vs_depth_{n_var_parallel}.png'
+    )
