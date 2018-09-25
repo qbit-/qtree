@@ -308,7 +308,6 @@ def collect_costs(
 
     total_tests = len(grid_sizes)*len(depths)
     log.info(f'Will run {total_tests} tests')
-
     # suffix of the test case file. Should we make it random?
     test_id = 2
     for n_grid, grid_size in enumerate(grid_sizes):
@@ -342,7 +341,7 @@ def collect_costs(
 
             # Merge current result with the rest
             data[grid_size, depth] = [mem_min, mem_max, flops, treewidth]
-            # Save result at every iteration
+            # Save result
             data.to_pickle(out_filename)
 
     return data
@@ -383,6 +382,7 @@ def extract_costs_vs_gridsize(
 
 
 def plot_cost_vs_depth(filename,
+                       n_var_parallel=0,
                        fig_filename='cost_vs_depth.png',
                        interactive=False):
     """
@@ -402,7 +402,8 @@ def plot_cost_vs_depth(filename,
     for n, grid_size in enumerate(grid_sizes):
         flop, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='flop')
-        axes[n].semilogy(depths_labels, flop, 'b-', label='flops')
+        axes[n].semilogy(depths_labels, np.array(flop)*2**n_var_parallel,
+                         'b-', label='flops')
         axes[n].set_xlabel(
             'depth')
         axes[n].set_title('{}x{} circuit'.format(grid_size, grid_size))
@@ -425,6 +426,7 @@ def plot_cost_vs_depth(filename,
 
 
 def plot_cost_vs_gridsize(filename,
+                          n_var_parallel=0,
                           fig_filename='cost_vs_gridsize.png',
                           interactive=False):
     """
@@ -444,7 +446,8 @@ def plot_cost_vs_gridsize(filename,
     for n, depth in enumerate(depths):
         flop, gridsize_labels = extract_costs_vs_depth(
             filename, grid_sizes, depth, rec_id='flop')
-        axes[n].semilogy(gridsize_labels, flop, 'b-', label='flops')
+        axes[n].semilogy(gridsize_labels, np.array(flop)*2**n_var_parallel,
+                         'b-', label='flops')
         axes[n].set_xlabel(
             'depth')
         axes[n].set_title('{} depth'.format(depth))
@@ -495,7 +498,7 @@ if __name__ == "__main__":
 
     n_var_parallel = 17
     collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
-                  grid_sizes=[7, 8, 9, 10, 11, 12],
+                  grid_sizes=[5, 6, 7, 8, 9, 10, 11, 12],
                   depths=list(range(10, 70)),
                   n_var_parallel=n_var_parallel,
     )

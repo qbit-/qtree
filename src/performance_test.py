@@ -473,7 +473,8 @@ def collect_timings_mpi(
         grid_sizes=[4, 5],
         depths=list(range(10, 15)),
         path_to_testcases='./test_circuits/inst/cz_v2',
-        timing_fn_mpi=time_single_amplitude_np_mpi):
+        timing_fn_mpi=time_single_amplitude_np_mpi,
+        n_var_parallel_min=5):
     """
     Runs timings for test circuits with grid size equal to grid_sizes
     and outputs results to a pandas.DataFrame, and saves to out_filename
@@ -538,7 +539,8 @@ def collect_timings_mpi(
             # Measure time
             start_time = time.time()
             exec_time, *costs = timing_fn_mpi(
-                testfile, target_state, MAXIMAL_MEMORY)
+                testfile, target_state, n_var_parallel_min=n_var_parallel_min,
+                mem_constraint=MAXIMAL_MEMORY)
             end_time = time.time()
             total_time = end_time - start_time
             mem_max, flop, treewidth = costs

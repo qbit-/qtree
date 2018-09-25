@@ -12,6 +12,7 @@ from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
 QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
+MAXIMAL_MEMORY = 100000000   # 100000000 64bit complex numbers
 
 
 def relabel_graph_nodes(graph, label_dict=None):
@@ -363,7 +364,7 @@ def split_graph_by_metric(
 def split_graph_with_mem_constraint(
         old_graph,
         n_var_parallel_min=0,
-        mem_constraint=1000000000,
+        mem_constraint=MAXIMAL_MEMORY,
         metric_function=get_node_by_degree,
         step_by=5):
     """
