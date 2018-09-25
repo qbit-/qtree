@@ -255,7 +255,7 @@ def test_split_with_mem_constraint(filename, constraints, step_by=1):
     results = []
     for mem_constraint in constraints:
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-             graph_raw, mem_constraint, step_by=step_by)
+             graph_raw, 0, mem_constraint, step_by=step_by)
 
         peo, treewidth = gm.get_peo(reduced_graph)
 
@@ -350,7 +350,7 @@ def collect_costs(
 
 def extract_costs_vs_depth(
         filename, depths,
-        grid_size=4, rec_id='mi'):
+        grid_size=4, rec_id='max_mem'):
     """
     Extracts timings vs depth from the timings data file
     for a fixed grid_size
@@ -363,6 +363,23 @@ def extract_costs_vs_depth(
         values.append(time)
 
     return values, depths
+
+
+def extract_costs_vs_gridsize(
+        filename, grid_sizes,
+        depth=10, rec_id='flop'):
+    """
+    Extracts timings vs grid size from the timings data file
+    for a fixed depth
+    """
+    data = pd.read_pickle(filename)
+
+    times = []
+    for grid_size in grid_sizes:
+        time = data[(grid_size, depth)][rec_id]
+        times.append(time)
+
+    return times, grid_sizes
 
 
 def plot_cost_vs_depth(filename,
@@ -383,9 +400,9 @@ def plot_cost_vs_depth(filename,
                              figsize=(12, 6))
 
     for n, grid_size in enumerate(grid_sizes):
-        flop, depths = extract_costs_vs_depth(
+        flop, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='flop')
-        axes[n].semilogy(depths, flop, 'b-', label='flops')
+        axes[n].semilogy(depths_labels, flop, 'b-', label='flops')
         axes[n].set_xlabel(
             'depth')
         axes[n].set_title('{}x{} circuit'.format(grid_size, grid_size))
@@ -393,9 +410,51 @@ def plot_cost_vs_depth(filename,
         axes[n].legend(loc='upper left')
 
         right_ax = axes[n].twinx()
-        treewidth, depths = extract_costs_vs_depth(
+        treewidth, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='treewidth')
-        right_ax.plot(depths, treewidth, 'r-', label='treewidth')
+        right_ax.plot(depths_labels, treewidth, 'r-', label='treewidth')
+        right_ax.set_ylabel('treewidth')
+        right_ax.legend(loc='lower right')
+
+    fig.suptitle('Evaluation cost vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_cost_vs_gridsize(filename,
+                          fig_filename='cost_vs_gridsize.png',
+                          interactive=False):
+    """
+    Plots cost estimates vs gridsize for some number of depths
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    grid_sizes = [4, 5]
+    depths = range(10, 50)
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
+                             figsize=(12, 6))
+
+    for n, depth in enumerate(depths):
+        flop, gridsize_labels = extract_costs_vs_depth(
+            filename, grid_sizes, depth, rec_id='flop')
+        axes[n].semilogy(gridsize_labels, flop, 'b-', label='flops')
+        axes[n].set_xlabel(
+            'depth')
+        axes[n].set_title('{} depth'.format(depth))
+        axes[n].set_ylabel('flops')
+        axes[n].legend(loc='upper left')
+
+        right_ax = axes[n].twinx()
+        treewidth, gridsize_labels = extract_costs_vs_depth(
+            filename,  grid_sizes, depth, rec_id='treewidth')
+        right_ax.plot(gridsize_labels, treewidth, 'r-', label='treewidth')
         right_ax.set_ylabel('treewidth')
         right_ax.legend(loc='lower right')
 
@@ -434,10 +493,10 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    n_var_parallel = 0
+    n_var_parallel = 17
     collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
-                  grid_sizes=[6, 7],
-                  depths=list(range(10, 50)),
+                  grid_sizes=[7, 8, 9, 10, 11, 12],
+                  depths=list(range(10, 70)),
                   n_var_parallel=n_var_parallel,
     )
     plot_cost_vs_depth(f'output/cost_estimate_{n_var_parallel}.p',

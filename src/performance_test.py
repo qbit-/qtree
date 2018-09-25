@@ -147,6 +147,7 @@ def time_single_amplitude_np(
 
 def time_single_amplitude_tf_mpi(
         filename, target_state,
+        n_var_parallel_min=0,
         mem_constraint=MAXIMAL_MEMORY,
         quickbb_command=QUICKBB_COMMAND):
     """
@@ -155,7 +156,9 @@ def time_single_amplitude_tf_mpi(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-    def prepare_mpi_environment(filename, mem_constraint):
+    def prepare_mpi_environment(filename,
+                                n_var_parallel_min,
+                                mem_constraint):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -165,7 +168,9 @@ def time_single_amplitude_tf_mpi(
 
         # Split graphical model to parallelize
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-            graph, mem_constraint=mem_constraint)
+            graph,
+            n_var_parallel_min=n_var_parallel_min,
+            mem_constraint=mem_constraint)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -254,7 +259,9 @@ def time_single_amplitude_tf_mpi(
     rank = comm.rank
 
     if rank == 0:
-        env = prepare_mpi_environment(filename, mem_constraint)
+        env = prepare_mpi_environment(filename,
+                                      n_var_parallel_min,
+                                      mem_constraint)
     else:
         env = None
 
@@ -281,7 +288,9 @@ def time_single_amplitude_tf_mpi(
 
 
 def time_single_amplitude_np_mpi(
-        filename, target_state, mem_constraint=MAXIMAL_MEMORY,
+        filename, target_state,
+        n_var_parallel_min=0,
+        mem_constraint=MAXIMAL_MEMORY,
         quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
@@ -289,7 +298,9 @@ def time_single_amplitude_np_mpi(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-    def prepare_mpi_environment(filename, mem_constraint):
+    def prepare_mpi_environment(filename,
+                                n_var_parallel_min,
+                                mem_constraint):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -299,7 +310,10 @@ def time_single_amplitude_np_mpi(
 
         # Split the graph to parallelize
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-            graph, mem_constraint=mem_constraint, step_by=3)
+            graph,
+            n_var_parallel_min=n_var_parallel_min,
+            mem_constraint=mem_constraint,
+        )
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -362,7 +376,9 @@ def time_single_amplitude_np_mpi(
     rank = comm.rank
 
     if rank == 0:
-        env = prepare_mpi_environment(filename, mem_constraint)
+        env = prepare_mpi_environment(filename,
+                                      n_var_parallel_min,
+                                      mem_constraint)
     else:
         env = None
 
@@ -814,6 +830,10 @@ if __name__ == "__main__":
     #                     timing_fn_mpi=time_single_amplitude_np_mpi)
     collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(16, 24)),
                         timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(41, 46)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
     # collect_timings_for_multiple_processes(

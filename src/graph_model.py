@@ -362,7 +362,8 @@ def split_graph_by_metric(
 
 def split_graph_with_mem_constraint(
         old_graph,
-        mem_constraint,
+        n_var_parallel_min=0,
+        mem_constraint=1000000000,
         metric_function=get_node_by_degree,
         step_by=5):
     """
@@ -373,21 +374,25 @@ def split_graph_with_mem_constraint(
     ----------
     old_graph : networkx.Graph()
            initial contraction graph
+    n_var_parallel_min : int
+           minimal number of variables to split the task to
     mem_constraint : int
-           Upper limit on memory
+           Upper limit on memory per task
     metric_function : function, optional
            function to rank nodes for elimination
     step_by : int, optional
            scan the metric function with this step
     Returns
     -------
-    n_var_parallel : int
-           number of the variables to parallelize
+    idx_parallel : list
+             list of removed variables
+    reduced_graph : networkx.Graph
+             reduced contraction graph
     """
 
     n_var_total = old_graph.number_of_nodes()
 
-    for n_var_parallel in range(0, n_var_total, step_by):
+    for n_var_parallel in range(n_var_parallel_min, n_var_total, step_by):
         idx_parallel, reduced_graph = split_graph_by_metric(
              old_graph, n_var_parallel, metric_fn=metric_function)
 
