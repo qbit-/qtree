@@ -607,35 +607,35 @@ def extract_parallel_efficiency(
     return efficiencies, n_processes
 
 
-def extract_timings_vs_gridsize(
+def extract_record_vs_gridsize(
         filename, grid_sizes,
-        depth=10, time_id='exec_time'):
+        depth=10, rec_id='exec_time'):
     """
-    Extracts timings vs grid size from the timings data file
+    Extracts record vs grid size from the timings data file
     for a fixed depth
     """
     data = pd.read_pickle(filename)
 
     times = []
     for grid_size in grid_sizes:
-        time = data[(grid_size, depth)][time_id]
+        time = data[(grid_size, depth)][rec_id]
         times.append(time)
 
     return times, grid_sizes
 
 
-def extract_timings_vs_depth(
+def extract_record_vs_depth(
         filename, depths,
-        grid_size=4, time_id='exec_time'):
+        grid_size=4, rec_id='exec_time'):
     """
-    Extracts timings vs depth from the timings data file
+    Extracts record vs depth from the timings data file
     for a fixed grid_size
     """
     data = pd.read_pickle(filename)
 
     times = []
     for depth in depths:
-        time = data[(grid_size, depth)][time_id]
+        time = data[(grid_size, depth)][rec_id]
         times.append(time)
 
     return times, depths
@@ -689,7 +689,7 @@ def plot_time_vs_depth(filename,
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [4, 5]
+    grid_sizes = [6, 7]
     depths = range(10, 20)
 
     # Create empty canvas
@@ -697,13 +697,21 @@ def plot_time_vs_depth(filename,
                              figsize=(12, 6))
 
     for n, grid_size in enumerate(grid_sizes):
-        time, depths = extract_timings_vs_depth(
+        time, depths_labels = extract_record_vs_depth(
             filename, depths, grid_size)
-        axes[n].semilogy(depths, time)
+        axes[n].semilogy(depths_labels, time, 'b-', label='time')
         axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('log(time in seconds)')
-    fig.suptitle('Evaluation time vs depth of the circuit')
+        axes[n].legend(loc='upper left')
+        treewidth, depths_labels = extract_record_vs_depth(
+            filename, depths, grid_size, rec_id='treewidth'
+        )
+        right_ax = axes[n].twinx()
+        right_ax.plot(depths_labels, treewidth, 'r-', label='treewidth')
+        right_ax.legend(loc='lower right')
+
+    fig.suptitle('Evaluation time dependence on the depth of the circuit')
 
     if interactive:
         fig.show()
@@ -736,7 +744,7 @@ def plot_par_vs_depth_multiple(
                                for n_proc in n_processes]
 
     for n, (filename, title) in enumerate(zip(filenames, titles)):
-        time, depths = extract_timings_vs_depth(
+        time, depths = extract_record_vs_depth(
             filename, depths, grid_size)
         axes[n].semilogy(depths, time)
         axes[n].set_xlabel('depth')
@@ -760,8 +768,8 @@ def plot_par_efficiency(
     """
     Plots parallel efficiency for a given set of processors
     """
-    grid_size = 4
-    depth = 10
+    grid_size = 9
+    depth = 14
 
     if not interactive:
         plt.switch_backend('agg')
@@ -799,8 +807,8 @@ def plot_flops_per_sec_vs_depth(
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [4, 5]
-    depths = range(10, 20)
+    grid_sizes = [6, 7]
+    depths = range(10, 16)
 
     # Create empty canvas
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
@@ -809,7 +817,7 @@ def plot_flops_per_sec_vs_depth(
     for n, grid_size in enumerate(grid_sizes):
         flops_per_sec, depths = extract_flops_per_sec_vs_depth(
             filename, depths, grid_size)
-        axes[n].plot(depths, flops_per_sec)
+        axes[n].semilogy(depths, flops_per_sec)
         axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('flops per second')

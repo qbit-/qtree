@@ -179,7 +179,7 @@ def plot_compare_parallelization_strategies(
     metric_functions = {
         'degree': gm.get_node_by_degree,
         'betweenness': gm.get_node_by_betweenness,
-        'bruteforce (Alibaba)': gm.get_node_by_mem_reduction
+        'bruteforce (Chen et al.)': gm.get_node_by_mem_reduction
     }
 
     results = {}
@@ -397,7 +397,7 @@ def plot_cost_vs_depth(filename,
 
     # Create empty canvas
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
-                             figsize=(12, 6))
+                             figsize=(24, 6))
 
     for n, grid_size in enumerate(grid_sizes):
         flop, depths_labels = extract_costs_vs_depth(
@@ -462,6 +462,51 @@ def plot_cost_vs_gridsize(filename,
         right_ax.legend(loc='lower right')
 
     fig.suptitle('Evaluation cost vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_cost_vs_depth_multiple(
+        filename,
+        n_var_parallel=0,
+        fig_filename='cost_vs_depth.png',
+        interactive=False):
+    """
+    Plots cost estimates (per node) vs depth for some
+    number of grid sizes and some number of depths for each grid size
+    """
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+
+    if not interactive:
+        plt.switch_backend('agg')
+
+    grid_sizes = [6, 7, 8, 9, 10, 11]
+    depths_list = [range(50, 69), range(41, 54), range(35, 45),
+                   range(31, 40), range(27, 36), range(25, 32)
+    ]
+
+    # Create empty canvas
+    fig, ax = plt.subplots(1, 1, sharey=True,
+                           figsize=(12, 12))
+
+    jet = cm = plt.get_cmap('jet')
+    cNorm  = colors.Normalize(vmin=0, vmax=len(grid_sizes))
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)
+
+    for n, (grid_size, depths) in enumerate(zip(grid_sizes, depths_list)):
+        flop, depths_labels = extract_costs_vs_depth(
+            filename, depths, grid_size, rec_id='flop')
+        ax.semilogy(depths_labels, flop, color=scalarMap.to_rgba(n), marker='o',
+                    label=f'n = {grid_size}')
+        ax.set_xlabel(
+            'Depth')
+        ax.set_title('Predicted runtimes for the Qtree simulator')
+        ax.set_ylabel('Predicted runtime (s)')
+        ax.legend(loc='upper right')
 
     if interactive:
         fig.show()
