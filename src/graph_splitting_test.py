@@ -542,11 +542,13 @@ if __name__ == "__main__":
     #     constraints=constraints, step_by=5)
 
     n_var_parallel = 17
-    collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
-                  grid_sizes=[5, 6, 7, 8, 9, 10, 11, 12],
-                  depths=list(range(10, 70)),
-                  n_var_parallel=n_var_parallel,
-    )
-    plot_cost_vs_depth(f'output/cost_estimate_{n_var_parallel}.p',
-                       fig_filename=f'cost_vs_depth_{n_var_parallel}.png'
+    # collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
+    #               grid_sizes=[11],
+    #               depths=list(range(25, 32)),
+    #               n_var_parallel=n_var_parallel,
+    # )
+
+    plot_cost_vs_depth_multiple(
+        f'output/cost_estimate_{n_var_parallel}.p',
+        fig_filename=f'cost_vs_depth_multiple_{n_var_parallel}.png'
     )
