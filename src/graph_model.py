@@ -182,41 +182,30 @@ def cost_estimator(old_graph):
         # the node and its neighbor).
         # Then we have to count only the number of unique tensors.
         if graph.is_multigraph():
-            edges_from_node = {
-                neighbor: list(graph[node][neighbor].values())
-                for neighbor in neighbors}
-            neighbor_to_hash_tag_map = {
-                neighbor: edge['hash_tag'] for neighbor, edges_of_neighbor
-                in edges_from_node for edge in edges_of_neighbor
-            }
-            # tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-            #                     in edges_from_node
-            #                     for edge in edges_of_neighbor]
+            edges_from_node = [list(graph[node][neighbor].values())
+                               for neighbor in neighbors]
+            tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
+                                in edges_from_node
+                                for edge in edges_of_neighbor]
         else:
-            neighbor_to_hash_tag_map = {
-                neighbor: graph[node][neighbor]['hash_tag'] for
-                neighbor in neighbors}
-            # tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-            #                     for neighbor in neighbors]
-
-        tensor_hash_tags = list(neighbor_to_hash_tag_map.values())
-        n_unique_tensors = len(set(tensor_hash_tags))
-
+            tensor_hash_tags = [graph[node][neighbor]['hash_tag']
+                                for neighbor in neighbors]
         # The order of tensor in each term is the number of neighbors
         # having edges with the same hash tag + 1 (the node itself)
         neighbor_tensor_orders = {hash_tag: count+1 for
                                   hash_tag, count in
-                                  Counter(tensor_hash_tags)}
+                                  Counter(tensor_hash_tags).items()}
+        # memory estimation: the size of the result + all sizes of terms
+        memory = 2**(len(neighbors))
+        for order in neighbor_tensor_orders.values():
+            memory += 2**order
+
+        n_unique_tensors = len(set(tensor_hash_tags))
 
         if n_unique_tensors == 0:
             n_multiplications = 0
         else:
             n_multiplications = n_unique_tensors - 1
-
-        # memory estimation: the size of the result + all sizes of terms
-        memory = 2**(len(neighbors))
-        for order in neighbor_tensor_orders.values():
-            memory += 2**order
 
         # there are number_of_terms - 1 multiplications and 1 addition
         # repeated size_of_the_result*size_of_contracted_variables
@@ -387,7 +376,8 @@ def split_graph_with_mem_constraint(
         n_var_parallel_min=0,
         mem_constraint=MAXIMAL_MEMORY,
         metric_function=get_node_by_degree,
-        step_by=5):
+        step_by=5,
+        n_var_parallel_max=None):
     """
     Calculates memory cost vs the number of parallelized
     variables for a given graph.
@@ -404,6 +394,9 @@ def split_graph_with_mem_constraint(
            function to rank nodes for elimination
     step_by : int, optional
            scan the metric function with this step
+    n_var_parallel_max : int, optional
+           constraint on the maximal number of parallelized
+           variables. Default None
     Returns
     -------
     idx_parallel : list
@@ -413,8 +406,11 @@ def split_graph_with_mem_constraint(
     """
 
     n_var_total = old_graph.number_of_nodes()
+    if n_var_parallel_max is None:
+        n_var_parallel_max = n_var_total
 
-    for n_var_parallel in range(n_var_parallel_min, n_var_total, step_by):
+    for n_var_parallel in range(n_var_parallel_min,
+                                n_var_parallel_max, step_by):
         idx_parallel, reduced_graph = split_graph_by_metric(
              old_graph, n_var_parallel, metric_fn=metric_function)
 

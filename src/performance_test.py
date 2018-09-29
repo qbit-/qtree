@@ -149,6 +149,7 @@ def time_single_amplitude_tf_mpi(
         filename, target_state,
         n_var_parallel_min=0,
         mem_constraint=MAXIMAL_MEMORY,
+        n_var_parallel_max=None,
         quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
@@ -158,7 +159,8 @@ def time_single_amplitude_tf_mpi(
     """
     def prepare_mpi_environment(filename,
                                 n_var_parallel_min,
-                                mem_constraint):
+                                mem_constraint,
+                                n_var_parallel_max):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -170,7 +172,8 @@ def time_single_amplitude_tf_mpi(
         idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
             graph,
             n_var_parallel_min=n_var_parallel_min,
-            mem_constraint=mem_constraint)
+            mem_constraint=mem_constraint,
+            n_var_parallel_max=n_var_parallel_max)
 
         # Calculate elimination order with QuickBB
         peo, treewidth = gm.get_peo(reduced_graph)
@@ -261,7 +264,8 @@ def time_single_amplitude_tf_mpi(
     if rank == 0:
         env = prepare_mpi_environment(filename,
                                       n_var_parallel_min,
-                                      mem_constraint)
+                                      mem_constraint,
+                                      n_var_parallel_max)
     else:
         env = None
 
@@ -291,6 +295,7 @@ def time_single_amplitude_np_mpi(
         filename, target_state,
         n_var_parallel_min=0,
         mem_constraint=MAXIMAL_MEMORY,
+        n_var_parallel_max=None,
         quickbb_command=QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
@@ -300,7 +305,8 @@ def time_single_amplitude_np_mpi(
     """
     def prepare_mpi_environment(filename,
                                 n_var_parallel_min,
-                                mem_constraint):
+                                mem_constraint,
+                                n_var_parallel_max):
         # filename = 'inst_2x2_7_0.txt'
         n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -313,6 +319,7 @@ def time_single_amplitude_np_mpi(
             graph,
             n_var_parallel_min=n_var_parallel_min,
             mem_constraint=mem_constraint,
+            n_var_parallel_max=n_var_parallel_max
         )
 
         # Calculate elimination order with QuickBB
@@ -378,7 +385,8 @@ def time_single_amplitude_np_mpi(
     if rank == 0:
         env = prepare_mpi_environment(filename,
                                       n_var_parallel_min,
-                                      mem_constraint)
+                                      mem_constraint,
+                                      n_var_parallel_max)
     else:
         env = None
 
@@ -474,7 +482,7 @@ def collect_timings_mpi(
         depths=list(range(10, 15)),
         path_to_testcases='./test_circuits/inst/cz_v2',
         timing_fn_mpi=time_single_amplitude_np_mpi,
-        n_var_parallel_min=5):
+        n_var_parallel_min=7):
     """
     Runs timings for test circuits with grid size equal to grid_sizes
     and outputs results to a pandas.DataFrame, and saves to out_filename
@@ -555,6 +563,74 @@ def collect_timings_mpi(
                                           mem_max, flop, treewidth]
                 # Save result at each iteration
                 data.to_pickle(out_filename)
+
+    return data
+
+
+def collect_timings_npar(
+        testfile,
+        vars_parallel,
+        out_filename,
+        timing_fn_mpi=time_single_amplitude_np_mpi):
+    """
+    Runs timings for a single test circuit with different number of parallel
+    variables. This version supports execution by mpiexec.
+    """
+
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    if rank == 0:
+        try:
+            data = pd.read_pickle(out_filename)
+        except FileNotFoundError:
+            # lays down the structure of data
+            data = pd.DataFrame(
+                [],
+                index=['exec_time', 'total_time',
+                       'mem_max', 'flop', 'treewidth'],
+                columns=pd.Index(
+                    [],
+                    name='n_var_parallel'))
+
+        total_tests = len(vars_parallel)
+        log.info(f'Will run {total_tests} tests')
+        log.info(f'Will run {comm_size} paralell processes')
+    else:
+        data = None
+
+    for n, n_var_parallel in enumerate(vars_parallel):
+        if rank == 0:
+            log.info('Running nparallel = {}, [{}/{}]'.format(
+                n_var_parallel, n+1, total_tests))
+
+        # Will calculate "1000..000" target amplitude
+        target_state = 1
+
+        # Synchronize processes
+        comm.bcast(testfile, root=0)
+        comm.bcast(target_state, root=0)
+
+        # Measure time
+        start_time = time.time()
+        exec_time, *costs = timing_fn_mpi(
+            testfile, target_state, n_var_parallel_min=n_var_parallel,
+            mem_constraint=MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel)
+        end_time = time.time()
+        total_time = end_time - start_time
+        mem_max, flop, treewidth = costs
+
+        # Get maximal time as it determines overall time
+        comm.reduce(exec_time, op=MPI.MAX, root=0)
+        comm.reduce(total_time, op=MPI.MAX, root=0)
+
+        if rank == 0:  # Parent process. Store results
+            # Merge current result with the rest
+            data[n_var_parallel] = [exec_time, total_time,
+                                    mem_max, flop, treewidth]
+            # Save result at each iteration
+            data.to_pickle(out_filename)
 
     return data
 
