@@ -616,7 +616,7 @@ def collect_timings_npar(
         start_time = time.time()
         exec_time, *costs = timing_fn_mpi(
             testfile, target_state, n_var_parallel_min=n_var_parallel,
-            mem_constraint=MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel)
+            mem_constraint=MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel+1)
         end_time = time.time()
         total_time = end_time - start_time
         mem_max, flop, treewidth = costs
@@ -910,12 +910,12 @@ if __name__ == "__main__":
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(10, 18)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(10, 18)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
     #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(16, 24)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(16, 24)),
+    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
     #                     timing_fn_mpi=time_single_amplitude_np_mpi)
     # collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(41, 46)),
@@ -956,4 +956,9 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    plot_flops_per_sec_vs_depth('output/test_np_1.p')
+    # plot_flops_per_sec_vs_depth('output/test_np_1.p')
+    collect_timings_npar(
+        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
+        [1, 5, 10, 15, 20, 25],
+        'nvar_np.p',
+        timing_fn_mpi=time_single_amplitude_np_mpi)

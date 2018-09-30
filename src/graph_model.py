@@ -409,6 +409,9 @@ def split_graph_with_mem_constraint(
     if n_var_parallel_max is None:
         n_var_parallel_max = n_var_total
 
+    mem_cost, flop_cost = cost_estimator(copy.deepcopy(old_graph))
+    max_mem = sum(mem_cost)
+
     for n_var_parallel in range(n_var_parallel_min,
                                 n_var_parallel_max, step_by):
         idx_parallel, reduced_graph = split_graph_by_metric(
