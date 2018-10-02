@@ -67,8 +67,8 @@ def time_single_amplitude_tf(
 
     # Calculate costs
     mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-    mem_max = np.sum(mem_costs)
-    flop = np.sum(flop_costs)
+    mem_max = np.sum(np.array(mem_costs, dtype=np.double))
+    flop = np.sum(np.array(flop_costs, dtype=np.double))
     log.info('Evaluation cost:\n memory: {:e} flop: {:e}'.format(
         mem_max, flop))
 
@@ -121,8 +121,8 @@ def time_single_amplitude_np(
 
     # Calculate costs
     mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-    mem_max = np.sum(mem_costs)
-    flop = np.sum(flop_costs)
+    mem_max = np.sum(np.array(mem_costs, dtype=np.double))
+    flop = np.sum(np.array(flop_costs, dtype=np.double))
     log.info('Evaluation cost:\n memory: {:e} flop: {:e}'.format(
         mem_max, flop))
 
@@ -186,8 +186,10 @@ def time_single_amplitude_tf_mpi(
 
         # Estimate cost
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-        mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
-        flop = np.sum(flop_costs) * 2**len(idx_parallel)
+        mem_max = np.sum(
+            np.array(mem_costs, dtype=np.double)) * 2**len(idx_parallel)
+        flop = np.sum(
+            np.array(flop_costs, dtype=np.double)) * 2**len(idx_parallel)
         log.info('Evaluation cost:')
         log.info(' total:\n  memory: {:e} flop: {:e}'.format(
             mem_max, flop))
@@ -333,8 +335,10 @@ def time_single_amplitude_np_mpi(
 
         # Estimate cost
         mem_costs, flop_costs = gm.cost_estimator(graph_optimal)
-        mem_max = np.sum(mem_costs) * 2**len(idx_parallel)
-        flop = np.sum(flop_costs) * 2**len(idx_parallel)
+        mem_max = np.sum(
+            np.array(mem_costs, dtype=np.double)) * 2**len(idx_parallel)
+        flop = np.sum(
+            np.array(flop_costs, dtype=np.double)) * 2**len(idx_parallel)
         log.info('Evaluation cost:')
         log.info(' total:\n  memory: {:e} flop: {:e}'.format(
             mem_max, flop))
@@ -431,7 +435,8 @@ def collect_timings(
         # lays down the structure of data
         data = pd.DataFrame(
             [],
-            index=['exec_time', 'total_time', 'mem_max', 'flop', 'treewidth'],
+            index=['exec_time', 'total_time',
+                   'mem_max', 'flop', 'treewidth'],
             columns=pd.MultiIndex.from_product(
                 [[], []], names=['grid size', 'depth']))
 
@@ -774,17 +779,18 @@ def plot_time_vs_depth(filename,
 
     for n, grid_size in enumerate(grid_sizes):
         time, depths_labels = extract_record_vs_depth(
-            filename, depths, grid_size)
+            filename, depths, grid_size, rec_id='exec_time')
         axes[n].semilogy(depths_labels, time, 'b-', label='time')
         axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('log(time in seconds)')
         axes[n].legend(loc='upper left')
+
         treewidth, depths_labels = extract_record_vs_depth(
-            filename, depths, grid_size, rec_id='treewidth'
+            filename, depths, grid_size, rec_id='flop'
         )
         right_ax = axes[n].twinx()
-        right_ax.plot(depths_labels, treewidth, 'r-', label='treewidth')
+        right_ax.semilogy(depths_labels, treewidth, 'r-', label='flop')
         right_ax.legend(loc='lower right')
 
     fig.suptitle('Evaluation time dependence on the depth of the circuit')
@@ -898,6 +904,44 @@ def plot_flops_per_sec_vs_depth(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('flops per second')
     fig.suptitle('Flops per second vs depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_time_vs_n_var_parallel(
+        filename,
+        fig_filename='time_vs_n_var_parallel.png',
+        interactive=False):
+    """
+    Plots time as a function of the number of parallelized variables
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # Create empty canvas
+    fig, ax = plt.subplots(1, 1, sharey=True,
+                           figsize=(6, 6))
+
+    data = pd.read_pickle(filename)
+    times = data.loc['exec_time', :].get_values()
+    costs_per_task = data.loc['flop', :].get_values()
+    n_vars = data.loc['exec_time', :].index.get_values()
+
+    costs_total = [cost * 2**n_var_parallel for cost, n_var_parallel
+                   in zip(costs_per_task, n_vars)]
+    ax.semilogy(n_vars, times, 'b-', marker='o', label='time')
+    ax.set_xlabel(
+        'Number of parallelized variables')
+    ax.set_ylabel('time')
+    ax.set_title('Time as a function of the number of parallelized variables')
+    ax.legend(loc='upper left')
+    ax2 = ax.twinx()
+    ax2.semilogy(n_vars, costs_total, 'r-', marker='o', label='cost')
+    ax2.set_ylabel('predicted cost')
+    ax2.legend(loc='lower right')
 
     if interactive:
         fig.show()
