@@ -333,7 +333,14 @@ def collect_costs(
                 metric_fn=gm.get_node_by_degree)
 
             peo, treewidth = gm.get_peo(reduced_graph)
-            mem_cost, flop_cost = gm.cost_estimator(reduced_graph)
+
+            # Transform graph to the elimination order
+            graph_optimal, label_dict = gm.relabel_graph_nodes(
+                reduced_graph,
+                dict(zip(range(1, len(peo) + 1), peo))
+            )
+
+            mem_cost, flop_cost = gm.cost_estimator(graph_optimal)
 
             mem_min = max(mem_cost)
             mem_max = sum(mem_cost)
@@ -541,14 +548,14 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    n_var_parallel = 17
-    # collect_costs(f'output/cost_estimate_{n_var_parallel}.p',
-    #               grid_sizes=[11],
-    #               depths=list(range(25, 32)),
-    #               n_var_parallel=n_var_parallel,
-    # )
-
-    plot_cost_vs_depth_multiple(
-        f'output/cost_estimate_{n_var_parallel}.p',
-        fig_filename=f'cost_vs_depth_multiple_{n_var_parallel}.png'
+    n_var_parallel = 7
+    collect_costs(f'cost_estimate_{n_var_parallel}.p',
+                  grid_sizes=[6, 7],
+                  depths=list(range(10, 20)),
+                  n_var_parallel=n_var_parallel,
     )
+
+    # plot_cost_vs_depth_multiple(
+    #     f'output/cost_estimate_{n_var_parallel}.p',
+    #     fig_filename=f'cost_vs_depth_multiple_{n_var_parallel}.png'
+    # )
