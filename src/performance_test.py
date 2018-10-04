@@ -223,7 +223,7 @@ def time_single_amplitude_tf_mpi(
             idx_parallel=idx_parallel,
             input_names=list(pdict_sliced.keys()),
             tf_graph_def=tf.get_default_graph().as_graph_def(),
-            costs=(mem_max, flop, treewidth)
+            costs=(mem_max, flop, treewidth, len(idx_parallel))
         )
         return env
 
@@ -288,9 +288,9 @@ def time_single_amplitude_tf_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    mem_max, flop, treewidth = env['costs']
+    mem_max, flop, treewidth, n_var_parallel = env['costs']
 
-    return elapsed_time, mem_max, flop, treewidth
+    return elapsed_time, mem_max, flop, treewidth, n_var_parallel
 
 
 def time_single_amplitude_np_mpi(
@@ -353,7 +353,7 @@ def time_single_amplitude_np_mpi(
             n_qubits=n_qubits,
             idx_parallel=idx_parallel,
             buckets=perm_buckets,
-            costs=(mem_max, flop, treewidth)
+            costs=(mem_max, flop, treewidth, len(idx_parallel))
         )
         return env
 
@@ -411,9 +411,9 @@ def time_single_amplitude_np_mpi(
 
     comm.bcast(elapsed_time, root=0)
 
-    mem_max, flop, treewidth = env['costs']
+    mem_max, flop, treewidth, n_var_parallel = env['costs']
 
-    return elapsed_time, mem_max, flop, treewidth
+    return elapsed_time, mem_max, flop, treewidth, n_var_parallel
 
 
 def collect_timings(
@@ -510,7 +510,7 @@ def collect_timings_mpi(
             data = pd.DataFrame(
                 [],
                 index=['exec_time', 'total_time',
-                       'mem_max', 'flop', 'treewidth'],
+                       'mem_max', 'flop', 'treewidth', 'n_var_parallel'],
                 columns=pd.MultiIndex.from_product(
                     [[], []],
                     names=['grid size', 'depth']))
@@ -556,7 +556,7 @@ def collect_timings_mpi(
                 mem_constraint=MAXIMAL_MEMORY)
             end_time = time.time()
             total_time = end_time - start_time
-            mem_max, flop, treewidth = costs
+            mem_max, flop, treewidth, n_var_parallel = costs
 
             # Get maximal time as it determines overall time
             comm.reduce(exec_time, op=MPI.MAX, root=0)
@@ -565,7 +565,8 @@ def collect_timings_mpi(
             if rank == 0:  # Parent process. Store results
                 # Merge current result with the rest
                 data[grid_size, depth] = [exec_time, total_time,
-                                          mem_max, flop, treewidth]
+                                          mem_max, flop, treewidth,
+                                          n_var_parallel]
                 # Save result at each iteration
                 data.to_pickle(out_filename)
 
@@ -762,6 +763,8 @@ def extract_flops_per_sec_vs_nprocesses(
 
 def plot_time_vs_depth(filename,
                        fig_filename='time_vs_depth.png',
+                       grid_sizes=[4, 5],
+                       depths=range(10, 30),
                        interactive=False):
     """
     Plots time vs depth for some number of grid sizes
@@ -770,12 +773,12 @@ def plot_time_vs_depth(filename,
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [6, 7]
-    depths = range(10, 20)
+    # grid_sizes = [4]
+    # depths = range(10, 20)
 
     # Create empty canvas
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
-                             figsize=(12, 6))
+                             figsize=(6*len(grid_sizes), 6))
 
     for n, grid_size in enumerate(grid_sizes):
         time, depths_labels = extract_record_vs_depth(
@@ -786,11 +789,12 @@ def plot_time_vs_depth(filename,
         axes[n].set_ylabel('log(time in seconds)')
         axes[n].legend(loc='upper left')
 
-        treewidth, depths_labels = extract_record_vs_depth(
+        flop, depths_labels = extract_record_vs_depth(
             filename, depths, grid_size, rec_id='flop'
         )
+        total_flop = [f * 2**7 for f in flop]
         right_ax = axes[n].twinx()
-        right_ax.semilogy(depths_labels, treewidth, 'r-', label='flop')
+        right_ax.plot(depths_labels, total_flop, 'r-', label='flop')
         right_ax.legend(loc='lower right')
 
     fig.suptitle('Evaluation time dependence on the depth of the circuit')
@@ -985,9 +989,11 @@ if __name__ == "__main__":
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
     #     n_var_parallel=3)
 
-    # plot_time_vs_depth('output/test_np.p',
-    #                    fig_filename='time_vs_depth_np_hachiko.png',
-    #                    interactive=True)
+    plot_time_vs_depth('performance_7_np_1.p',
+                       fig_filename='time_vs_depth_7_45.png',
+                       grid_sizes=[4, 5],
+                       depths=range(10, 30),
+                       interactive=True)
     # plot_par_vs_depth_multiple(
     #     'output/test_np.p',
     #     'output/test_np',
@@ -1001,8 +1007,15 @@ if __name__ == "__main__":
     #                     interactive=True)
 
     # plot_flops_per_sec_vs_depth('output/test_np_1.p')
-    collect_timings_npar(
-        'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
-        [1, 5, 10, 15, 20, 25],
-        'nvar_np.p',
-        timing_fn_mpi=time_single_amplitude_np_mpi)
+    # collect_timings_npar(
+    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
+    #     [1, 5, 10, 15, 20, 25],
+    #     'nvar_np.p',
+    #     timing_fn_mpi=time_single_amplitude_np_mpi)
+
+    # grid_size = 4
+    # depth = 11
+    # plot_time_vs_n_var_parallel(
+    #     f'output/nvar_np_{grid_size}x{grid_size}_{depth}.p',
+    #     fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
+    # )

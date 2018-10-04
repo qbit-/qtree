@@ -145,24 +145,27 @@ def plot_cost_vs_n_var_parallel(
 
 def plot_flops_vs_n_var_parallel(
         filename,
-        fig_filename='treewidth_vs_parallelized_vars.png',
-        step_by=5):
+        fig_filename='flops_vs_parallelized_vars.png',
+        start_at=0,
+        stop_at=None,
+        step_by=1):
     """
     Plots treewidth and flop count with respect to the number of
     parallelized variables
     """
-    costs = get_cost_vs_parallel_size(filename, step_by)
+    costs = get_cost_vs_parallel_size(filename, step_by=step_by,
+                                      start_at=start_at, stop_at=stop_at)
     fig, ax = plt.subplots(1, 1, sharey=True, figsize=(20, 6))
     x_range = list(range(0, len(costs[0])*step_by, step_by))
 
-    ax.plot(x_range, costs[6], 'r-', label='treewidth')
+    ax.semilogy(x_range, costs[5], 'b-', label='flops')
     ax.set_xlabel('Number of parallelized variables')
-    ax.set_ylabel('treewidth')
-    ax.set_title('Graph treewidth')
+    ax.set_title('Cost vs number of parallelized variables')
+    ax.set_ylabel('flops')
 
     ax2 = ax.twinx()
-    ax2.semilogy(x_range, costs[5], 'b-', label='flops')
-    ax.set_ylabel('flops')
+    ax2.plot(x_range, costs[6], 'r-', label='treewidth')
+    ax2.set_ylabel('treewidth')
 
     ax.legend(loc='lower right')
     ax2.legend(loc='upper right')
@@ -391,6 +394,8 @@ def extract_costs_vs_gridsize(
 def plot_cost_vs_depth(filename,
                        n_var_parallel=0,
                        fig_filename='cost_vs_depth.png',
+                       grid_sizes=[6, 7],
+                       depths=range(10, 20),
                        interactive=False):
     """
     Plots cost estimates vs depth for some number of grid sizes
@@ -399,18 +404,18 @@ def plot_cost_vs_depth(filename,
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [4, 5]
-    depths = range(10, 50)
+    # grid_sizes = [6, 7]
+    # depths = range(10, 20)
 
     # Create empty canvas
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
-                             figsize=(24, 6))
+                             figsize=(6*len(grid_sizes), 6))
 
     for n, grid_size in enumerate(grid_sizes):
         flop, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='flop')
-        axes[n].semilogy(depths_labels, np.array(flop)*2**n_var_parallel,
-                         'b-', label='flops')
+        axes[n].semilogy(depths_labels, np.array(flop, dtype=np.float64)*2**n_var_parallel,
+                         'b-', label='flop cost')
         axes[n].set_xlabel(
             'depth')
         axes[n].set_title('{}x{} circuit'.format(grid_size, grid_size))
@@ -548,12 +553,27 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    n_var_parallel = 7
-    collect_costs(f'cost_estimate_{n_var_parallel}.p',
-                  grid_sizes=[6, 7],
-                  depths=list(range(10, 20)),
-                  n_var_parallel=n_var_parallel,
-    )
+    n_var_parallel = 0
+    # collect_costs(f'cost_estimate_{n_var_parallel}.p',
+    #               grid_sizes=[4, 5, 6, 7],
+    #               depths=list(range(10, 30)),
+    #               n_var_parallel=n_var_parallel,
+    # )
+
+    plot_cost_vs_depth(f'cost_estimate_{n_var_parallel}.p',
+                       n_var_parallel=n_var_parallel,
+                       fig_filename=f'cost_vs_depth_{n_var_parallel}.png',
+                       grid_sizes=[6, 7],
+                       depths=range(10, 30),
+                       interactive=False)
+
+    n = 4
+    d = 30
+    plot_flops_vs_n_var_parallel(
+        f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+        fig_filename=f'flops_vs_parallelized_vars_{n}_{d}.png',
+        stop_at=40,
+        step_by=1)
 
     # plot_cost_vs_depth_multiple(
     #     f'output/cost_estimate_{n_var_parallel}.p',
