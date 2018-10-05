@@ -792,9 +792,13 @@ def plot_time_vs_depth(filename,
         flop, depths_labels = extract_record_vs_depth(
             filename, depths, grid_size, rec_id='flop'
         )
-        total_flop = [f * 2**7 for f in flop]
+        n_var_parallel, depths_labels = extract_record_vs_depth(
+            filename, depths, grid_size, rec_id='n_var_parallel'
+        )
+
+        total_flop = [f * 2**nvar for f, nvar in zip(flop, n_var_parallel)]
         right_ax = axes[n].twinx()
-        right_ax.plot(depths_labels, total_flop, 'r-', label='flop')
+        right_ax.semilogy(depths_labels, total_flop, 'r-', label='flop')
         right_ax.legend(loc='lower right')
 
     fig.suptitle('Evaluation time dependence on the depth of the circuit')
@@ -885,6 +889,8 @@ def plot_par_efficiency(
 def plot_flops_per_sec_vs_depth(
         filename,
         fig_filename='fps_vs_depth.png',
+        grid_sizes=[6, 7],
+        depths=range(10, 16),
         interactive=False):
     """
     Plots flops per second vs depth for some number of grid sizes
@@ -893,12 +899,12 @@ def plot_flops_per_sec_vs_depth(
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [6, 7]
-    depths = range(10, 16)
+    # grid_sizes = [6, 7]
+    # depths = range(10, 16)
 
     # Create empty canvas
     fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
-                             figsize=(12, 6))
+                             figsize=(6*len(grid_sizes), 6))
 
     for n, grid_size in enumerate(grid_sizes):
         flops_per_sec, depths = extract_flops_per_sec_vs_depth(
@@ -989,10 +995,10 @@ if __name__ == "__main__":
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
     #     n_var_parallel=3)
 
-    plot_time_vs_depth('performance_7_np_1.p',
-                       fig_filename='time_vs_depth_7_45.png',
-                       grid_sizes=[4, 5],
-                       depths=range(10, 30),
+    plot_time_vs_depth('fps_6-7_10-20.p',
+                       fig_filename='time_vs_depth_67.png',
+                       grid_sizes=[6, 7],
+                       depths=range(10, 20),
                        interactive=True)
     # plot_par_vs_depth_multiple(
     #     'output/test_np.p',
@@ -1006,7 +1012,9 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    # plot_flops_per_sec_vs_depth('output/test_np_1.p')
+    plot_flops_per_sec_vs_depth('fps_6-7_10-20.p',
+                                grid_sizes=[6, 7],
+                                depths=range(10, 20))
     # collect_timings_npar(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
     #     [1, 5, 10, 15, 20, 25],
@@ -1014,7 +1022,7 @@ if __name__ == "__main__":
     #     timing_fn_mpi=time_single_amplitude_np_mpi)
 
     # grid_size = 4
-    # depth = 11
+    # depth = 20
     # plot_time_vs_n_var_parallel(
     #     f'output/nvar_np_{grid_size}x{grid_size}_{depth}.p',
     #     fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
