@@ -17,10 +17,10 @@ import src.utils as utils
 
 from src.logger_setup import log
 from mpi4py import MPI
-#from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt
 
-QUICKBB_COMMAND = './quickbb/quickbb_64'
-MAXIMAL_MEMORY = 10000000   # 100000000 64bit complex numbers
+QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
+MAXIMAL_MEMORY = 1e22   # 100000000 64bit complex numbers
 
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):

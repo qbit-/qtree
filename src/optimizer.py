@@ -7,6 +7,7 @@ go here.
 import itertools
 import networkx as nx
 import src.operators as ops
+import src.utils as utils
 
 from src.logger_setup import log
 
@@ -42,7 +43,7 @@ def circ2buckets(circuit):
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
     for i in range(1, qubit_count+1):
-        g.add_node(i)
+        g.add_node(i, name=utils.num_to_alpha(i))
 
     # Build buckets for bucket elimination algorithm along the way.
     # we start from 1 here to follow the variable indices
@@ -63,7 +64,7 @@ def circ2buckets(circuit):
                 var1 = layer_variables[op._qubits[0]]
                 var2 = current_var+1
 
-                g.add_node(var2)
+                g.add_node(var2, name=utils.num_to_alpha(var2))
                 g.add_edge(var1, var2)
 
                 # Append gate 2-variable tensor to the first variable's
@@ -151,7 +152,8 @@ def buckets2graph(buckets):
     for n, bucket in enumerate(buckets):
         for element in bucket:
             tensor, variables = element
-            graph.add_nodes_from(variables)
+            for var in variables:
+                graph.add_node(var, name=utils.num_to_alpha(var))
             if len(variables) > 1:
                 edges = itertools.combinations(variables, 2)
             else:
@@ -214,7 +216,6 @@ def graph2buckets(graph):
         # Now we have all unique tensors in bucket format.
         # Drop tensors where current variable is not the lowest in order
 
-        # bucket = candidate_elements
         bucket = []
         for element in candidate_elements.values():
             tensor, variables = element

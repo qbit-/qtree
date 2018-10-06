@@ -152,6 +152,102 @@ def split_graph_random(old_graph, n_var_parallel=0):
     return sorted(idx_parallel), graph
 
 
+def get_cost_by_node(graph, node):
+    """
+    Outputs the cost corresponding to the
+    contraction of the node in the graph
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+               Graph containing the information about the contraction
+    node : node of the graph (such that graph can be indexed by it)
+
+    Returns
+    -------
+    memory : int
+              Memory cost for contraction of node
+    flops : int
+              Flop cost for contraction of node
+    """
+    neighbors = list(graph[node])
+
+    # We have to find all unique tensors which will be contracted
+    # in this bucket. They label the edges coming from
+    # the current node (may be multiple edges between
+    # the node and its neighbor).
+    # Then we have to count only the number of unique tensors.
+    if graph.is_multigraph():
+        edges_from_node = [list(graph[node][neighbor].values())
+                           for neighbor in neighbors]
+        tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
+                            in edges_from_node
+                            for edge in edges_of_neighbor]
+    else:
+        tensor_hash_tags = [graph[node][neighbor]['hash_tag']
+                            for neighbor in neighbors]
+    # The order of tensor in each term is the number of neighbors
+    # having edges with the same hash tag + 1 (the node itself)
+    neighbor_tensor_orders = {hash_tag: count+1 for
+                              hash_tag, count in
+                              Counter(tensor_hash_tags).items()}
+    # memory estimation: the size of the result + all sizes of terms
+    memory = 2**(len(neighbors))
+    for order in neighbor_tensor_orders.values():
+        memory += 2**order
+
+    n_unique_tensors = len(set(tensor_hash_tags))
+
+    if n_unique_tensors == 0:
+        n_multiplications = 0
+    else:
+        n_multiplications = n_unique_tensors - 1
+
+    # there are number_of_terms - 1 multiplications and 1 addition
+    # repeated size_of_the_result*size_of_contracted_variables
+    # times for each contraction
+    flops = (2**(len(neighbors) + 1)       # this is addition
+             + 2**(len(neighbors) + 1)*n_multiplications)
+
+    return memory, flops
+
+
+def eliminate_node(graph, node):
+    """
+    Eliminates node according to the tensor contraction rules.
+    A new clique is formed, which includes all neighbors of the node.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+            Graph containing the information about the contraction
+            GETS MODIFIED IN THIS FUNCTION
+    node : node to contract (such that graph can be indexed by it)
+
+    Returns
+    -------
+    None
+    """
+
+    neighbors = list(graph[node])
+
+    if len(neighbors) > 1:
+        edges = itertools.combinations(neighbors, 2)
+    elif len(neighbors) == 1:
+        # This node had a single neighbor, add self loop to it
+        edges = [[neighbors[0], neighbors[0]]]
+    else:
+        # This node had no neighbors
+        edges = None
+
+    graph.remove_node(node)
+
+    if edges is not None:
+        graph.add_edges_from(
+            edges, tensor=f'E{node}',
+            hash_tag=hash((f'E{node}', tuple(neighbors))))
+
+
 def cost_estimator(old_graph):
     """
     Estimates the cost of the bucket elimination algorithm.
@@ -174,62 +270,10 @@ def cost_estimator(old_graph):
 
     results = []
     for n, node in enumerate(nodes):
-        neighbors = list(graph[node])
-
-        # We have to find all unique tensors which will be contracted
-        # in this bucket. They label the edges coming from
-        # the current node (may be multiple edges between
-        # the node and its neighbor).
-        # Then we have to count only the number of unique tensors.
-        if graph.is_multigraph():
-            edges_from_node = [list(graph[node][neighbor].values())
-                               for neighbor in neighbors]
-            tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-                                in edges_from_node
-                                for edge in edges_of_neighbor]
-        else:
-            tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                                for neighbor in neighbors]
-        # The order of tensor in each term is the number of neighbors
-        # having edges with the same hash tag + 1 (the node itself)
-        neighbor_tensor_orders = {hash_tag: count+1 for
-                                  hash_tag, count in
-                                  Counter(tensor_hash_tags).items()}
-        # memory estimation: the size of the result + all sizes of terms
-        memory = 2**(len(neighbors))
-        for order in neighbor_tensor_orders.values():
-            memory += 2**order
-
-        n_unique_tensors = len(set(tensor_hash_tags))
-
-        if n_unique_tensors == 0:
-            n_multiplications = 0
-        else:
-            n_multiplications = n_unique_tensors - 1
-
-        # there are number_of_terms - 1 multiplications and 1 addition
-        # repeated size_of_the_result*size_of_contracted_variables
-        # times for each contraction
-        flops = (2**(len(neighbors) + 1)       # this is addition
-                 + 2**(len(neighbors) + 1)*n_multiplications)
-
+        memory, flops = get_cost_by_node(graph, node)
         results.append((memory, flops))
 
-        if len(neighbors) > 1:
-            edges = itertools.combinations(neighbors, 2)
-        elif len(neighbors) == 1:
-            # This node had a single neighbor, add self loop to it
-            edges = [[neighbors[0], neighbors[0]]]
-        else:
-            # This node had no neighbors
-            edges = None
-
-        graph.remove_node(node)
-
-        if edges is not None:
-            graph.add_edges_from(
-                edges, tensor=f'E{n}',
-                hash_tag=hash((f'E{n}', tuple(neighbors))))
+        eliminate_node(graph, node)
 
     return tuple(zip(*results))
 
