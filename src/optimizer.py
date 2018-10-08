@@ -5,11 +5,14 @@ go here.
 """
 
 import itertools
+import random
 import networkx as nx
 import src.operators as ops
 import src.utils as utils
 
 from src.logger_setup import log
+
+random.seed(0)
 
 
 def circ2buckets(circuit):
@@ -43,7 +46,7 @@ def circ2buckets(circuit):
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
     for i in range(1, qubit_count+1):
-        g.add_node(i, name=utils.num_to_alpha(i))
+        g.add_node(i, name=utils.num_to_alnum(i))
 
     # Build buckets for bucket elimination algorithm along the way.
     # we start from 1 here to follow the variable indices
@@ -64,7 +67,7 @@ def circ2buckets(circuit):
                 var1 = layer_variables[op._qubits[0]]
                 var2 = current_var+1
 
-                g.add_node(var2, name=utils.num_to_alpha(var2))
+                g.add_node(var2, name=utils.num_to_alnum(var2))
                 g.add_edge(var1, var2)
 
                 # Append gate 2-variable tensor to the first variable's
@@ -153,7 +156,7 @@ def buckets2graph(buckets):
         for element in bucket:
             tensor, variables = element
             for var in variables:
-                graph.add_node(var, name=utils.num_to_alpha(var))
+                graph.add_node(var, name=utils.num_to_alnum(var))
             if len(variables) > 1:
                 edges = itertools.combinations(variables, 2)
             else:
@@ -163,7 +166,7 @@ def buckets2graph(buckets):
             graph.add_edges_from(
                 edges, tensor=tensor,
                 hash_tag=hash(
-                    (tensor, tuple(variables))
+                    (tensor, tuple(variables), random.random())
                 )
             )
 

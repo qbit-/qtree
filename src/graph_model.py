@@ -7,11 +7,14 @@ import re
 import copy
 import networkx as nx
 import itertools
+import random
 
 from collections import Counter
 
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
+
+random.seed(0)
 
 QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
 MAXIMAL_MEMORY = 100000000   # 100000000 64bit complex numbers
@@ -231,6 +234,11 @@ def eliminate_node(graph, node):
 
     neighbors = list(graph[node])
 
+    # Delete node itself from the list of its neighbors.
+    # This eliminates possible self loop
+    while node in neighbors:
+        neighbors.remove(node)
+
     if len(neighbors) > 1:
         edges = itertools.combinations(neighbors, 2)
     elif len(neighbors) == 1:
@@ -245,7 +253,7 @@ def eliminate_node(graph, node):
     if edges is not None:
         graph.add_edges_from(
             edges, tensor=f'E{node}',
-            hash_tag=hash((f'E{node}', tuple(neighbors))))
+            hash_tag=hash((f'E{node}', tuple(neighbors), random.random())))
 
 
 def cost_estimator(old_graph):

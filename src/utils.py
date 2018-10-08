@@ -83,7 +83,7 @@ def slice_values_generator(comm_size, rank, idx_parallel):
 
 def num_to_alpha(integer):
     """
-    Transform integer to [a-z], [a0-z0]-[a9-z9]
+    Transform integer to [a-z], [A-Z]
 
     Parameters
     ----------
@@ -100,6 +100,27 @@ def num_to_alpha(integer):
         return ascii[integer]
     else:
         raise ValueError('Too large index for einsum')
+
+
+def num_to_alnum(integer):
+    """
+    Transform integer to [a-z], [a0-z0]-[a9-z9]
+
+    Parameters
+    ----------
+    integer : int
+        Integer to transform
+
+    Returns
+    -------
+    a : str
+        alpha-numeric representation of the integer
+    """
+    ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
+    if integer < 26:
+        return ascii_lowercase[integer]
+    else:
+        return ascii_lowercase[integer % 25 - 1] + str(integer // 25)
 
 
 def get_einsum_expr(idx1, idx2):
