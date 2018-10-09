@@ -2,10 +2,31 @@
 Here we will collect functions to interact with the web visualization
 code
 """
-
 import src.operators as ops
 import src.optimizer as opt
 import src.graph_model as gm
+import json
+from networkx.readwrite import json_graph
+import networkx as nx
+
+
+def graph_to_d3json(graph):
+    """
+    Converts a graph to json node-link file
+
+    Parameters
+    ----------
+    graph : networkx.MultiGraph
+             Graph to convert
+
+    Returns
+    -------
+    res: string
+            converted json string
+    """
+    data = json_graph.node_link_data(graph)
+    res = json.dumps(data)
+    return res
 
 
 def read_graph_from_circfile(filename):
@@ -29,6 +50,25 @@ def read_graph_from_circfile(filename):
     buckets, _ = opt.circ2buckets(circuit)
     graph = opt.buckets2graph(buckets)
     return graph
+
+
+def copy_to_simple(graph):
+    """
+    Makes a copy of graph and removes from it all duplicate edges
+    and self loops
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+
+    Returns
+    -------
+    sgraph : networkx.Graph or networkx.MultiGraph
+    """
+    g = graph.copy()
+    g.remove_edges_from(graph.selfloop_edges())
+    sg = nx.Graph(g)
+    return sg
 
 
 def get_cost_by_node(graph, node):

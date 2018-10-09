@@ -1,0 +1,5 @@
+numpy
+flask
+flask-cors
+networkx
+cirq
