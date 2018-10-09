@@ -8,6 +8,7 @@ import src.graph_model as gm
 import json
 from networkx.readwrite import json_graph
 import networkx as nx
+import copy
 
 
 def graph_to_d3json(graph):
@@ -106,12 +107,14 @@ def get_contraction_expression(graph, node):
     expr : str
     """
 
+    # Find neighbors. This list may contain node itself due to selfloops
     neighbors = list(graph[node])
+    neighbors_wo_selfloops = copy.copy(neighbors)
 
     # Delete node itself from the list of its neighbors.
     # This eliminates possible self loop
-    while node in neighbors:
-        neighbors.remove(node)
+    while node in neighbors_wo_selfloops:
+        neighbors_wo_selfloops.remove(node)
 
     # We have to find all unique tensors which will be contracted
     # in this bucket. They label the edges coming from
@@ -137,6 +140,7 @@ def get_contraction_expression(graph, node):
     # Collect tensor indices
     indices_by_hash_tag = {hash_tag: [node, ] for hash_tag
                            in tensor_by_hash_tag.keys()}
+
     if graph.is_multigraph():
         for neighbor in neighbors:
             edges_from_node = list(graph[node][neighbor].values())
@@ -158,7 +162,8 @@ def get_contraction_expression(graph, node):
     # Build the expression string
     # First build what the resulting tensor will be
     expr = f'E{node}(' + ','.join(node_names[neighbor]
-                                  for neighbor in neighbors) + ')'
+                                  for neighbor
+                                  in neighbors_wo_selfloops) + ')'
     expr = expr + ' = ' + expr + ' + '
 
     # Build contraction terms

@@ -174,11 +174,12 @@ def get_cost_by_node(graph, node):
               Flop cost for contraction of node
     """
     neighbors = list(graph[node])
+    neighbors_wo_selfloops = copy.copy(neighbors)
 
     # Delete node itself from the list of its neighbors.
     # This eliminates possible self loop
-    while node in neighbors:
-        neighbors.remove(node)
+    while node in neighbors_wo_selfloops:
+        neighbors_wo_selfloops.remove(node)
 
     # We have to find all unique tensors which will be contracted
     # in this bucket. They label the edges coming from
@@ -194,28 +195,52 @@ def get_cost_by_node(graph, node):
     else:
         tensor_hash_tags = [graph[node][neighbor]['hash_tag']
                             for neighbor in neighbors]
+
+    # Now find all self loops (single variable tensors)
+    if graph.is_multigraph():
+        selfloops_from_node = [list(graph[node][neighbor].values())
+                               for neighbor in neighbors
+                               if neighbor == node]
+        selfloop_tensor_hash_tags = [edge['hash_tag']
+                                     for selfloop_of_node
+                                     in selfloops_from_node
+                                     for edge in selfloop_of_node]
+    else:
+        selfloop_tensor_hash_tags = [graph[node][neighbor]['hash_tag']
+                                     for neighbor in neighbors
+                                     if neighbor == node]
+
     # The order of tensor in each term is the number of neighbors
-    # having edges with the same hash tag + 1 (the node itself)
-    neighbor_tensor_orders = {hash_tag: count+1 for
-                              hash_tag, count in
-                              Counter(tensor_hash_tags).items()}
+    # having edges with the same hash tag + 1 (the node itself),
+    # except for self-loops, where the order is 1
+    neighbor_tensor_orders = {}
+    for hash_tag, count in Counter(tensor_hash_tags).items():
+        if hash_tag in selfloop_tensor_hash_tags:
+            tensor_order = {hash_tag: count}
+        else:
+            tensor_order = {hash_tag: count+1}
+        neighbor_tensor_orders.update(tensor_order)
+
     # memory estimation: the size of the result + all sizes of terms
-    memory = 2**(len(neighbors))
+    memory = 2**(len(neighbors_wo_selfloops))
     for order in neighbor_tensor_orders.values():
         memory += 2**order
 
     n_unique_tensors = len(set(tensor_hash_tags))
 
+    # there are number_of_terms - 1 multiplications
     if n_unique_tensors == 0:
         n_multiplications = 0
     else:
         n_multiplications = n_unique_tensors - 1
 
-    # there are number_of_terms - 1 multiplications and 1 addition
+    size_of_the_result = len(neighbors_wo_selfloops)
+
+    # There are n_multiplications and 1 addition
     # repeated size_of_the_result*size_of_contracted_variables
     # times for each contraction
-    flops = (2**(len(neighbors) + 1)       # this is addition
-             + 2**(len(neighbors) + 1)*n_multiplications)
+    flops = (2**(size_of_the_result + 1)       # this is addition
+             + 2**(size_of_the_result + 1)*n_multiplications)
 
     return memory, flops
 
