@@ -175,6 +175,11 @@ def get_cost_by_node(graph, node):
     """
     neighbors = list(graph[node])
 
+    # Delete node itself from the list of its neighbors.
+    # This eliminates possible self loop
+    while node in neighbors:
+        neighbors.remove(node)
+
     # We have to find all unique tensors which will be contracted
     # in this bucket. They label the edges coming from
     # the current node (may be multiple edges between
