@@ -6,6 +6,7 @@ import networkx as nx
 import subprocess
 import os
 
+import src.system_defs as defs
 from src.logger_setup import log
 
 
@@ -42,7 +43,7 @@ def gen_cnf(filename, old_graph):
 
 
 def run_quickbb(cnffile,
-                command='./quickbb_64',
+                command=defs.QUICKBB_COMMAND,
                 outfile='output/quickbb_out.qbb',
                 statfile='output/quickbb_stat.qbb'):
     """

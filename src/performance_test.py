@@ -14,13 +14,11 @@ import src.graph_model as gm
 import src.tf_framework as tffr
 import src.np_framework as npfr
 import src.utils as utils
+import src.system_defs as defs
 
 from src.logger_setup import log
 from mpi4py import MPI
 from matplotlib import pyplot as plt
-
-QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
-MAXIMAL_MEMORY = 1e22   # 100000000 64bit complex numbers
 
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
@@ -44,7 +42,7 @@ def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
 
 def time_single_amplitude_tf(
         filename, target_state,
-        quickbb_command=QUICKBB_COMMAND):
+        quickbb_command=defs.QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -98,7 +96,7 @@ def time_single_amplitude_tf(
 
 def time_single_amplitude_np(
         filename, target_state,
-        quickbb_command=QUICKBB_COMMAND):
+        quickbb_command=defs.QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -148,9 +146,9 @@ def time_single_amplitude_np(
 def time_single_amplitude_tf_mpi(
         filename, target_state,
         n_var_parallel_min=0,
-        mem_constraint=MAXIMAL_MEMORY,
+        mem_constraint=defs.MAXIMAL_MEMORY,
         n_var_parallel_max=None,
-        quickbb_command=QUICKBB_COMMAND):
+        quickbb_command=defs.QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -296,9 +294,9 @@ def time_single_amplitude_tf_mpi(
 def time_single_amplitude_np_mpi(
         filename, target_state,
         n_var_parallel_min=0,
-        mem_constraint=MAXIMAL_MEMORY,
+        mem_constraint=defs.MAXIMAL_MEMORY,
         n_var_parallel_max=None,
-        quickbb_command=QUICKBB_COMMAND):
+        quickbb_command=defs.QUICKBB_COMMAND):
     """
     Returns the time of a single amplitude evaluation.
     The circuit is loaded from the filename and the
@@ -553,7 +551,7 @@ def collect_timings_mpi(
             start_time = time.time()
             exec_time, *costs = timing_fn_mpi(
                 testfile, target_state, n_var_parallel_min=n_var_parallel_min,
-                mem_constraint=MAXIMAL_MEMORY)
+                mem_constraint=defs.MAXIMAL_MEMORY)
             end_time = time.time()
             total_time = end_time - start_time
             mem_max, flop, treewidth, n_var_parallel = costs
@@ -622,7 +620,7 @@ def collect_timings_npar(
         start_time = time.time()
         exec_time, *costs = timing_fn_mpi(
             testfile, target_state, n_var_parallel_min=n_var_parallel,
-            mem_constraint=MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel+1)
+            mem_constraint=defs.MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel+1)
         end_time = time.time()
         total_time = end_time - start_time
         mem_max, flop, treewidth = costs
