@@ -347,18 +347,18 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     graph_raw = opt.buckets2graph(buckets)
 
     # estimate cost
-    mem_cost, _ = gm.cost_estimator(graph_raw)
-    mem_raw = sum(mem_cost)
+    mem_raw, flop_raw = gm.cost_estimator(graph_raw)
+    mem_raw_tot = sum(mem_raw)
 
     # optimize node order
     peo, treewidth = gm.get_peo(graph_raw)
 
     # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(
-        graph_raw, dict(zip(range(1, len(peo)+1), peo))
+        graph_raw, dict(zip(peo, range(1, len(peo)+1)))
     )
-    mem_cost, _ = gm.cost_estimator(graph)
-    mem_opt = sum(mem_cost)
+    mem_opt, flop_opt = gm.cost_estimator(graph)
+    mem_opt_tot = sum(mem_opt)
 
     # split graph and relabel in optimized way
     n_var_parallel = 3
@@ -367,16 +367,16 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     peo, treewidth = gm.get_peo(reduced_graph)
 
     graph_parallel, label_dict = gm.relabel_graph_nodes(
-        reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
+        reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
     )
 
-    mem_cost, _ = gm.cost_estimator(graph_parallel)
-    mem_par = sum(mem_cost)
+    mem_par, flop_par = gm.cost_estimator(graph_parallel)
+    mem_par_tot = sum(mem_par)
 
     print('Memory (in doubles):\n raw: {} optimized: {}'.format(
-        mem_raw, mem_opt))
+        mem_raw_tot, mem_opt_tot))
     print(' parallel:\n  node: {} total: {} n_tasks: {}'.format(
-        mem_par, mem_par*2**(n_var_parallel),
+        mem_par_tot, mem_par_tot*2**(n_var_parallel),
         2**(n_var_parallel)
     ))
 

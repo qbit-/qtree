@@ -54,7 +54,7 @@ def eliminate():
             print("eliminating", node)
 
             graph = pickle.load(open('graph.p', 'rb'))
-            graph = api.copy_to_simple(graph)
+            # graph = api.copy_to_simple(graph)
             api.eliminate_node(graph, node)
             pickle.dump(graph, open('graph.p', 'wb'))
 
