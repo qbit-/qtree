@@ -454,7 +454,7 @@ def split_graph_by_metric(
 def split_graph_with_mem_constraint(
         old_graph,
         n_var_parallel_min=0,
-        mem_constraint=MAXIMAL_MEMORY,
+        mem_constraint=defs.MAXIMAL_MEMORY,
         metric_function=get_node_by_degree,
         step_by=5,
         n_var_parallel_max=None):

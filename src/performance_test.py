@@ -485,7 +485,8 @@ def collect_timings_mpi(
         depths=list(range(10, 15)),
         path_to_testcases='./test_circuits/inst/cz_v2',
         timing_fn_mpi=time_single_amplitude_np_mpi,
-        n_var_parallel_min=7):
+        n_var_parallel_min=7,
+        n_var_parallel_max=8):
     """
     Runs timings for test circuits with grid size equal to grid_sizes
     and outputs results to a pandas.DataFrame, and saves to out_filename
@@ -551,7 +552,8 @@ def collect_timings_mpi(
             start_time = time.time()
             exec_time, *costs = timing_fn_mpi(
                 testfile, target_state, n_var_parallel_min=n_var_parallel_min,
-                mem_constraint=defs.MAXIMAL_MEMORY)
+                mem_constraint=defs.MAXIMAL_MEMORY,
+                n_var_parallel_max=n_var_parallel_max)
             end_time = time.time()
             total_time = end_time - start_time
             mem_max, flop, treewidth, n_var_parallel = costs
@@ -962,16 +964,18 @@ if __name__ == "__main__":
     #                 timing_fn=time_single_amplitude_np)
     # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_tf)
-    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(10, 18)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(16, 24)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('compare_alibaba_np_mpi.p', [6], list(range(50, 57)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
-    # collect_timings_mpi('compare_alibaba_np_mpi.p', [7], list(range(41, 46)),
-    #                     timing_fn_mpi=time_single_amplitude_np_mpi)
+    collect_timings_mpi('hachiko_np.p', [5], list(range(10, 44)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi,
+                        n_var_parallel_min=0, n_var_parallel_max=1)
+    collect_timings_mpi('hachiko_np.p', [6], list(range(10, 35)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi,
+                        n_var_parallel_min=0, n_var_parallel_max=1)
+    collect_timings_mpi('hachiko_np.p', [7], list(range(10, 32)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi,
+                        n_var_parallel_min=0, n_var_parallel_max=1)
+    collect_timings_mpi('hachiko_np.p', [8], list(range(10, 29)),
+                        timing_fn_mpi=time_single_amplitude_np_mpi,
+                        n_var_parallel_min=0, n_var_parallel_max=1)
     # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
     #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
     # collect_timings_for_multiple_processes(
@@ -993,11 +997,11 @@ if __name__ == "__main__":
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
     #     n_var_parallel=3)
 
-    plot_time_vs_depth('fps_6-7_10-20.p',
-                       fig_filename='time_vs_depth_67.png',
-                       grid_sizes=[6, 7],
-                       depths=range(10, 20),
-                       interactive=True)
+    # plot_time_vs_depth('fps_6-7_10-20.p',
+    #                    fig_filename='time_vs_depth_67.png',
+    #                    grid_sizes=[6, 7],
+    #                    depths=range(10, 20),
+    #                    interactive=True)
     # plot_par_vs_depth_multiple(
     #     'output/test_np.p',
     #     'output/test_np',
@@ -1010,9 +1014,9 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    plot_flops_per_sec_vs_depth('fps_6-7_10-20.p',
-                                grid_sizes=[6, 7],
-                                depths=range(10, 20))
+    # plot_flops_per_sec_vs_depth('fps_6-7_10-20.p',
+    #                             grid_sizes=[6, 7],
+    #                             depths=range(10, 20))
     # collect_timings_npar(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
     #     [1, 5, 10, 15, 20, 25],
