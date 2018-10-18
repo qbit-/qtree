@@ -375,7 +375,7 @@ def get_node_by_mem_reduction(old_graph):
 
     # Transform graph to this order
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(range(1, number_of_nodes+1), peo))
+        old_graph, dict(zip(peo, range(1, number_of_nodes+1)))
     )
 
     # Get flop cost of the bucket elimination
@@ -390,7 +390,7 @@ def get_node_by_mem_reduction(old_graph):
         order = (list(range(1, node))
                  + list(range(node + 1, number_of_nodes + 1)))
         reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(range(1, number_of_nodes), order))
+            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
         )
         mem, flop = cost_estimator(reduced_graph)
         delta = np.sum(initial_mem) - np.sum(mem)
@@ -502,7 +502,7 @@ def split_graph_with_mem_constraint(
         peo, treewidth = get_peo(reduced_graph)
 
         graph_parallel, label_dict = relabel_graph_nodes(
-            reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
+            reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
         )
 
         mem_cost, flop_cost = cost_estimator(graph_parallel)

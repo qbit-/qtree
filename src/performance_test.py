@@ -62,7 +62,7 @@ def time_single_amplitude_tf(
 
     # Transform graph to the elimination order
     graph_optimal, label_dict = gm.relabel_graph_nodes(
-        graph, dict(zip(range(1, len(peo) + 1), peo))
+        graph, dict(zip(peo, range(1, len(peo) + 1)))
     )
 
     # Calculate costs
@@ -116,7 +116,7 @@ def time_single_amplitude_np(
 
     # Transform graph to the elimination order
     graph_optimal, label_dict = gm.relabel_graph_nodes(
-        graph, dict(zip(range(1, len(peo) + 1), peo))
+        graph, dict(zip(peo, range(1, len(peo) + 1)))
     )
 
     # Calculate costs
@@ -181,7 +181,7 @@ def time_single_amplitude_tf_mpi(
         # Transform graph to the elimination order
         graph_optimal, label_dict = gm.relabel_graph_nodes(
             reduced_graph,
-            dict(zip(range(1, len(peo) + 1), peo))
+            dict(zip(peo, range(1, len(peo) + 1)))
         )
 
         # Estimate cost
@@ -330,7 +330,7 @@ def time_single_amplitude_np_mpi(
         # Transform graph to the elimination order
         graph_optimal, label_dict = gm.relabel_graph_nodes(
             reduced_graph,
-            dict(zip(range(1, len(peo) + 1), peo))
+            dict(zip(peo, range(1, len(peo) + 1)))
         )
 
         # Estimate cost

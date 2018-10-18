@@ -48,7 +48,7 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
         peo, treewidth = gm.get_peo(reduced_graph)
 
         graph_parallel, label_dict = gm.relabel_graph_nodes(
-            reduced_graph, dict(zip(range(1, len(peo) + 1), peo))
+            reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
         )
 
         mem_cost, flop_cost = gm.cost_estimator(graph_parallel)
@@ -340,7 +340,7 @@ def collect_costs(
             # Transform graph to the elimination order
             graph_optimal, label_dict = gm.relabel_graph_nodes(
                 reduced_graph,
-                dict(zip(range(1, len(peo) + 1), peo))
+                dict(zip(peo, range(1, len(peo) + 1)))
             )
 
             mem_cost, flop_cost = gm.cost_estimator(graph_optimal)
