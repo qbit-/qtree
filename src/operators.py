@@ -4,9 +4,12 @@ This module implements quantum gates from the CMON set of Google
 import numpy as np
 import re
 import cirq
+
 from src.logger_setup import log
 from math import sqrt, pi
 from cmath import exp
+
+import src.system_defs as defs
 
 
 class qOperation:
@@ -81,7 +84,8 @@ class H(qOperation):
     Hadamard gate
     """
     matrix = 1/sqrt(2) * np.array([[1j,  1j],
-                                   [1j, -1j]])
+                                   [1j, -1j]],
+                                  dtype=defs.NP_ARRAY_TYPE)
     name = 'H'
     cirq_op = cirq.H
     diagonal = False
@@ -101,7 +105,8 @@ class cZ(qOperation):
     matrix = np.array([[1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
                        [0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
                        [0.+0.j,  0.+0.j,  1,  0.+0.j],
-                       [0.+0.j,  0.+0.j,  0.+0.j, -1]])
+                       [0.+0.j,  0.+0.j,  0.+0.j, -1]],
+                      dtype=defs.NP_ARRAY_TYPE)
     name = 'cZ'
     diagonal = True
     n_qubit = 2
@@ -118,7 +123,8 @@ class T(qOperation):
     :math:`T`-gate
     """
     matrix = np.array([[exp(-1.j*pi/8),  0],
-                       [0,  exp(1.j*pi/8)]])
+                       [0,  exp(1.j*pi/8)]],
+                      dtype=defs.NP_ARRAY_TYPE)
     name = 'T'
     n_qubit = 1
 
@@ -136,7 +142,8 @@ class X_1_2(qOperation):
     gate
     """
     matrix = 1/sqrt(2) * np.array([[1, 1j],
-                                   [1j, 1]])
+                                   [1j, 1]],
+                                  dtype=defs.NP_ARRAY_TYPE)
     name = 'X_1_2'
     diagonal = False
     n_qubit = 1
@@ -153,7 +160,8 @@ class Y_1_2(qOperation):
     :math:`Y^{1/2}` gate
     """
     matrix = 1/sqrt(2) * np.array([[1, 1],
-                                   [-1,  1]])
+                                   [-1,  1]],
+                                  dtype=defs.NP_ARRAY_TYPE)
     name = 'Y_1_2'
     diagonal = False
     n_qubit = 1
@@ -167,7 +175,8 @@ class Y_1_2(qOperation):
 
 class X(qOperation):
     matrix = np.array([[0.+0.j, 1.+0j],
-                       [1.+0j, 0.+0j]])
+                       [1.+0j, 0.+0j]],
+                      dtype=defs.NP_ARRAY_TYPE)
     name = 'X'
     diagonal = False
     n_qubit = 1
@@ -181,7 +190,8 @@ class X(qOperation):
 
 class Y(qOperation):
     matrix = np.array([[0.-1j, 0.+0j],
-                       [0.+0j, 0.+1j]])
+                       [0.+0j, 0.+1j]],
+                      dtype=defs.NP_ARRAY_TYPE)
     name = 'Y'
     diagonal = False
     n_qubit = 1

@@ -997,11 +997,11 @@ if __name__ == "__main__":
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
     #     n_var_parallel=3)
 
-    # plot_time_vs_depth('fps_6-7_10-20.p',
-    #                    fig_filename='time_vs_depth_67.png',
-    #                    grid_sizes=[6, 7],
-    #                    depths=range(10, 20),
-    #                    interactive=True)
+    plot_time_vs_depth('hachiko_np.p',
+                       fig_filename='time_vs_depth.png',
+                       grid_sizes=[5, 6],
+                       depths=range(10, 33),
+                       interactive=True)
     # plot_par_vs_depth_multiple(
     #     'output/test_np.p',
     #     'output/test_np',
@@ -1014,9 +1014,10 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    # plot_flops_per_sec_vs_depth('fps_6-7_10-20.p',
-    #                             grid_sizes=[6, 7],
-    #                             depths=range(10, 20))
+    plot_flops_per_sec_vs_depth('hachiko_np.p',
+                                fig_filename='fps_vs_depth.png',
+                                grid_sizes=[5, 6],
+                                depths=range(10, 33))
     # collect_timings_npar(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
     #     [1, 5, 10, 15, 20, 25],
