@@ -113,29 +113,29 @@ def plot_cost_vs_n_var_parallel(
     costs = get_cost_vs_parallel_size(filename, start_at=start_at,
                                       stop_at=stop_at, step_by=step_by)
     x_range = list(range(start_at, start_at+len(costs[0])*step_by, step_by))
-    fig, axes = plt.subplots(1, 3, sharey=True, figsize=(12, 6))
+    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(12, 6))
 
-    axes[0].semilogy(x_range, costs[0], label='per node')
-    axes[0].semilogy(x_range, costs[3], label='total')
+    # axes[0].semilogy(x_range, costs[0], label='per node')
+    # axes[0].semilogy(x_range, costs[3], label='total')
+    # axes[0].set_xlabel('parallelized variables')
+    # axes[0].set_ylabel('memory (in doubles)')
+    # axes[0].set_title('Maximal memory requirement')
+    # axes[0].legend()
+
+    axes[0].semilogy(x_range, costs[1], label='per node')
+    axes[0].semilogy(x_range, costs[4], label='total')
     axes[0].set_xlabel('parallelized variables')
     axes[0].set_ylabel('memory (in doubles)')
-    axes[0].set_title('Maximal memory requirement')
+    axes[0].set_title('Minimal memory requirement')
     axes[0].legend()
 
-    axes[1].semilogy(x_range, costs[1], label='per node')
-    axes[1].semilogy(x_range, costs[4], label='total')
+    axes[1].semilogy(x_range, costs[5], 'b-', label='flops')
     axes[1].set_xlabel('parallelized variables')
-    axes[1].set_ylabel('memory (in doubles)')
-    axes[1].set_title('Minimal memory requirement')
-    axes[1].legend()
+    axes[1].set_ylabel('flops')
+    axes[1].set_title('Flops cost')
+    axes[1].legend(loc='upper right')
 
-    axes[2].semilogy(x_range, costs[5], 'b-', label='flops')
-    axes[1].set_xlabel('parallelized variables')
-    axes[2].set_ylabel('flops')
-    axes[2].set_title('Flops cost')
-    axes[2].legend(loc='upper right')
-
-    ax21 = axes[2].twinx()
+    ax21 = axes[1].twinx()
     ax21.plot(x_range, costs[6], 'r-', label='treewidth')
     ax21.set_ylabel('treewidth')
     ax21.legend(loc='lower right')
@@ -414,8 +414,10 @@ def plot_cost_vs_depth(filename,
     for n, grid_size in enumerate(grid_sizes):
         flop, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='flop')
-        axes[n].semilogy(depths_labels, np.array(flop, dtype=np.float64)*2**n_var_parallel,
-                         'b-', label='flop cost')
+        axes[n].semilogy(
+            depths_labels,
+            np.array(flop, dtype=np.float64)*2**n_var_parallel,
+            'b-', label='flop cost')
         axes[n].set_xlabel(
             'depth')
         axes[n].set_title('{}x{} circuit'.format(grid_size, grid_size))
@@ -481,9 +483,10 @@ def plot_cost_vs_gridsize(filename,
     fig.savefig(fig_filename)
 
 
-def plot_cost_vs_depth_multiple(
+def plot_estimate_vs_depth_multiple(
         filename,
-        n_var_parallel=0,
+        fps_per_node,
+        n_var_parallel_per_node=0,
         fig_filename='cost_vs_depth.png',
         interactive=False):
     """
@@ -505,15 +508,18 @@ def plot_cost_vs_depth_multiple(
     fig, ax = plt.subplots(1, 1, sharey=True,
                            figsize=(12, 12))
 
-    jet = cm = plt.get_cmap('jet')
+    jet = plt.get_cmap('jet')
     cNorm  = colors.Normalize(vmin=0, vmax=len(grid_sizes))
     scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)
 
     for n, (grid_size, depths) in enumerate(zip(grid_sizes, depths_list)):
         flop, depths_labels = extract_costs_vs_depth(
             filename, depths, grid_size, rec_id='flop')
-        ax.semilogy(depths_labels, flop, color=scalarMap.to_rgba(n), marker='o',
-                    label=f'n = {grid_size}')
+        ax.semilogy(
+            depths_labels,
+            2**n_var_parallel_per_node*np.array(flop)/fps_per_node,
+            color=scalarMap.to_rgba(n), marker='o',
+            label=f'n = {grid_size}')
         ax.set_xlabel(
             'Depth')
         ax.set_title('Predicted runtimes for the Qtree simulator')
@@ -527,16 +533,17 @@ def plot_cost_vs_depth_multiple(
 
 
 if __name__ == "__main__":
-    n = 4
-    d = 20
-    idx = 2
-    step_by = 1
+    # n = 7
+    # d = 50
+    # idx = 2
+    # step_by = 5
 
     # plot_cost_vs_n_var_parallel(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     fig_filename=f'memory_vs_parallelized_vars_{n}x{n}_{d}.png',
-    #     start_at=5, stop_at=300, step_by=step_by
+    #     start_at=0, stop_at=300, step_by=step_by
     # )
+
     # plot_compare_parallelization_strategies(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
@@ -553,29 +560,30 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    n_var_parallel = 0
+    # n_var_parallel = 17
     # collect_costs(f'cost_estimate_{n_var_parallel}.p',
-    #               grid_sizes=[4, 5, 6, 7],
-    #               depths=list(range(10, 30)),
-    #               n_var_parallel=n_var_parallel,
-    # )
+    #               grid_sizes=[8, 9, 10, 11, 12],
+    #               depths=list(range(63, 70)),
+    #               n_var_parallel=n_var_parallel)
 
-    plot_cost_vs_depth(f'cost_estimate_{n_var_parallel}.p',
-                       n_var_parallel=n_var_parallel,
-                       fig_filename=f'cost_vs_depth_{n_var_parallel}.png',
-                       grid_sizes=[6, 7],
-                       depths=range(10, 30),
-                       interactive=False)
+    # plot_cost_vs_depth(f'cost_estimate_{n_var_parallel}.p',
+    #                    n_var_parallel=n_var_parallel,
+    #                    fig_filename=f'cost_vs_depth_{n_var_parallel}.png',
+    #                    grid_sizes=[5, 6, 7],
+    #                    depths=range(10, 27),
+    #                    interactive=False)
 
-    n = 4
-    d = 30
-    plot_flops_vs_n_var_parallel(
-        f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-        fig_filename=f'flops_vs_parallelized_vars_{n}_{d}.png',
-        stop_at=40,
-        step_by=1)
+    # n = 7
+    # d = 30
+    # plot_flops_vs_n_var_parallel(
+    #     f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+    #     fig_filename=f'flops_vs_parallelized_vars_{n}_{d}.png',
+    #     stop_at=40,
+    #     step_by=1)
 
-    # plot_cost_vs_depth_multiple(
-    #     f'output/cost_estimate_{n_var_parallel}.p',
-    #     fig_filename=f'cost_vs_depth_multiple_{n_var_parallel}.png'
-    # )
+    n_var_parallel = 17
+    plot_estimate_vs_depth_multiple(
+        f'output/cost_estimate_{n_var_parallel}.p',
+        fig_filename=f'estimate_vs_depth_multiple_{n_var_parallel}.png',
+        fps_per_node=1e8
+    )

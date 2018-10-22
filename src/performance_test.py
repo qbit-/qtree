@@ -625,7 +625,7 @@ def collect_timings_npar(
             mem_constraint=defs.MAXIMAL_MEMORY, n_var_parallel_max=n_var_parallel+1)
         end_time = time.time()
         total_time = end_time - start_time
-        mem_max, flop, treewidth = costs
+        mem_max, flop, treewidth, _ = costs
 
         # Get maximal time as it determines overall time
         comm.reduce(exec_time, op=MPI.MAX, root=0)
@@ -809,6 +809,55 @@ def plot_time_vs_depth(filename,
     fig.savefig(fig_filename)
 
 
+def plot_time_vs_gridsize(filename,
+                          fig_filename='time_vs_gridsize.png',
+                          grid_sizes=[5],
+                          depths=[20, 25],
+                          interactive=False):
+    """
+    Plots time vs gridsize for some number of depths
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # grid_sizes = [4]
+    # depths = range(10, 20)
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(depths), sharey=True,
+                             figsize=(6*len(depths), 6))
+
+    for n, depth in enumerate(depths):
+        time, gridsize_labels = extract_record_vs_gridsize(
+            filename, grid_sizes=grid_sizes,
+            depth=depth, rec_id='exec_time')
+        axes[n].semilogy(gridsize_labels, time, 'b-', label='time')
+        axes[n].set_xlabel(
+            'size of depth={} circuit'.format(depth))
+        axes[n].set_ylabel('log(time in seconds)')
+        axes[n].legend(loc='upper left')
+
+        flop, depths_labels = extract_record_vs_gridsize(
+            filename, grid_sizes, depth, rec_id='flop'
+        )
+        n_var_parallel, depths_labels = extract_record_vs_gridsize(
+            filename, grid_sizes, depth, rec_id='n_var_parallel'
+        )
+
+        total_flop = [f * 2**nvar for f, nvar in zip(flop, n_var_parallel)]
+        right_ax = axes[n].twinx()
+        right_ax.semilogy(depths_labels, total_flop, 'r-', label='flop')
+        right_ax.legend(loc='lower right')
+
+    fig.suptitle('Evaluation time dependence on the size of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 def plot_par_vs_depth_multiple(
         seq_filename, par_filename_base,
         n_processes=[1, 2], fig_filename='time_vs_depth_multiple.png',
@@ -910,6 +959,8 @@ def plot_flops_per_sec_vs_depth(
         flops_per_sec, depths = extract_flops_per_sec_vs_depth(
             filename, depths, grid_size)
         axes[n].semilogy(depths, flops_per_sec)
+        # axes[n].axhline(y=8.388*10**9, color='k', linestyle='-.')
+        # axes[n].text(1, 8.5*10**9, 'zAXPY', color='k')
         axes[n].set_xlabel(
             'depth of {}x{} circuit'.format(grid_size, grid_size))
         axes[n].set_ylabel('flops per second')
@@ -959,25 +1010,42 @@ def plot_time_vs_n_var_parallel(
     fig.savefig(fig_filename)
 
 
+def plot_fps_vs_n_var_parallel(
+        filename,
+        fig_filename='fps_vs_n_var_parallel.png',
+        interactive=False):
+    """
+    Plots time as a function of the number of parallelized variables
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # Create empty canvas
+    fig, ax = plt.subplots(1, 1, sharey=True,
+                           figsize=(6, 6))
+
+    data = pd.read_pickle(filename)
+    times = data.loc['exec_time', :].get_values()
+    costs_per_task = data.loc['flop', :].get_values()
+    n_vars = data.loc['exec_time', :].index.get_values()
+
+    costs_total = [cost * 2**n_var_parallel for cost, n_var_parallel
+                   in zip(costs_per_task, n_vars)]
+    ax.semilogy(n_vars, costs_total / times, 'b-', marker='o', label='fps')
+    ax.set_xlabel(
+        'Number of parallelized variables')
+    ax.set_ylabel('flops per second')
+    ax.set_title('Performance as a function of the number of parallelized variables')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 if __name__ == "__main__":
     # collect_timings('test_np.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_np)
-    # collect_timings('test_tf.p', [4, 5], list(range(10, 21)),
-    #                 timing_fn=time_single_amplitude_tf)
-    collect_timings_mpi('hachiko_np.p', [5], list(range(10, 44)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi,
-                        n_var_parallel_min=0, n_var_parallel_max=1)
-    collect_timings_mpi('hachiko_np.p', [6], list(range(10, 35)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi,
-                        n_var_parallel_min=0, n_var_parallel_max=1)
-    collect_timings_mpi('hachiko_np.p', [7], list(range(10, 32)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi,
-                        n_var_parallel_min=0, n_var_parallel_max=1)
-    collect_timings_mpi('hachiko_np.p', [8], list(range(10, 29)),
-                        timing_fn_mpi=time_single_amplitude_np_mpi,
-                        n_var_parallel_min=0, n_var_parallel_max=1)
-    # collect_timings_mpi('test_tf_mpi.p', [4, 5], list(range(10, 21)),
-    #                     timing_fn_mpi=time_single_amplitude_tf_mpi)
     # collect_timings_for_multiple_processes(
     #     'output/test_np', [1, 2, 4],
     #     extra_args=[[4, 5], list(range(10, 21)), 'timing_fn_mpi=time_single_amplitude_tf_mpi']
@@ -986,22 +1054,15 @@ if __name__ == "__main__":
     # time_single_amplitude_tf(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0)
 
-    # time_single_amplitude_np(
-    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0)
-
-    # time_single_amplitude_tf_mpi(
-    #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
-    #     n_var_parallel=3)
-
     # time_single_amplitude_np_mpi(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt', 0,
     #     n_var_parallel=3)
 
-    plot_time_vs_depth('hachiko_np.p',
-                       fig_filename='time_vs_depth.png',
-                       grid_sizes=[5, 6],
-                       depths=range(10, 33),
-                       interactive=True)
+    # plot_time_vs_depth('hachiko_np_7.p',
+    #                    fig_filename='time_vs_depth_7.png',
+    #                    grid_sizes=[7, 7],
+    #                    depths=range(10, 26),
+    #                    interactive=True)
     # plot_par_vs_depth_multiple(
     #     'output/test_np.p',
     #     'output/test_np',
@@ -1014,15 +1075,22 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    plot_flops_per_sec_vs_depth('hachiko_np.p',
-                                fig_filename='fps_vs_depth.png',
-                                grid_sizes=[5, 6],
-                                depths=range(10, 33))
+    # plot_flops_per_sec_vs_depth('hachiko_np_7.p',
+    #                             fig_filename='fps_vs_depth_7.png',
+    #                             grid_sizes=[7, 7],
+    #                             depths=range(10, 26))
     # collect_timings_npar(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
     #     [1, 5, 10, 15, 20, 25],
     #     'nvar_np.p',
     #     timing_fn_mpi=time_single_amplitude_np_mpi)
+
+    plot_time_vs_gridsize(
+        'hachiko_np.p',
+        fig_filename='time_vs_gridsize.png',
+        grid_sizes=[4, 5, 6, 7, 8],
+        depths=[10, 15, 20],
+        interactive=False)
 
     # grid_size = 4
     # depth = 20
