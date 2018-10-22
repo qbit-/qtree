@@ -198,6 +198,26 @@ def eliminate_node(graph, node):
     gm.eliminate_node(graph, node)
 
 
+def cost_estimator(graph):
+    """
+    Estimates the cost of the bucket elimination algorithm.
+    The order of elimination is defined by node order (if ints are
+    used as nodes then it will be the number of integers).
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+               Graph containing the information about the contraction
+    Returns
+    -------
+    memory : list
+              Memory cost for steps of the bucket elimination algorithm
+    flops : list
+              Flop cost for steps of the bucket elimination algorithm
+    """
+    return gm.cost_estimator(graph)
+
+
 if __name__ == "__main__":
     # Test API
     graph = read_graph_from_circfile('inst_2x2_7_0.txt')
