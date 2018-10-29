@@ -838,16 +838,17 @@ def plot_time_vs_gridsize(filename,
         axes[n].set_ylabel('log(time in seconds)')
         axes[n].legend(loc='upper left')
 
-        flop, depths_labels = extract_record_vs_gridsize(
-            filename, grid_sizes, depth, rec_id='flop'
+        treewidth, depths_labels = extract_record_vs_gridsize(
+            filename, grid_sizes, depth, rec_id='treewidth'
         )
-        n_var_parallel, depths_labels = extract_record_vs_gridsize(
-            filename, grid_sizes, depth, rec_id='n_var_parallel'
-        )
+        # n_var_parallel, depths_labels = extract_record_vs_gridsize(
+        #     filename, grid_sizes, depth, rec_id='n_var_parallel'
+        # )
 
-        total_flop = [f * 2**nvar for f, nvar in zip(flop, n_var_parallel)]
+        # total_flop = [f * 2**nvar for f, nvar in zip(flop, n_var_parallel)]
         right_ax = axes[n].twinx()
-        right_ax.semilogy(depths_labels, total_flop, 'r-', label='flop')
+        right_ax.semilogy(
+            depths_labels, treewidth, 'r-', label='treewidth')
         right_ax.legend(loc='lower right')
 
     fig.suptitle('Evaluation time dependence on the size of the circuit')
@@ -993,14 +994,15 @@ def plot_time_vs_n_var_parallel(
 
     costs_total = [cost * 2**n_var_parallel for cost, n_var_parallel
                    in zip(costs_per_task, n_vars)]
-    ax.semilogy(n_vars, times, 'b-', marker='o', label='time')
+    ax.semilogy(n_vars, times, ls='', color='b', marker='o', label='time')
     ax.set_xlabel(
         'Number of parallelized variables')
     ax.set_ylabel('time')
-    ax.set_title('Time as a function of the number of parallelized variables')
+    ax.set_title('Time and cost as a function \n of the number of parallelized variables')
     ax.legend(loc='upper left')
     ax2 = ax.twinx()
-    ax2.semilogy(n_vars, costs_total, 'r-', marker='o', label='cost')
+    ax2.semilogy(n_vars, costs_total, ls='', color='r', marker='*', label='cost')
+
     ax2.set_ylabel('predicted cost')
     ax2.legend(loc='lower right')
 
@@ -1085,16 +1087,16 @@ if __name__ == "__main__":
     #     'nvar_np.p',
     #     timing_fn_mpi=time_single_amplitude_np_mpi)
 
-    plot_time_vs_gridsize(
-        'hachiko_np.p',
-        fig_filename='time_vs_gridsize.png',
-        grid_sizes=[4, 5, 6, 7, 8],
-        depths=[10, 15, 20],
-        interactive=False)
+    # plot_time_vs_gridsize(
+    #     'hachiko_np.p',
+    #     fig_filename='time_vs_gridsize.png',
+    #     grid_sizes=[4, 5, 6, 7, 8, 9],
+    #     depths=[10, 15, 20],
+    #     interactive=False)
 
-    # grid_size = 4
-    # depth = 20
-    # plot_time_vs_n_var_parallel(
-    #     f'output/nvar_np_{grid_size}x{grid_size}_{depth}.p',
-    #     fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
-    # )
+    grid_size = 7
+    depth = 20
+    plot_time_vs_n_var_parallel(
+        f'nvar_np_{grid_size}x{grid_size}_{depth}.p',
+        fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
+    )
