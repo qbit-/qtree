@@ -284,6 +284,55 @@ def eliminate_node(graph, node):
             hash_tag=hash((f'E{node}', tuple(neighbors), random.random())))
 
 
+def get_mem_requirement(graph):
+    """
+    Calculates memory to store the tensor network
+    expressed in the graph model form.
+
+    Parameters
+    ----------
+    graph : networkx.MultiGraph
+             Graph of the network
+    Returns
+    -------
+    memory : int
+            Amount of memory
+    """
+    nodes = list(graph.nodes)
+    nodes_wo_selfloops = copy.copy(nodes)
+
+    # Delete node itself from the list of its neighbors.
+    # This eliminates possible self loop
+    while nodes in nodes_wo_selfloops:
+        nodes_wo_selfloops.remove(nodes)
+
+    # We have to find all unique tensors in the network
+    # They label the edges of the graph
+    # (may be multiple edges between
+    # the node and its neighbor).
+    # Then we have to count only the number of unique tensors.
+    tensor_hash_tags = []
+    selfloop_tensor_hash_tags = []
+    for edge in graph.edges:
+        tensor_hash_tags.append(graph.edges[edge]['hash_tag'])
+        if edge[0] == edge[1]:
+            selfloop_tensor_hash_tags.append(
+                graph.edges[edge]['hash_tag'])
+
+    # The order of tensor is the number of same hash tags
+    tensor_orders = {}
+    for hash_tag, count in Counter(tensor_hash_tags).items():
+        tensor_order = {hash_tag: count}
+        tensor_orders.update(tensor_order)
+
+    # memory estimation
+    memory = 0
+    for order in tensor_orders.values():
+        memory += 2**order
+
+    return memory
+
+
 def cost_estimator(old_graph):
     """
     Estimates the cost of the bucket elimination algorithm.

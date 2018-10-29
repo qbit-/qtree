@@ -31,6 +31,7 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
           total_max_mem - maximal memory of all tasks combined
           total_min_mem - minimal memory of all tasks combined
           treewidth - treewidth returned by quickBB
+          av_flop_per_mem - average memory access per flop
     """
     n_qubits, circuit = ops.read_circuit_file(filename)
 
@@ -61,9 +62,14 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
         total_min_mem = min_mem * (2**n_var_parallel)
         total_flops = flops * (2**n_var_parallel)
 
+        flop_per_mem = [flop / mem for mem, flop
+                        in zip(mem_cost, flop_cost)]
+        av_flop_per_mem = sum(flop_per_mem) / len(flop_per_mem)
+
         results.append((max_mem, min_mem, flops,
                         total_mem_max, total_min_mem,
-                        total_flops, treewidth))
+                        total_flops, treewidth,
+                        av_flop_per_mem))
 
     return tuple(zip(*results))
 
@@ -113,7 +119,7 @@ def plot_cost_vs_n_var_parallel(
     costs = get_cost_vs_parallel_size(filename, start_at=start_at,
                                       stop_at=stop_at, step_by=step_by)
     x_range = list(range(start_at, start_at+len(costs[0])*step_by, step_by))
-    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(12, 6))
+    fig, axes = plt.subplots(1, 3, sharey=True, figsize=(18, 6))
 
     # axes[0].semilogy(x_range, costs[0], label='per node')
     # axes[0].semilogy(x_range, costs[3], label='total')
@@ -137,8 +143,15 @@ def plot_cost_vs_n_var_parallel(
 
     ax21 = axes[1].twinx()
     ax21.plot(x_range, costs[6], 'r-', label='treewidth')
+    ax21.plot(x_range, costs[7], 'g-', label='flop_per_mem_access')
     ax21.set_ylabel('treewidth')
     ax21.legend(loc='lower right')
+
+    axes[2].plot(x_range, costs[7], 'g-', label='flop_per_mem_access')
+    axes[2].set_xlabel('parallelized variables')
+    axes[2].set_ylabel('Flop per memory access')
+    axes[2].set_title('CPU/memory ratio')
+    axes[2].legend(loc='upper right')
 
     fig.savefig(fig_filename)
 
@@ -496,12 +509,15 @@ def plot_estimate_vs_depth_multiple(
     import matplotlib.colors as colors
     import matplotlib.cm as cmx
 
+    plt.rcParams.update({'font.size': 18})
+
     if not interactive:
         plt.switch_backend('agg')
 
-    grid_sizes = [6, 7, 8, 9, 10, 11]
+    grid_sizes = [6, 7, 8, 9, 10, 11, 12]
     depths_list = [range(50, 69), range(41, 54), range(35, 45),
-                   range(31, 40), range(27, 36), range(25, 32)
+                   range(31, 40), range(27, 36), range(25, 31),
+                   range(22, 27)
     ]
 
     # Create empty canvas
@@ -522,9 +538,16 @@ def plot_estimate_vs_depth_multiple(
             label=f'n = {grid_size}')
         ax.set_xlabel(
             'Depth')
-        ax.set_title('Predicted runtimes for the Qtree simulator')
+        ax.set_title('Predicted runtimes for the circuit simulation')
         ax.set_ylabel('Predicted runtime (s)')
-        ax.legend(loc='upper right')
+        ax.legend(loc='lower right')
+
+    timescales = [3600, 86400, 604800, 2678400]
+    timescale_labels = ['1 hour', '1 day', '1 week', '1 month']
+
+    for ts, label in zip(timescales, timescale_labels):
+        ax.axhline(ts, linestyle=':', color='black')
+        ax.text(22, ts+1000, label, color='black')
 
     if interactive:
         fig.show()
@@ -533,10 +556,10 @@ def plot_estimate_vs_depth_multiple(
 
 
 if __name__ == "__main__":
-    # n = 7
-    # d = 50
-    # idx = 2
-    # step_by = 5
+    n = 7
+    d = 50
+    idx = 2
+    step_by = 5
 
     # plot_cost_vs_n_var_parallel(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
@@ -560,10 +583,10 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    # n_var_parallel = 17
+    # n_var_parallel = 23
     # collect_costs(f'cost_estimate_{n_var_parallel}.p',
-    #               grid_sizes=[8, 9, 10, 11, 12],
-    #               depths=list(range(63, 70)),
+    #               grid_sizes=[12],
+    #               depths=list(range(20, 70)),
     #               n_var_parallel=n_var_parallel)
 
     # plot_cost_vs_depth(f'cost_estimate_{n_var_parallel}.p',
@@ -581,9 +604,10 @@ if __name__ == "__main__":
     #     stop_at=40,
     #     step_by=1)
 
-    n_var_parallel = 17
+    n_var_parallel = 23
     plot_estimate_vs_depth_multiple(
-        f'output/cost_estimate_{n_var_parallel}.p',
+        f'cost_estimate_{n_var_parallel}.p',
         fig_filename=f'estimate_vs_depth_multiple_{n_var_parallel}.png',
-        fps_per_node=1e8
+        fps_per_node=1e12,
+        n_var_parallel_per_node=0
     )
