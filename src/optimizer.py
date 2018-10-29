@@ -33,15 +33,14 @@ def circ2buckets(circuit):
     -------
     buckets : list of lists
             list of lists (buckets)
-    g : networkx.Graph
+    g : networkx.MultiGraph
             contraction graph of the circuit
     """
     # import pdb
     # pdb.set_trace()
-    g = nx.Graph()
+    g = nx.MultiGraph()
 
     qubit_count = len(circuit[0])
-    # print(qubit_count)
 
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
@@ -68,7 +67,11 @@ def circ2buckets(circuit):
                 var2 = current_var+1
 
                 g.add_node(var2, name=utils.num_to_alnum(var2))
-                g.add_edge(var1, var2)
+                g.add_edge(var1, var2,
+                           hash_tag=hash((
+                               op.name, (var1, var2),
+                               random.random()))
+                )
 
                 # Append gate 2-variable tensor to the first variable's
                 # bucket. This yields buckets containing variables
@@ -92,7 +95,10 @@ def circ2buckets(circuit):
 
                 # cZ connects two variables with an edge
                 g.add_edge(
-                    var1, var2
+                    var1, var2,
+                    hash_tag=hash(
+                        (op.name, (var1, var2),
+                         random.random()))
                 )
 
                 # append cZ gate to the bucket of lower variable index
@@ -109,7 +115,7 @@ def circ2buckets(circuit):
                     [op.name, [var1, ]]
                 )
 
-    # add last layer of measurement vectors
+    # add first layer
     for qubit_idx, var in zip(range(1, qubit_count+1),
                               layer_variables):
         buckets[var-1].append(
@@ -302,3 +308,29 @@ def bucket_elimination(buckets, process_bucket_fn):
                 else:
                     result = tensor
     return result
+
+
+def test_bucket_graph_conversion(filename):
+    """
+    Test the conversion between Buckets and the contraction multigraph
+    """
+    # load circuit
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    buckets, _ = circ2buckets(circuit)
+    graph = buckets2graph(buckets)
+    buckets_new = graph2buckets(graph)
+    graph_new = buckets2graph(buckets_new)
+
+    buckets_equal = True
+    for b1, b2 in zip(buckets, buckets_new):
+        if sorted(b1) != sorted(b2):
+            buckets_equal = False
+            break
+
+    print('Buckets equal? : {}'.format(buckets_equal))
+    print('Graphs equal? : {}'.format(nx.is_isomorphic(graph, graph_new)))
+
+
+if __name__ == '__main__':
+    test_bucket_graph_conversion('inst_2x2_7_0.txt')
