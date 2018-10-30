@@ -381,7 +381,34 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     ))
 
 
-if __name__ == "__main__":
+def what_is_terminal_tensor():
+    """
+    This functions shows what a terminal tensor (e.g. the one
+    we encounter when trying to calculate several amplitudes at a time)
+    should be. Here 4 qubits are considered. This tensor
+    is made of ones.
+    """
+    import itertools
+    def kron_list(operands):
+        res = operands[0].flatten()
+        shapes = [res.shape[0]]
+
+        for operand in operands[1:]:
+            shapes.append(operand.flatten().shape[0])
+            res = np.kron(res, operand.flatten())
+        return np.reshape(res, shapes)
+
+    u = np.array([0, 1])
+    d = np.array([1, 0])
+
+    a = np.zeros((2, 2, 2, 2))
+
+    for prod in itertools.product([u, d], repeat=4):
+        a += kron_list(prod)
+    print(a)
+
+
+if __name__ == "__main__":    
     eval_circuit('inst_2x2_7_0.txt')
     eval_circuit_np('inst_2x2_7_0.txt')
     eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
