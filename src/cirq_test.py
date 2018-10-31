@@ -409,71 +409,53 @@ def what_is_terminal_tensor():
 
 
 def test_graph_reading(filename):
-
+    """
+    This function tests direct reading of circuits to graphs.
+    It should be noted that graphs can not to be used in place
+    of buckets yet, since the information about transpositions
+    of tensors (denoted by edges) is not kept during node
+    relabelling
+    """
+    import matplotlib.pyplot as plt
+    import networkx as nx
     import pprint as pp
-    def draw_graph(graph, filename):
-        import matplotlib.pyplot as plt
-        import networkx as nx
 
-        plt.figure(figsize=(20, 20))
+    def draw_graph(graph, filename):
+
+        plt.figure(figsize=(10, 10))
         edge_labels = nx.get_edge_attributes(graph, 'tensor')
-        pos = nx.spectral_layout(graph)
+        pos = nx.spring_layout(graph)
         nx.draw(graph, pos,
                 node_color=(list(graph.nodes())),
-                node_size=400,
+                node_size=100,
                 cmap=plt.cm.Blues,
-                with_labels=False,
+                with_labels=True,
         )
-        nx.draw_networkx_edge_labels(graph, pos, labels=edge_labels)
         plt.savefig(filename)
 
-    g = gm.read_graph(filename)
+    graph = gm.read_graph(filename)
 
-    n_qubits, c = ops.read_circuit_file(filename)
-    bb, gg = opt.circ2buckets(c)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets_original, graph_original = opt.circ2buckets(circuit)
 
-    peo1, tw1 = gm.get_peo(g)
-    peo2, tw2 = gm.get_peo(gg)
+    from networkx.algorithms import isomorphism
+    GM = isomorphism.GraphMatcher(graph, graph_original)
 
-    g_new, _ = gm.relabel_graph_nodes(
-        g, dict(zip(peo1, range(1, len(peo1)+1))))
-    gg_new, _ = gm.relabel_graph_nodes(
-        gg, dict(zip(peo2, range(1, len(peo2)+1))))
-    b = opt.graph2buckets(g_new)
+    print('Isomorphic? : {}'.format(GM.is_isomorphic()))
+    graph = nx.relabel_nodes(graph, GM.mapping, copy=True)
 
-    bb = opt.transform_buckets(bb, peo2)
-    bb2 = opt.graph2buckets(gg_new)
+    draw_graph(graph, 'new_graph.png')
+    draw_graph(graph_original, 'orig_graph.png')
+
+    buckets = opt.graph2buckets(graph)
+    buckets_from_original = opt.graph2buckets(graph_original)
 
     print('Original buckets')
-    pp.pprint(bb)
+    pp.pprint(buckets_original)
     print('Buckets from graph')
-    pp.pprint(bb2)
+    pp.pprint(buckets_from_original)
     print('New buckets')
-    pp.pprint(b)
-
-    amplitudes1 = []
-    for target_state in range(2**n_qubits):
-        np_buckets = npfr.get_np_buckets(
-            b, n_qubits, target_state)
-        amplitude = opt.bucket_elimination(
-            np_buckets, npfr.process_bucket_np)
-        amplitudes1.append(amplitude)
-
-    amplitudes2 = []
-    for target_state in range(2**n_qubits):
-        np_buckets = npfr.get_np_buckets(
-            bb, n_qubits, target_state)
-        amplitude = opt.bucket_elimination(
-            np_buckets, npfr.process_bucket_np)
-        amplitudes2.append(amplitude)
-
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
-    print('Result graph:')
-    print(np.round(np.array(amplitudes1), 3))
-    print('Original buckets:')
-    print(np.round(np.array(amplitudes2), 3))
-    print('Reference:')
-    print(np.round(amplitudes_reference, 3))
+    pp.pprint(buckets)
 
 
 if __name__ == "__main__":    

@@ -175,6 +175,12 @@ def buckets2graph(buckets):
     variable tensors are coded as self loops and there may be
     multiple parallel edges.
 
+    !!!!!!!!!
+    Warning! Conversion of buckets to graphs destroys the information
+    about permutations of the input tensors. The restored buckets
+    may not evaluate to the same result as the original ones.
+    !!!!!!!!!
+
     Parameters
     ----------
     buckets : list of lists
@@ -212,6 +218,12 @@ def graph2buckets(graph):
     """
     Takes a Networkx MultiGraph and produces a corresponding
     bucket list. This is an inverse of the :py:meth:`buckets2graph`
+
+    !!!!!!!!!
+    Warning! Conversion of buckets to graphs destroys the information
+    about permutations of the input tensors. The restored buckets
+    may not evaluate to the same result as the original ones.
+    !!!!!!!!!
 
     Parameters
     ----------
