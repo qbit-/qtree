@@ -86,7 +86,7 @@ class H(qOperation):
     matrix = 1/sqrt(2) * np.array([[1j,  1j],
                                    [1j, -1j]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'H'
+    name = 'h'
     cirq_op = cirq.H
     diagonal = False
     n_qubit = 1
@@ -107,7 +107,7 @@ class cZ(qOperation):
                        [0.+0.j,  0.+0.j,  1,  0.+0.j],
                        [0.+0.j,  0.+0.j,  0.+0.j, -1]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'cZ'
+    name = 'cz'
     diagonal = True
     n_qubit = 2
 
@@ -125,7 +125,7 @@ class T(qOperation):
     matrix = np.array([[exp(-1.j*pi/8),  0],
                        [0,  exp(1.j*pi/8)]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'T'
+    name = 't'
     n_qubit = 1
 
     cirq_op = cirq.T
@@ -144,7 +144,7 @@ class X_1_2(qOperation):
     matrix = 1/sqrt(2) * np.array([[1, 1j],
                                    [1j, 1]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'X_1_2'
+    name = 'x_1_2'
     diagonal = False
     n_qubit = 1
 
@@ -162,7 +162,7 @@ class Y_1_2(qOperation):
     matrix = 1/sqrt(2) * np.array([[1, 1],
                                    [-1,  1]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'Y_1_2'
+    name = 'y_1_2'
     diagonal = False
     n_qubit = 1
 
@@ -177,7 +177,7 @@ class X(qOperation):
     matrix = np.array([[0.+0.j, 1.+0j],
                        [1.+0j, 0.+0j]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'X'
+    name = 'x'
     diagonal = False
     n_qubit = 1
 
@@ -192,7 +192,7 @@ class Y(qOperation):
     matrix = np.array([[0.-1j, 0.+0j],
                        [0.+0j, 0.+1j]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'Y'
+    name = 'y'
     diagonal = False
     n_qubit = 1
 
@@ -256,9 +256,9 @@ def read_circuit_file(filename, max_depth=None):
 # in this module. Only nonzero entries are listed, which means diagonal
 # for diagonal matrices or double diagonal for diagonal fourth order tensors
 operator_matrices_dict = {
-    'H': H(1).matrix,
-    'X_1_2': X_1_2(1).matrix,
-    'Y_1_2': Y_1_2(1).matrix,
-    'T': np.diag(T(1).matrix),
-    'cZ': np.diag(cZ(1, 1).matrix).reshape([2, 2])
+    'h': H(1).matrix,
+    'x_1_2': X_1_2(1).matrix,
+    'y_1_2': Y_1_2(1).matrix,
+    't': np.diag(T(1).matrix),
+    'cz': np.diag(cZ(1, 1).matrix).reshape([2, 2])
 }

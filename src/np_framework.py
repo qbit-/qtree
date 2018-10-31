@@ -39,7 +39,7 @@ def get_np_buckets(buckets, qubit_count, target_state):
     # Add input vectors
 
     input_layer_dict = {
-        'I{}'.format(qubit_idx): qubit_value @ matrices_dict['H']
+        'I{}'.format(qubit_idx): qubit_value @ matrices_dict['h']
         for qubit_idx, qubit_value
         in zip(
             range(1, qubit_count+1),
@@ -51,7 +51,7 @@ def get_np_buckets(buckets, qubit_count, target_state):
     # Add output vectors
 
     output_layer_dict = {
-        'O{}'.format(qubit_idx): matrices_dict['H'] @ qubit_value
+        'O{}'.format(qubit_idx): matrices_dict['h'] @ qubit_value
         for qubit_idx, qubit_value
         in zip(
             range(1, qubit_count+1),

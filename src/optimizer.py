@@ -44,8 +44,18 @@ def circ2buckets(circuit):
 
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
-    for i in range(1, qubit_count+1):
-        g.add_node(i, name=utils.num_to_alnum(i))
+    for ii in range(1, qubit_count+1):
+        g.add_node(ii, name=utils.num_to_alnum(ii))
+
+    # Add selfloops to the border nodes
+    for var in range(1, qubit_count+1):
+        g.add_edge(
+            var, var,
+            tensor=f'O{var}',
+            hash_tag=hash(
+                (f'O{var}', (var, var),
+                 random.random()))
+        )
 
     # Build buckets for bucket elimination algorithm along the way.
     # we start from 1 here to follow the variable indices
@@ -68,6 +78,7 @@ def circ2buckets(circuit):
 
                 g.add_node(var2, name=utils.num_to_alnum(var2))
                 g.add_edge(var1, var2,
+                           tensor=op.name,
                            hash_tag=hash((
                                op.name, (var1, var2),
                                random.random()))
@@ -96,6 +107,7 @@ def circ2buckets(circuit):
                 # cZ connects two variables with an edge
                 g.add_edge(
                     var1, var2,
+                    tensor=op.name,
                     hash_tag=hash(
                         (op.name, (var1, var2),
                          random.random()))
@@ -114,12 +126,29 @@ def circ2buckets(circuit):
                 buckets[var1-1].append(
                     [op.name, [var1, ]]
                 )
+                # Add a selfloop for a 1-variable tensor
+                g.add_edge(
+                    var1, var1,
+                    tensor=op.name,
+                    hash_tag=hash(
+                        (op.name, (var1, var1),
+                         random.random()))
+                )
 
     # add first layer
     for qubit_idx, var in zip(range(1, qubit_count+1),
                               layer_variables):
         buckets[var-1].append(
             [f'I{qubit_idx}', [var, ]]
+        )
+    # add selfloops to the border edges
+    for qubit_idx, var in zip(range(1, qubit_count+1),
+                              layer_variables):
+        g.add_edge(var, var,
+                   tensor=f'I{qubit_idx}',
+                   hash_tag=hash(
+                       (f'I{qubit_idx}',
+                        (var, var), random.random()))
         )
 
     v = g.number_of_nodes()
