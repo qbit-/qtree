@@ -44,12 +44,10 @@ def read_graph_from_circfile(filename):
     graph : networkx.MultiGraph
             Graph representing the contraction
     """
-    # load circuit
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
     # get contraction graph (node order is arbitrary)
-    buckets, _ = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
+
     return graph
 
 

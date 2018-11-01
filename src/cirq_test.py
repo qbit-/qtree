@@ -50,10 +50,8 @@ def get_optimal_graphical_model(
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    # filename = 'inst_2x2_1_1.txt'
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    buckets, graph = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
 
     cnffile = 'quickbb.cnf'
     gen_cnf(cnffile, graph)
@@ -66,11 +64,9 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
     using the bucket elimination algorithm (with tensorflow tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
-    # filename = 'inst_4x4_11_2.txt'
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
     # Convert circuit to buckets
-    buckets, graph = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
 
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
@@ -109,11 +105,9 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     the resulting computation graph (as GraphDef) and other
     supporting information is returned
     """
-    # filename = 'inst_2x2_7_0.txt'
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
     # Prepare graphical model
-    buckets, graph = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
 
     # Run quickBB and get contraction order
     idx_parallel, reduced_graph = gm.split_graph_by_metric(
@@ -224,11 +218,9 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     using the bucket elimination algorithm (with Numpy tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
-    # filename = 'inst_4x4_11_2.txt'
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    # Convert circuit to buckets
-    buckets, graph = opt.circ2buckets(circuit)
+    # Prepare graphical model
+    n_qubits, buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
 
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
@@ -262,11 +254,9 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     Unsliced Numpy buckets in the optimal order of elimination
     are returned
     """
-    # filename = 'inst_2x2_7_0.txt'
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
     # Prepare graphical model
-    buckets, graph = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
 
     # Run quickBB and get contraction order
     idx_parallel, reduced_graph = gm.split_graph_by_metric(
@@ -349,11 +339,8 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     Loads circuit from file, evaluates contraction cost
     with and without optimization
     """
-    # load circuit
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    # get contraction graph (node order is arbitrary)
-    buckets, _ = opt.circ2buckets(circuit)
+    # Prepare graphical model
+    n_qubits, buckets = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
 
     # estimate cost
@@ -473,9 +460,7 @@ def test_bucket_reading(filename):
     """
     This function tests direct reading of circuits to buckets.
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    buckets = opt.read_buckets(filename)
+    n_qubits, buckets = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     peo, treewidth = gm.get_peo(graph)

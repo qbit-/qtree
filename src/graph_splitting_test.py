@@ -33,10 +33,9 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
           treewidth - treewidth returned by quickBB
           av_flop_per_mem - average memory access per flop
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    buckets, _ = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
+
     n_var_total = graph_raw.number_of_nodes()
     if stop_at is None or stop_at > n_var_total:
         stop_at = n_var_total
@@ -89,10 +88,9 @@ def get_treewidth_vs_parallel_size(filename, metric_function,
     -------
           treewidth - treewidth returned by quickBB
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    buckets, _ = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
+
     n_var_total = graph_raw.number_of_nodes()
     if stop_at is None or stop_at > n_var_total:
         stop_at = n_var_total
@@ -263,9 +261,9 @@ def test_split_with_mem_constraint(filename, constraints, step_by=1):
     from filename, for each constraint the treewidth and attained
     cost is printed
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, _ = opt.circ2buckets(circuit)
+    n_qubits, buckets = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
+
     n_var_total = graph_raw.number_of_nodes()
 
     results = []
@@ -340,8 +338,7 @@ def collect_costs(
                 f'inst_{grid_size}x{grid_size}_{depth}_{test_id}.txt'
             ))
 
-            n_qubits, circuit = ops.read_circuit_file(testfile)
-            buckets, _ = opt.circ2buckets(circuit)
+            n_qubits, buckets = opt.read_buckets(testfile)
             graph_raw = opt.buckets2graph(buckets)
 
             idx_parallel, reduced_graph = gm.split_graph_by_metric(

@@ -19,7 +19,7 @@ def get_tf_buckets(buckets, qubit_count):
     Parameters
     ----------
     buckets : list of list
-              buckets as returned by :py:meth:`circ2buckets`
+              buckets as returned by :py:meth:`read_buckets`
               and :py:meth:`transform_buckets`.
     qubit_count : int
               total number of qubits
@@ -36,14 +36,14 @@ def get_tf_buckets(buckets, qubit_count):
     # pdb.set_trace()
 
     # Define ingredients
-    X_1_2 = tf.placeholder(tf.complex64, [2, 2], 'X_1_2')
-    Y_1_2 = tf.placeholder(tf.complex64, [2, 2], 'Y_1_2')
-    H = tf.placeholder(tf.complex64, [2, 2], 'H')
-    cZ = tf.placeholder(tf.complex64, [2, 2], 'cZ')
-    T = tf.placeholder(tf.complex64, [2], 'T')
+    X_1_2 = tf.placeholder(tf.complex64, [2, 2], 'x_1_2')
+    Y_1_2 = tf.placeholder(tf.complex64, [2, 2], 'y_1_2')
+    H = tf.placeholder(tf.complex64, [2, 2], 'h')
+    cZ = tf.placeholder(tf.complex64, [2, 2], 'cz')
+    T = tf.placeholder(tf.complex64, [2], 't')
 
-    placeholder_dict = {'X_1_2': X_1_2, 'Y_1_2': Y_1_2,
-                        'H': H, 'cZ': cZ, 'T': T}
+    placeholder_dict = {'x_1_2': X_1_2, 'y_1_2': Y_1_2,
+                        'h': H, 'cz': cZ, 't': T}
 
     # Add input vectors
     input_names = ['I{}'.format(ii)
@@ -121,7 +121,7 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
             utils.qubit_vector_generator(0, n_qubits)):
         input_dict.update({
             # numeration starts at 1!
-            'I{}'.format(ii+1): bc_state @ values_dict['H']
+            'I{}'.format(ii+1): bc_state @ values_dict['h']
         })
     input_feed_dict = {placeholder_dict[key]                       : val for key, val in input_dict.items()}
 
@@ -133,7 +133,7 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
             utils.qubit_vector_generator(target_state, n_qubits)):
         output_dict.update({
             # numeration starts at 1!
-            'O{}'.format(ii+1): values_dict['H'] @ bc_state
+            'O{}'.format(ii+1): values_dict['h'] @ bc_state
         })
     output_feed_dict = {placeholder_dict[key]                        : val for key, val in output_dict.items()}
 

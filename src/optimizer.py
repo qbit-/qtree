@@ -8,8 +8,8 @@ import itertools
 import random
 import re
 import networkx as nx
-import src.operators as ops
 import src.utils as utils
+import src.operators as ops
 
 from src.logger_setup import log
 
@@ -19,6 +19,20 @@ random.seed(0)
 def read_buckets(filename, max_depth=None):
     """
     Reads circuit from filename and builds buckets for its contraction
+
+    Parameters
+    ----------
+    filename : str
+             circuit file in the format of Sergio Boixo
+    max_depth : int
+             maximal depth of gates to read
+
+    Returns
+    -------
+    qubit_count : int
+            number of qubits in the circuit
+    buckets : list of lists
+            list of lists (buckets)
     """
 
     # perform the cirquit file processing
@@ -128,10 +142,10 @@ def read_buckets(filename, max_depth=None):
 
         log.info(
             f"Generated buckets with {n_variables} variables" +
-            f"and {n_tensors} tensors")
+            f" and {n_tensors} tensors")
         log.info(f"last index contains from {layer_variables}")
 
-    return buckets
+    return qubit_count, buckets
 
 
 def circ2buckets(circuit):
@@ -466,9 +480,7 @@ def test_bucket_graph_conversion(filename):
     Test the conversion between Buckets and the contraction multigraph
     """
     # load circuit
-    n_qubits, circuit = ops.read_circuit_file(filename)
-
-    buckets, _ = circ2buckets(circuit)
+    n_qubits, buckets = read_buckets(filename)
     graph = buckets2graph(buckets)
     buckets_new = graph2buckets(graph)
     graph_new = buckets2graph(buckets_new)

@@ -211,6 +211,8 @@ def read_circuit_file(filename, max_depth=None):
 
     Returns
     -------
+    qubit_count : int
+            number of qubits in the circuit
     circuit : list of lists
             quantum circuit as a list of layers of gates
     """
