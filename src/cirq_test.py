@@ -469,7 +469,37 @@ def test_graph_reading(filename):
     pp.pprint(buckets)
 
 
-if __name__ == "__main__":    
+def test_bucket_reading(filename):
+    """
+    This function tests direct reading of circuits to buckets.
+    """
+    n_qubits, circuit = ops.read_circuit_file(filename)
+
+    buckets = opt.read_buckets(filename)
+    graph = opt.buckets2graph(buckets)
+
+    peo, treewidth = gm.get_peo(graph)
+    perm_buckets = opt.transform_buckets(buckets, peo)
+
+    amplitudes = []
+    for target_state in range(2**n_qubits):
+        np_buckets = npfr.get_np_buckets(
+            perm_buckets, n_qubits, target_state)
+        amplitude = opt.bucket_elimination(
+            np_buckets, npfr.process_bucket_np)
+        amplitudes.append(amplitude)
+
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    print('Result:')
+    print(np.round(np.array(amplitudes), 3))
+    print('Reference:')
+    print(np.round(amplitudes_reference, 3))
+    print('Maximal difference:')
+    print(np.max(np.array(amplitudes)
+                 - np.array(amplitudes_reference)))
+
+
+if __name__ == "__main__":
     eval_circuit('inst_2x2_7_0.txt')
     eval_circuit_np('inst_2x2_7_0.txt')
     eval_circuit_parallel_mpi('inst_2x2_7_0.txt')

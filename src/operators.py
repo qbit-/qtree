@@ -159,8 +159,8 @@ class Y_1_2(qOperation):
     r"""
     :math:`Y^{1/2}` gate
     """
-    matrix = 1/sqrt(2) * np.array([[1, 1],
-                                   [-1,  1]],
+    matrix = 1/sqrt(2) * np.array([[1, -1],
+                                   [1,  1]],
                                   dtype=defs.NP_ARRAY_TYPE)
     name = 'y_1_2'
     diagonal = False
@@ -224,7 +224,7 @@ def read_circuit_file(filename, max_depth=None):
         n_ignored_layers = 0
         current_layer = 0
 
-        for line in fp:
+        for idx, line in enumerate(fp):
             m = re.search(r'(?P<layer>[0-9]+) (?=[a-z])', line)
             if m is None:
                 raise Exception("file format error at line {}".format(idx))

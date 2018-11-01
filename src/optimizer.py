@@ -6,6 +6,7 @@ go here.
 
 import itertools
 import random
+import re
 import networkx as nx
 import src.operators as ops
 import src.utils as utils
@@ -13,6 +14,124 @@ import src.utils as utils
 from src.logger_setup import log
 
 random.seed(0)
+
+
+def read_buckets(filename, max_depth=None):
+    """
+    Reads circuit from filename and builds buckets for its contraction
+    """
+
+    # perform the cirquit file processing
+    log.info(f'reading file {filename}')
+
+    with open(filename, 'r') as fp:
+        # read the number of qubits
+        qubit_count = int(fp.readline())
+        log.info("There are {:d} qubits in circuit".format(qubit_count))
+
+        n_ignored_layers = 0
+        current_layer = 0
+
+        # Build buckets for bucket elimination algorithm.
+        # we start with adding border 1-variable tensors
+        buckets = []
+        for ii in range(1, qubit_count+1):
+            buckets.append(
+                [[f'I{ii}', [ii]]]
+            )
+
+        layer_variables = list(range(1, qubit_count+1))
+        current_var = qubit_count
+
+        for idx, line in enumerate(fp):
+
+            # Read circuit layer by layer. Decipher contents of the line
+            m = re.search(r'(?P<layer>[0-9]+) (?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', line)
+            if m is None:
+                raise Exception("file format error at line {}".format(idx))
+            layer_num = int(m.group('layer'))
+
+            # Skip layers if max_depth is set
+            if max_depth is not None and layer_num > max_depth:
+                n_ignored_layers = layer_num - max_depth
+                continue
+            if layer_num > current_layer:
+                current_layer = layer_num
+
+            op_identif = m.group('operation')
+            if m.group('qubit2') is not None:
+                q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
+            else:
+                q_idx = (int(m.group('qubit1')),)
+
+            # Now apply what we got to build the graph
+            if op_identif == 'cz':
+                # cZ connects two variables with an edge
+                var1 = layer_variables[q_idx[0]]
+                var2 = layer_variables[q_idx[1]]
+
+                # append cZ gate to the bucket of lower variable index
+                min_var = min(var1, var2)
+                buckets[min_var-1].append(
+                    [op_identif, [var1, var2]]
+                )
+
+            # Skip Hadamard tensors - for now
+            elif op_identif == 'h':
+                pass
+
+            # Add selfloops for single variable gates
+            elif op_identif == 't':
+                var1 = layer_variables[q_idx[0]]
+                # Do not add any variables (buckets), but add tensor
+                # to the bucket
+                buckets[var1-1].append(
+                    [op_identif, [var1, ]]
+                )
+
+            # Process non-diagonal gates X and Y
+            else:
+                var1 = layer_variables[q_idx[0]]
+                var2 = current_var+1
+
+                # Append gate 2-variable tensor to the first variable's
+                # bucket. This yields buckets containing variables
+                # in increasing order (starting at least with bucket's
+                # variable)
+                buckets[var1-1].append(
+                    [op_identif, [var1, var2]]
+                )
+
+                # Create a new variable
+                buckets.append(
+                    []
+                )
+
+                current_var += 1
+                layer_variables[q_idx[0]] = current_var
+
+        # add border tensors for the last layer
+        for qubit_idx, var in zip(range(1, qubit_count+1),
+                                  layer_variables):
+            buckets[var-1].append(
+                [f'O{qubit_idx}', [var, ]]
+            )
+
+        # We are done, print stats
+        if n_ignored_layers > 0:
+            log.info("Ignored {} layers".format(n_ignored_layers))
+
+        n_variables = len(buckets)
+        n_tensors = 0
+        for bucket in buckets:
+            n_tensors += len(bucket)
+
+        log.info(
+            f"Generated buckets with {n_variables} variables" +
+            f"and {n_tensors} tensors")
+        log.info(f"last index contains from {layer_variables}")
+
+    return buckets
 
 
 def circ2buckets(circuit):
@@ -51,9 +170,9 @@ def circ2buckets(circuit):
     for var in range(1, qubit_count+1):
         g.add_edge(
             var, var,
-            tensor=f'O{var}',
+            tensor=f'I{var}',
             hash_tag=hash(
-                (f'O{var}', (var, var),
+                (f'I{var}', (var, var),
                  random.random()))
         )
 
@@ -62,13 +181,13 @@ def circ2buckets(circuit):
     buckets = []
     for ii in range(1, qubit_count+1):
         buckets.append(
-            [[f'O{ii}', [ii]]]
+            [[f'I{ii}', [ii]]]
         )
 
     current_var = qubit_count
     layer_variables = list(range(1, qubit_count+1))
 
-    for layer in reversed(circuit[1:-1]):
+    for layer in circuit[1:-1]:
         for op in layer:
             if not op.diagonal:
                 # Non-diagonal gate adds a new variable and
@@ -139,15 +258,15 @@ def circ2buckets(circuit):
     for qubit_idx, var in zip(range(1, qubit_count+1),
                               layer_variables):
         buckets[var-1].append(
-            [f'I{qubit_idx}', [var, ]]
+            [f'O{qubit_idx}', [var, ]]
         )
     # add selfloops to the border edges
     for qubit_idx, var in zip(range(1, qubit_count+1),
                               layer_variables):
         g.add_edge(var, var,
-                   tensor=f'I{qubit_idx}',
+                   tensor=f'O{qubit_idx}',
                    hash_tag=hash(
-                       (f'I{qubit_idx}',
+                       (f'O{qubit_idx}',
                         (var, var), random.random()))
         )
 
@@ -157,15 +276,6 @@ def circ2buckets(circuit):
     log.info(f"Generated graph with {v} nodes and {e} edges")
     log.info(f"last index contains from {layer_variables}")
 
-    # with io.StringIO() as outstrings:
-    #     aj = nx.adjacency_matrix(g)
-    #     np.savetxt(outstrings, aj.toarray(), delimiter=" ",fmt='%i')
-    #     s = outstrings.getvalue()
-    #     log.info("Adjacency matrix:\n" + s.replace('0','-'))
-
-    # plt.figure(figsize=(10,10))
-    # nx.draw(g, with_labels=True)
-    # plt.savefig('graph.eps')
     return buckets, g
 
 
