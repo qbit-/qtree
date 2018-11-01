@@ -97,6 +97,8 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
+    print('Max difference:')
+    print(np.max(np.array(amplitudes) - np.array(amplitudes_reference)))
 
 
 def prepare_parallel_evaluation(filename, n_var_parallel):
@@ -211,6 +213,9 @@ def eval_circuit_parallel_mpi(filename):
         print(np.round(np.array(amplitudes), 3))
         print('Reference:')
         print(np.round(amplitudes_reference, 3))
+        print('Max difference:')
+        print(np.max(np.array(amplitudes)
+                     - np.array(amplitudes_reference)))
 
 
 def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
@@ -246,6 +251,8 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
+    print('Max difference:')
+    print(np.max(np.array(amplitudes) - np.array(amplitudes_reference)))
 
 
 def prepare_parallel_evaluation_np(filename, n_var_parallel):
@@ -332,6 +339,9 @@ def eval_circuit_np_parallel_mpi(filename):
         print(np.round(np.array(amplitudes), 3))
         print('Reference:')
         print(np.round(amplitudes_reference, 3))
+        print('Max difference:')
+        print(np.max(np.array(amplitudes)
+                     - np.array(amplitudes_reference)))
 
 
 def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
@@ -389,6 +399,7 @@ def what_is_terminal_tensor():
     is made of ones.
     """
     import itertools
+
     def kron_list(operands):
         res = operands[0].flatten()
         shapes = [res.shape[0]]

@@ -114,8 +114,8 @@ def circ2buckets(circuit):
                 )
 
                 # append cZ gate to the bucket of lower variable index
-                var1, var2 = sorted([var1, var2])
-                buckets[var1-1].append(
+                min_var = min(var1, var2)
+                buckets[min_var-1].append(
                     [op.name, [var1, var2]]
                 )
 
