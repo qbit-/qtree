@@ -431,7 +431,7 @@ def test_graph_reading(filename):
         )
         plt.savefig(filename)
 
-    graph = gm.read_graph(filename)
+    n_qubits, graph = gm.read_graph(filename)
 
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets_original, graph_original = opt.circ2buckets(circuit)

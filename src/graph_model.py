@@ -22,6 +22,19 @@ random.seed(0)
 def read_graph(filename, max_depth=None):
     """
     Reads circuit from filename and builds its contraction graph
+
+    Parameters
+    ----------
+    filename : str
+             circuit file in the format of Sergio Boixo
+    max_depth : int
+             maximal depth of gates to read
+
+    Returns
+    -------
+    qubit_count : int
+            number of qubits in the circuit
+    graph : networkx.MultiGraph
     """
     graph = nx.MultiGraph()
 
@@ -120,7 +133,7 @@ def read_graph(filename, max_depth=None):
         log.info(f"Generated graph with {v} nodes and {e} edges")
         log.info(f"last index contains from {layer_variables}")
 
-    return graph
+    return qubit_count, graph
 
 
 def relabel_graph_nodes(graph, label_dict=None):

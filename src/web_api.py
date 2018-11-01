@@ -45,8 +45,7 @@ def read_graph_from_circfile(filename):
             Graph representing the contraction
     """
     # get contraction graph (node order is arbitrary)
-    n_qubits, buckets = opt.read_buckets(filename)
-    graph = opt.buckets2graph(buckets)
+    n_qubits, graph = opt.read_graph(filename)
 
     return graph
 
