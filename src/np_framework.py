@@ -18,7 +18,7 @@ def get_np_buckets(buckets, qubit_count, target_state):
     ----------
     buckets : list of list
               buckets as returned by :py:meth:`read_buckets`
-              and :py:meth:`transform_buckets`.
+              and :py:meth:`reorder_buckets`.
     qubit_count : int
               total number of qubits
     target_state : int

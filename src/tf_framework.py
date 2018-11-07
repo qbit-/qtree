@@ -20,7 +20,7 @@ def get_tf_buckets(buckets, qubit_count):
     ----------
     buckets : list of list
               buckets as returned by :py:meth:`read_buckets`
-              and :py:meth:`transform_buckets`.
+              and :py:meth:`reorder_buckets`.
     qubit_count : int
               total number of qubits
 

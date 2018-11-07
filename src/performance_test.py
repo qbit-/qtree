@@ -69,7 +69,7 @@ def time_single_amplitude_tf(
 
     #@profile_decorator(filename='sequential_tf_cprof')
     def computational_core(buckets, peo):
-        perm_buckets = opt.transform_buckets(buckets, peo)
+        perm_buckets = opt.reorder_buckets(buckets, peo)
 
         tf_buckets, placeholder_dict = tffr.get_tf_buckets(
             perm_buckets, n_qubits)
@@ -120,7 +120,7 @@ def time_single_amplitude_np(
 
     #@profile_decorator(filename='sequential_np_cprof')
     def computational_core(buckets, peo):
-        perm_buckets = opt.transform_buckets(buckets, peo)
+        perm_buckets = opt.reorder_buckets(buckets, peo)
 
         np_buckets = npfr.get_np_buckets(
             perm_buckets, n_qubits, target_state)
@@ -185,7 +185,7 @@ def time_single_amplitude_tf_mpi(
             np.sum(mem_costs), np.sum(flop_costs)))
 
         # Permute buckets to the order of optimal contraction
-        perm_buckets = opt.transform_buckets(
+        perm_buckets = opt.reorder_buckets(
             buckets, peo + idx_parallel)
 
         # Transform tensor labels in buckets to tensorflow placeholders
@@ -330,7 +330,7 @@ def time_single_amplitude_np_mpi(
             np.sum(mem_costs), np.sum(flop_costs)))
 
         # Permute buckets to the order of optimal contraction
-        perm_buckets = opt.transform_buckets(
+        perm_buckets = opt.reorder_buckets(
             buckets, peo + idx_parallel)
 
         env = dict(

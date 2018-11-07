@@ -7,6 +7,7 @@ import re
 import copy
 import networkx as nx
 import itertools
+import matplotlib.pyplot as plt
 import random
 
 from collections import Counter
@@ -681,3 +682,24 @@ def split_graph_with_mem_constraint(
         raise ValueError('Maximal memory constraint is not met')
 
     return idx_parallel, reduced_graph
+
+
+def draw_graph(graph, filename):
+    """
+    Draws graph with spectral layout
+    Parameters
+    ----------
+    graph : networkx.Graph
+            graph to draw
+    filename : str
+            filename for image output
+    """
+    plt.figure(figsize=(10, 10))
+    pos = nx.spectral_layout(graph)
+    nx.draw(graph, pos,
+            node_color=(list(graph.nodes())),
+            node_size=100,
+            cmap=plt.cm.Blues,
+            with_labels=True,
+    )
+    plt.savefig(filename)
