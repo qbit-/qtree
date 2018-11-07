@@ -403,7 +403,7 @@ def graph2buckets(graph):
     return buckets
 
 
-def transform_buckets(old_buckets, permutation):
+def reorder_buckets(old_buckets, permutation):
     """
     Transforms bucket list according to the new order given by
     permutation. The variables are renamed and buckets are reordered

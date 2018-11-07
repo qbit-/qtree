@@ -71,7 +71,7 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
         peo, treewidth = gm.get_peo(graph)
-        perm_buckets = opt.transform_buckets(buckets, peo)
+        perm_buckets = opt.reorder_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
         perm_buckets = buckets
@@ -115,7 +115,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     peo, treewidth = gm.get_peo(reduced_graph)
 
     # Permute buckets to the order of optimal contraction
-    perm_buckets = opt.transform_buckets(
+    perm_buckets = opt.reorder_buckets(
         buckets, peo + idx_parallel)
 
     # Transform tensor labels in buckets to tensorflow placeholders
@@ -225,7 +225,7 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
         peo, treewidth = gm.get_peo(graph)
-        perm_buckets = opt.transform_buckets(buckets, peo)
+        perm_buckets = opt.reorder_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
         perm_buckets = buckets
@@ -264,7 +264,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     peo, treewidth = gm.get_peo(reduced_graph)
 
     # Permute buckets to the order of optimal contraction
-    perm_buckets = opt.transform_buckets(
+    perm_buckets = opt.reorder_buckets(
         buckets, peo + idx_parallel)
 
     environment = dict(
@@ -464,7 +464,7 @@ def test_bucket_reading(filename):
     graph = opt.buckets2graph(buckets)
 
     peo, treewidth = gm.get_peo(graph)
-    perm_buckets = opt.transform_buckets(buckets, peo)
+    perm_buckets = opt.reorder_buckets(buckets, peo)
 
     amplitudes = []
     for target_state in range(2**n_qubits):
