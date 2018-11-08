@@ -16,7 +16,7 @@ from src.logger_setup import log
 random.seed(0)
 
 
-def read_buckets(filename, max_depth=None):
+def read_buckets(filename, free_qubits=[], max_depth=None):
     """
     Reads circuit from filename and builds buckets for its contraction
 
@@ -24,6 +24,9 @@ def read_buckets(filename, max_depth=None):
     ----------
     filename : str
              circuit file in the format of Sergio Boixo
+    free_qubits : list, optional
+             qubits that have to be not contracted. Numeration
+             is zero based
     max_depth : int
              maximal depth of gates to read
 
@@ -34,7 +37,6 @@ def read_buckets(filename, max_depth=None):
     buckets : list of lists
             list of lists (buckets)
     """
-
     # perform the cirquit file processing
     log.info(f'reading file {filename}')
 
@@ -125,11 +127,33 @@ def read_buckets(filename, max_depth=None):
                 layer_variables[q_idx[0]] = current_var
 
         # add border tensors for the last layer
-        for qubit_idx, var in zip(range(1, qubit_count+1),
+        for qubit_idx, var in zip(range(qubit_count),
                                   layer_variables):
-            buckets[var-1].append(
-                [f'O{qubit_idx}', [var, ]]
+            if qubit_idx not in free_qubits:
+                buckets[var-1].append(
+                    ['O{}'.format(qubit_idx+1), [var, ]]
+                )
+
+        # Now add Hadamards for free qubits
+        for qubit_idx in free_qubits:
+            var1 = layer_variables[qubit_idx]
+            var2 = current_var+1
+
+            # Append H gate
+            buckets[var1-1].append(
+                ['h', [var1, var2]]
             )
+
+            # Create a new variable
+            buckets.append(
+                []
+            )
+            current_var += 1
+            layer_variables[qubit_idx] = current_var
+
+        # Collect free variables
+        free_variables = [layer_variables[qubit_idx]
+                          for qubit_idx in free_qubits]
 
         # We are done, print stats
         if n_ignored_layers > 0:
@@ -145,7 +169,7 @@ def read_buckets(filename, max_depth=None):
             f" and {n_tensors} tensors")
         log.info(f"last index contains from {layer_variables}")
 
-    return qubit_count, buckets
+    return qubit_count, buckets, free_variables
 
 
 def circ2buckets(circuit):
@@ -177,7 +201,7 @@ def circ2buckets(circuit):
 
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
-    for ii in range(1, qubit_count+1):
+    for var in range(1, qubit_count+1):
         g.add_node(ii, name=utils.num_to_alnum(ii))
 
     # Add selfloops to the border nodes
@@ -293,7 +317,54 @@ def circ2buckets(circuit):
     return buckets, g
 
 
-def buckets2graph(buckets):
+def bucket_elimination(buckets, process_bucket_fn, n_var_nosum=0):
+    """
+    Algorithm to evaluate a contraction of a large number of tensors.
+    The variables to contract over are assigned ``buckets`` which
+    hold tensors having respective variables. The algorithm
+    proceeds through contracting one variable at a time, thus we eliminate
+    buckets one by one.
+
+    Parameters
+    ----------
+    buckets : list of lists
+    process_bucket_fn : function
+              function that will process this kind of buckets
+    n_var_nosum : int, optional
+              number of variables that have to be left in the
+              result. Expected at the end of bucket list
+    Returns
+    -------
+    result : numpy.array
+    """
+    # import pdb
+    # pdb.set_trace()
+    n_var_contract = len(buckets) - n_var_nosum
+
+    result = None
+    for n, bucket in enumerate(buckets[:n_var_contract]):
+        if len(bucket) > 0:
+            tensor, variables = process_bucket_fn(bucket)
+            if len(variables) > 0:
+                first_index = variables[0]
+                buckets[first_index-1].append((tensor, variables))
+            else:   # tensor is scalar
+                if result is not None:
+                    result *= tensor
+                else:
+                    result = tensor
+
+    rest = list(itertools.chain.from_iterable(buckets[n_var_contract:]))
+    if len(rest) > 0:
+        tensor, variables = process_bucket_fn(rest, nosum=True)
+        if result is not None:
+            result *= tensor
+        else:
+            result = tensor
+    return result
+
+
+def buckets2graph(buckets, ignore_variables=[]):
     """
     Takes buckets and produces a corresponding undirected graph. Single
     variable tensors are coded as self loops and there may be
@@ -308,6 +379,9 @@ def buckets2graph(buckets):
     Parameters
     ----------
     buckets : list of lists
+    ignore_variables : list, optional
+       Variables to be deleted from the resulting graph.
+       Numbering is 1-based.
 
     Returns
     -------
@@ -334,6 +408,10 @@ def buckets2graph(buckets):
                     (tensor, tuple(variables), random.random())
                 )
             )
+
+    # Delete any requested variables from the final graph
+    if len(ignore_variables) > 0:
+        graph.remove_nodes_from(ignore_variables)
 
     return graph
 
@@ -442,45 +520,12 @@ def reorder_buckets(old_buckets, permutation):
     return new_buckets
 
 
-def bucket_elimination(buckets, process_bucket_fn):
-    """
-    Algorithm to evaluate a contraction of a large number of tensors.
-    The variables to contract over are assigned ``buckets`` which
-    hold tensors having respective variables. The algorithm
-    proceeds through contracting one variable at a time, thus we aliminate    buckets one by one.
-
-    Parameters
-    ----------
-    buckets : list of lists
-    process_bucket_fn : function that will process this kind of buckets
-
-    Returns
-    -------
-    result : tensor (0 dimensional)
-    """
-    # import pdb
-    # pdb.set_trace()
-    result = None
-    for n, bucket in enumerate(buckets):
-        if len(bucket) > 0:
-            tensor, variables = process_bucket_fn(bucket)
-            if len(variables) > 0:
-                first_index = variables[0]
-                buckets[first_index-1].append((tensor, variables))
-            else:
-                if result is not None:
-                    result *= tensor
-                else:
-                    result = tensor
-    return result
-
-
 def test_bucket_graph_conversion(filename):
     """
     Test the conversion between Buckets and the contraction multigraph
     """
     # load circuit
-    n_qubits, buckets = read_buckets(filename)
+    n_qubits, buckets, free_vars = read_buckets(filename)
     graph = buckets2graph(buckets)
     buckets_new = graph2buckets(graph)
     graph_new = buckets2graph(buckets_new)

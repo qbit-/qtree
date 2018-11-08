@@ -452,16 +452,18 @@ def get_mem_requirement(graph):
     return memory
 
 
-def cost_estimator(old_graph):
+def cost_estimator(old_graph, free_vars=[]):
     """
     Estimates the cost of the bucket elimination algorithm.
     The order of elimination is defined by node order (if ints are
-    used as nodes then it will be the number of integers).
+    used as nodes then it will be the values of integers).
 
     Parameters
     ----------
     old_graph : networkx.Graph or networkx.MultiGraph
                Graph containing the information about the contraction
+    free_vars : list, optional
+               Nodes that will be skipped
     Returns
     -------
     memory : list
@@ -474,10 +476,31 @@ def cost_estimator(old_graph):
 
     results = []
     for n, node in enumerate(nodes):
-        memory, flops = get_cost_by_node(graph, node)
-        results.append((memory, flops))
+        if node not in free_vars:
+            memory, flops = get_cost_by_node(graph, node)
+            results.append((memory, flops))
+            eliminate_node(graph, node)
 
-        eliminate_node(graph, node)
+    # Estimate cost of the last tensor product if subsets of
+    # amplitudes were evaluated
+    if len(free_vars) > 0:
+        size_of_the_result = len(free_vars)
+        tensor_orders = [
+            subgraph.number_of_nodes()
+            for subgraph
+            in nx.components.connected_component_subgraphs(graph)]
+        # memory estimation: the size of the result + all sizes of terms
+        memory = 2**size_of_the_result
+        for order in tensor_orders:
+            memory += 2**order
+        # there are number of tensors - 1 multiplications
+        n_multiplications = len(tensor_orders) - 1
+
+        # There are n_multiplications repeated size of the result
+        # times
+        flops = 2**size_of_the_result*n_multiplications
+
+        results.append((memory, flops))
 
     return tuple(zip(*results))
 

@@ -50,7 +50,7 @@ def get_optimal_graphical_model(
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     cnffile = 'quickbb.cnf'
@@ -65,7 +65,7 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Convert circuit to buckets
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Run quickbb
@@ -106,7 +106,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     supporting information is returned
     """
     # Prepare graphical model
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Run quickBB and get contraction order
@@ -219,7 +219,7 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Prepare graphical model
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Run quickbb
@@ -255,7 +255,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     are returned
     """
     # Prepare graphical model
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Run quickBB and get contraction order
@@ -340,7 +340,7 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     with and without optimization
     """
     # Prepare graphical model
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
 
     # estimate cost
@@ -418,19 +418,6 @@ def test_graph_reading(filename):
     import networkx as nx
     import pprint as pp
 
-    def draw_graph(graph, filename):
-
-        plt.figure(figsize=(10, 10))
-        edge_labels = nx.get_edge_attributes(graph, 'tensor')
-        pos = nx.spring_layout(graph)
-        nx.draw(graph, pos,
-                node_color=(list(graph.nodes())),
-                node_size=100,
-                cmap=plt.cm.Blues,
-                with_labels=True,
-        )
-        plt.savefig(filename)
-
     n_qubits, graph = gm.read_graph(filename)
 
     n_qubits, circuit = ops.read_circuit_file(filename)
@@ -442,8 +429,8 @@ def test_graph_reading(filename):
     print('Isomorphic? : {}'.format(GM.is_isomorphic()))
     graph = nx.relabel_nodes(graph, GM.mapping, copy=True)
 
-    draw_graph(graph, 'new_graph.png')
-    draw_graph(graph_original, 'orig_graph.png')
+    gm.draw_graph(graph, 'new_graph.png')
+    gm.draw_graph(graph_original, 'orig_graph.png')
 
     buckets = opt.graph2buckets(graph)
     buckets_from_original = opt.graph2buckets(graph_original)
@@ -460,7 +447,7 @@ def test_bucket_reading(filename):
     """
     This function tests direct reading of circuits to buckets.
     """
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     peo, treewidth = gm.get_peo(graph)
@@ -484,9 +471,60 @@ def test_bucket_reading(filename):
                  - np.array(amplitudes_reference)))
 
 
+def eval_circuit_multiamp_np(filename, quickbb_command=QUICKBB_COMMAND):
+    """
+    Loads circuit from file and evaluates
+    multiple amplitudes at once using np framework
+    """
+    # Get the number of qubits
+    n_qubits, _, _ = opt.read_buckets(filename)
+
+    # Read buckets with all qubits set to free variables
+    free_qubits = list(range(n_qubits))
+    n_qubits, buckets, free_vars = opt.read_buckets(filename,
+                                                    free_qubits)
+    if len(free_vars) > 0:
+        print('Evaluate subsets of amplitudes over qubits:')
+        print(free_qubits)
+        print('Free variables in the resulting expression:')
+        print(free_vars)
+
+    graph = opt.buckets2graph(buckets)
+    graph_partial = opt.buckets2graph(buckets, free_vars)
+
+    # Run quickbb
+    peo, treewidth = gm.get_peo(graph_partial)
+    peo = peo + free_vars
+
+    # Apply calculated PEO
+    perm_buckets = opt.reorder_buckets(buckets, peo)
+    perm_graph, _ = gm.relabel_graph_nodes(
+        graph, dict(zip(peo, range(1, len(peo)+1))))
+
+    # Finally make numpy buckets and calculate
+    # Can use any state here as all amplitudes are calculated
+    np_buckets = npfr.get_np_buckets(
+        perm_buckets, n_qubits, 0)
+    amplitude = opt.bucket_elimination(
+        np_buckets, npfr.process_bucket_np,
+        n_var_nosum=len(free_vars))
+
+    # Take reverse of the amplitude
+    amplitudes = amplitude.flatten()[::-1]
+
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    print('Result:')
+    print(np.round(amplitudes, 3))
+    print('Reference:')
+    print(np.round(amplitudes_reference, 3))
+    print('Max difference:')
+    print(np.max(amplitudes - np.array(amplitudes_reference)))
+
+
 if __name__ == "__main__":
     eval_circuit('inst_2x2_7_0.txt')
     eval_circuit_np('inst_2x2_7_0.txt')
     eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
     eval_contraction_cost('inst_2x2_7_0.txt')
+    eval_circuit_multiamp_np('inst_2x2_7_0.txt')

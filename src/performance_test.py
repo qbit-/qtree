@@ -49,7 +49,7 @@ def time_single_amplitude_tf(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Calculate elimination order with QuickBB
@@ -100,7 +100,7 @@ def time_single_amplitude_np(
     amplitude of the state is calculated. The time excludes
     file loading and quickbb operation.
     """
-    n_qubits, buckets = opt.read_buckets(filename)
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph = opt.buckets2graph(buckets)
 
     # Calculate elimination order with QuickBB
@@ -153,7 +153,7 @@ def time_single_amplitude_tf_mpi(
                                 n_var_parallel_min,
                                 mem_constraint,
                                 n_var_parallel_max):
-        n_qubits, buckets = opt.read_buckets(filename)
+        n_qubits, buckets, free_vars = opt.read_buckets(filename)
         graph = opt.buckets2graph(buckets)
 
         # Split graphical model to parallelize
@@ -297,7 +297,7 @@ def time_single_amplitude_np_mpi(
                                 n_var_parallel_min,
                                 mem_constraint,
                                 n_var_parallel_max):
-        n_qubits, buckets = opt.read_buckets(filename)
+        n_qubits, buckets, free_vars = opt.read_buckets(filename)
         graph = opt.buckets2graph(buckets)
 
         # Split the graph to parallelize

@@ -130,7 +130,7 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     return sliced_buckets
 
 
-def process_bucket_np(bucket):
+def process_bucket_np(bucket, nosum=False):
     """
     Process bucket in the bucket elimination algorithm.
     We multiply all tensors in the bucket and sum over the
@@ -141,6 +141,8 @@ def process_bucket_np(bucket):
     ----------
     bucket : list
            List containing tuples of tensors (gates) with their indices.
+    nosum : bool, optional
+           If we do not sum over the variable of the bucket
 
     Returns
     -------
@@ -154,10 +156,11 @@ def process_bucket_np(bucket):
         result = np.einsum(expr, result, tensor)
         variables = sorted(list(set(variables + variables_current)))
 
-    if len(variables) > 1:
-        variables = variables[1:]
-    else:
-        variables = []
+    if len(variables) > 0:
+        new_variables = variables[1:]
 
     # reduce
-    return np.sum(result, axis=0), variables
+    if nosum:
+        return result, variables
+    else:
+        return np.sum(result, axis=0), new_variables
