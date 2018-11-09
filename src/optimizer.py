@@ -36,6 +36,8 @@ def read_buckets(filename, free_qubits=[], max_depth=None):
             number of qubits in the circuit
     buckets : list of lists
             list of lists (buckets)
+    free_variables : list
+            possible free variable list
     """
     # perform the cirquit file processing
     log.info(f'reading file {filename}')
