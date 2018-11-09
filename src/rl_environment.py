@@ -7,7 +7,7 @@ import networkx as nx
 import src.graph_model as gm
 import copy
 
-MAX_STATE_SIZE = 10
+MAX_STATE_SIZE = 15
 
 
 def sparse_graph_adjacency(G, max_size, node_to_idx, weight='weight'):
@@ -75,12 +75,38 @@ def print_int_matrix(matrix):
         line = ' '.join(f'{e:d}' if e != 0 else '-' for e in row)
         print(line)
 
-    
+
+def contraction_cost_flops(graph, node):
+    """
+    Cost function that uses flops contraction cost
+    """
+    memory, flops = gm.get_cost_by_node(graph, node)
+    return flops
+
+
+def contraction_cost_memory(graph, node):
+    """
+    Cost function that uses memory contraction cost
+    """
+    memory, flops = gm.get_cost_by_node(graph, node)
+    return memory
+
+
+def degree_cost(graph, node):
+    """
+    Cost function that calculates degree
+    """
+    memory, flops = gm.get_cost_by_node(graph, node)
+    return flops
+
+
 class Environment:
     """
     Creates an environment to train the agents
     """
-    def __init__(self, filename):
+    def __init__(self, filename,
+                 cost_function=contraction_cost_flops,
+                 simple_graph=False):
         """
         Creates an environment for the model from file
 
@@ -88,13 +114,27 @@ class Environment:
         ----------
         filename : str
                file to load
+        cost_function : function, optional
+               function (networkx.Graph, int)->int which
+               evaluates the cost of selecting a node.
+               Default `contraction_cost_flops`
+        simple_graph : bool
+               If the graph should be generated as simple graph
+               (no selfloops and no parallel edges).
         """
         n_qubits, initial_graph = gm.read_graph(filename)
         if initial_graph.number_of_nodes() > MAX_STATE_SIZE:
             raise ValueError(
                 f'Graph is larger than the maximal state size:' +
                 f' {MAX_STATE_SIZE}')
+
+        if simple_graph:
+            initial_graph = nx.Graph(initial_graph)
+            initial_graph = initial_graph.remove_edges_from(
+                initial_graph.selfloop_edges)
+
         self.initial_graph = initial_graph
+        self.cost_function = cost_function
 
         self.reset()
 
@@ -136,9 +176,9 @@ class Environment:
               index in the state matrix to eliminate.
         """
         node = self.idx_to_node[index]
-        
+
         # Calculate cost function
-        memory, flops = gm.get_cost_by_node(self.graph, node)
+        cost = self.cost_function(self.graph, node)
 
         # Update state
         gm.eliminate_node(self.graph, node)
@@ -151,7 +191,7 @@ class Environment:
         # self.state = adj_matrix[np.tril_indices_from(adj_matrix)]
         self.state = adj_matrix
 
-        return flops, complete
+        return cost, complete
 
 
 if __name__ == '__main__':
