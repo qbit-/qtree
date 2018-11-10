@@ -10,7 +10,7 @@ import copy
 MAX_STATE_SIZE = 15
 
 
-def sparse_graph_adjacency(G, max_size, node_to_idx, weight='weight'):
+def sparse_graph_adjacency(G, max_size, node_to_row, weight='weight'):
     """Return the graph adjacency matrix as a SciPy sparse matrix.
 
     Parameters
@@ -22,9 +22,9 @@ def sparse_graph_adjacency(G, max_size, node_to_idx, weight='weight'):
         Matrix size. May be larger than the number of nodes. Has to
         be compatible with the node_to_idx mapping.
 
-    node_to_idx : dict
-        The elements of the adjacency matrix
-        are placed in the node_to_idx position
+    node_to_row : dict
+        The mapping between graph nodes and rows/columns in the
+        the adjacency matrix
 
     Returns
     -------
@@ -35,11 +35,11 @@ def sparse_graph_adjacency(G, max_size, node_to_idx, weight='weight'):
 
     nodelist = list(G)
 
-    if not set(nodelist).issubset(node_to_idx):
-        msg = "`nodelist` is not a subset of the `node_to_idx` dictionary."
+    if not set(nodelist).issubset(node_to_row):
+        msg = "`nodelist` is not a subset of the `node_to_row` dictionary."
         raise nx.NetworkXError(msg)
 
-    index = {node: node_to_idx[node] for node in nodelist}
+    index = {node: node_to_row[node] for node in nodelist}
     coefficients = zip(*((index[u], index[v], d.get(weight, 1))
                          for u, v, d in G.edges(nodelist, data=True)
                          if u in index and v in index))
@@ -71,7 +71,7 @@ def print_int_matrix(matrix):
     """
     Prints integer matrix in a readable form
     """
-    for row in environment.state:
+    for row in matrix:
         line = ' '.join(f'{e:d}' if e != 0 else '-' for e in row)
         print(line)
 
@@ -148,20 +148,34 @@ class Environment:
         graph_indices = np.random.permutation(range(1, n_nodes+1))
         entry_indices = np.random.choice(MAX_STATE_SIZE, n_nodes,
                                          replace=False)
-        node_to_idx = dict(zip(graph_indices, entry_indices))
-        idx_to_node = dict(zip(entry_indices, graph_indices))
+        # Build mappings idx -> node
+        node_to_row = dict(zip(graph_indices, entry_indices))
+        row_to_node = dict(zip(entry_indices, graph_indices))
 
+        # Build mapping triangular index -> node
+        row, col = np.tril_indices(MAX_STATE_SIZE)
+        tril_to_row = dict(zip(
+            range(MAX_STATE_SIZE*(MAX_STATE_SIZE+1) // 2), row))
+        idx_to_node = {tril_idx: row_to_node[tril_to_row[tril_idx]]
+                       for tril_idx in
+                       range(MAX_STATE_SIZE*(MAX_STATE_SIZE+1) // 2)
+                       if tril_to_row[tril_idx] in entry_indices
+        }
+
+        # Build adjacency matrix and pack it to lower triangular
         graph = copy.deepcopy(self.initial_graph)
         adj_matrix = np.asarray(
             sparse_graph_adjacency(
-                graph, MAX_STATE_SIZE, node_to_idx).todense()
+                graph, MAX_STATE_SIZE, node_to_row).todense()
             )
-        # state = adj_matrix[np.tril_indices_from(adj_matrix)]
-        state = adj_matrix
+
+        state = adj_matrix[np.tril_indices_from(adj_matrix)]
+        # state = adj_matrix
 
         # Store state and useful mappings
-        self.node_to_idx = node_to_idx
+        self.node_to_row = node_to_row
         self.idx_to_node = idx_to_node
+        self.tril_indices = (row, col)
         self.graph = graph
         self.state = state
 
@@ -171,7 +185,7 @@ class Environment:
 
         Parameters
         ----------
-        indes : int
+        index : int
               index in the state matrix to eliminate.
         """
         node = self.idx_to_node[index]
@@ -185,10 +199,10 @@ class Environment:
 
         adj_matrix = np.asarray(
             sparse_graph_adjacency(self.graph, MAX_STATE_SIZE,
-                                   self.node_to_idx).todense()
+                                   self.node_to_row).todense()
         )
-        # self.state = adj_matrix[np.tril_indices_from(adj_matrix)]
-        self.state = adj_matrix
+        self.state = adj_matrix[self.tril_indices]
+        # self.state = adj_matrix
 
         return cost, complete
 
@@ -201,10 +215,13 @@ if __name__ == '__main__':
     steps = []
     complete = False
     while not complete:
-        print_int_matrix(environment.state)
+        matrix = np.zeros((MAX_STATE_SIZE, MAX_STATE_SIZE), dtype='int')
+        matrix[environment.tril_indices] = environment.state
+        print_int_matrix(matrix)
         print()
 
-        row, col = np.nonzero(environment.state)
+        row, *_ = np.nonzero(environment.state)
+        # row, col = np.nonzero(environment.state)
         cost, complete = environment.step(row[0])
 
         steps.append(environment.idx_to_node[row[0]])
