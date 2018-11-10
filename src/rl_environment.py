@@ -96,8 +96,7 @@ def degree_cost(graph, node):
     """
     Cost function that calculates degree
     """
-    memory, flops = gm.get_cost_by_node(graph, node)
-    return flops
+    return graph.degree(node)
 
 
 class Environment:
