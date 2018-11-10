@@ -76,6 +76,24 @@ def print_int_matrix(matrix):
         print(line)
 
 
+def print_int_tril_matrix(matrix):
+    """
+    Prints a lower triangular integer matrix in a
+    readable form
+    """
+    from math import sqrt
+    size = int(-0.5 + sqrt(0.25+2*len(matrix)))
+
+    idx = 0
+    for ii in range(size):
+        n_elem = ii + 1
+        next_idx = idx + n_elem
+        line = ' '.join(f'{e:d}' if e != 0 else '-' for e in
+                        matrix[idx:next_idx])
+        print(line)
+        idx = next_idx
+
+
 def contraction_cost_flops(graph, node):
     """
     Cost function that uses flops contraction cost
@@ -215,9 +233,10 @@ if __name__ == '__main__':
     steps = []
     complete = False
     while not complete:
-        matrix = np.zeros((MAX_STATE_SIZE, MAX_STATE_SIZE), dtype='int')
-        matrix[environment.tril_indices] = environment.state
-        print_int_matrix(matrix)
+        # matrix = np.zeros((MAX_STATE_SIZE, MAX_STATE_SIZE), dtype='int')
+        # matrix[environment.tril_indices] = environment.state
+        # print_int_matrix(matrix)
+        print_int_tril_matrix(environment.state)
         print()
 
         row, *_ = np.nonzero(environment.state)
