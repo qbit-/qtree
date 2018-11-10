@@ -129,8 +129,8 @@ class Environment:
 
         if simple_graph:
             initial_graph = nx.Graph(initial_graph)
-            initial_graph = initial_graph.remove_edges_from(
-                initial_graph.selfloop_edges)
+            initial_graph.remove_edges_from(
+                initial_graph.selfloop_edges(data=False))
 
         self.initial_graph = initial_graph
         self.cost_function = cost_function
