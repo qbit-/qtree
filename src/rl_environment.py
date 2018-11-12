@@ -191,16 +191,18 @@ class Environment:
             )
 
         state = adj_matrix[np.tril_indices_from(adj_matrix)]
-        # state = adj_matrix
+        state_square = adj_matrix
 
         # Store state and useful mappings
         self.node_to_row = node_to_row
+        self.row_to_node = row_to_node
         self.idx_to_node = idx_to_node
         self.tril_indices = (row, col)
         self.graph = graph
         self.state = state
+        self.state_square = state_square
 
-    def step(self, index):
+    def step(self, index, square_index=False):
         """
         Takes 1 step in the graph elimination environment
 
@@ -208,8 +210,15 @@ class Environment:
         ----------
         index : int
               index in the state matrix to eliminate.
+              By default a lower triangular index is expected here
+        square_index : bool
+              if True the index is taken as a row/column index in
+              the square adjacency matrix 
         """
-        node = self.idx_to_node[index]
+        if not square_index:
+            node = self.idx_to_node[index]
+        else:
+            node = self.row_to_node[index]
 
         # Calculate cost function
         cost = self.cost_function(self.graph, node)
@@ -223,35 +232,9 @@ class Environment:
                                    self.node_to_row).todense()
         )
         self.state = adj_matrix[self.tril_indices]
-        # self.state = adj_matrix
+        self.state_square = adj_matrix
 
         return cost, complete
-
-
-if __name__ == '__main__':
-    environment = Environment('inst_2x2_7_0.txt')
-    environment.reset()
-
-    costs = []
-    steps = []
-    complete = False
-    while not complete:
-        print_int_tril_matrix(environment.state)
-        print()
-
-        row, *_ = np.nonzero(environment.state)
-        # row, col = np.nonzero(environment.state)
-        cost, complete = environment.step(row[0])
-
-        steps.append(environment.idx_to_node[row[0]])
-        costs.append(cost)
-
-    print(' Strategy\n Node | Cost:')
-    print('-'*24)
-    print('\n'.join('{:5} | {:5}'.format(step, cost)
-                    for step, cost in zip(steps, costs)))
-    print('-'*24)
-    print('Total cost: {}'.format(sum(costs)))
 
 
 def wrap_general_graph_for_qtree(graph):
@@ -319,3 +302,57 @@ def generate_random_graph(n_nodes, n_edges):
     graph.add_edges_from(idx_to_pair[idx] for idx in edge_indices)
 
     return wrap_general_graph_for_qtree(graph)
+
+
+if __name__ == '__main__':
+    environment = Environment('inst_2x2_7_0.txt')
+    environment.reset()
+
+    # Print triangular adjacency matrices
+    costs = []
+    steps = []
+    complete = False
+    while not complete:
+        print_int_tril_matrix(environment.state)
+        print()
+
+        row, *_ = np.nonzero(environment.state)
+        cost, complete = environment.step(row[0])
+
+        steps.append(environment.idx_to_node[row[0]])
+        costs.append(cost)
+
+    print(' Strategy\n Node | Cost:')
+    print('-'*24)
+    print('\n'.join('{:5} | {:5}'.format(step, cost)
+                    for step, cost in zip(steps, costs)))
+    print('-'*24)
+    print('Total cost: {}'.format(sum(costs)))
+
+    print()
+    print('-'*32)
+    print()
+    
+    # Print square adjacency matrices
+    environment.reset()
+
+    costs = []
+    steps = []
+    complete = False
+    while not complete:
+        print_int_matrix(environment.state_square)
+        print()
+
+        row, col = np.nonzero(environment.state_square)
+        cost, complete = environment.step(row[0], square_index=True)
+
+        steps.append(environment.row_to_node[row[0]])
+        costs.append(cost)
+
+    print(' Strategy\n Node | Cost:')
+    print('-'*24)
+    print('\n'.join('{:5} | {:5}'.format(step, cost)
+                    for step, cost in zip(steps, costs)))
+    print('-'*24)
+    print('Total cost: {}'.format(sum(costs)))
+    
