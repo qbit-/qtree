@@ -118,34 +118,6 @@ def degree_cost(graph, node):
     return graph.degree(node)
 
 
-def wrap_general_graph_for_qtree(graph):
-    """
-    Modifies a general networkx graph to be compatible with
-    graph functions from qtree. Basically, we just renumerate nodes
-    from 1 and set attributes.
-
-    Parameters
-    ----------
-    graph : networkx.Graph or networkx.Multigraph
-            Input graph
-    Returns
-    -------
-    new_graph : type(graph)
-            Modified graph
-    """
-    # relabel nodes starting from 1
-    label_dict = dict(zip(
-        range(graph.number_of_nodes()),
-        range(1, graph.number_of_nodes()+1)
-    ))
-
-    # Add unique hash tags to edges
-    new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
-    for edge in new_graph.edges():
-        new_graph.edges[edge].update({'hash_tag': hash(random.random())})
-    return new_graph
-
-
 class Environment:
     """
     Creates an environment to train the agents
@@ -202,6 +174,7 @@ class Environment:
 
         # Build mapping triangular index -> node
         row, col = np.tril_indices(MAX_STATE_SIZE)
+        # n*(n+1)//2 number of edges that selfloops are allowed.
         tril_to_row = dict(zip(
             range(MAX_STATE_SIZE*(MAX_STATE_SIZE+1) // 2), row))
         idx_to_node = {tril_idx: row_to_node[tril_to_row[tril_idx]]
@@ -279,3 +252,70 @@ if __name__ == '__main__':
                     for step, cost in zip(steps, costs)))
     print('-'*24)
     print('Total cost: {}'.format(sum(costs)))
+
+
+def wrap_general_graph_for_qtree(graph):
+    """
+    Modifies a general networkx graph to be compatible with
+    graph functions from qtree. Basically, we just renumerate nodes
+    from 1 and set attributes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.Multigraph
+            Input graph
+    Returns
+    -------
+    new_graph : type(graph)
+            Modified graph
+    """
+    # relabel nodes starting from 1
+    label_dict = dict(zip(
+        range(graph.number_of_nodes()),
+        range(1, graph.number_of_nodes()+1)
+    ))
+
+    # Add unique hash tags to edges
+    new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+    for edge in new_graph.edges():
+        new_graph.edges[edge].update({'hash_tag': hash(random.random())})
+    return new_graph
+
+
+def generate_random_graph(n_nodes, n_edges):
+    """
+    Generates a random graph with n_nodes and n_edges. Edges are
+    selected randomly from a uniform distribution over n*(n-1)/2
+    possible edges
+
+    Parameters
+    ----------
+    n_nodes : int
+          Number of nodes
+    n_edges : int
+          Number of edges
+    Returns
+    -------
+    graph : networkx.Graph
+          Random graph usable by graph_models
+    """
+
+    # Create a disconnected graph
+    graph = nx.Graph()
+    graph.add_nodes_from(range(n_nodes))
+
+    # Add edges
+    row, col = np.tril_indices(n_nodes)
+    idx_to_pair = dict(zip(
+        range(int(n_nodes*(n_nodes+1)//2)),
+        zip(row, col)
+    ))
+
+    edge_indices = np.random.choice(
+        range(int(n_nodes*(n_nodes+1)//2)),
+        n_edges,
+        replace=False
+    )
+    graph.add_edges_from(idx_to_pair[idx] for idx in edge_indices)
+
+    return wrap_general_graph_for_qtree(graph)
