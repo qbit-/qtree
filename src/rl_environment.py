@@ -6,6 +6,7 @@ import numpy as np
 import networkx as nx
 import src.graph_model as gm
 import copy
+import random
 
 MAX_STATE_SIZE = 15
 
@@ -117,6 +118,34 @@ def degree_cost(graph, node):
     return graph.degree(node)
 
 
+def wrap_general_graph_for_qtree(graph):
+    """
+    Modifies a general networkx graph to be compatible with
+    graph functions from qtree. Basically, we just renumerate nodes
+    from 1 and set attributes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.Multigraph
+            Input graph
+    Returns
+    -------
+    new_graph : type(graph)
+            Modified graph
+    """
+    # relabel nodes starting from 1
+    label_dict = dict(zip(
+        range(graph.number_of_nodes()),
+        range(1, graph.number_of_nodes()+1)
+    ))
+
+    # Add unique hash tags to edges
+    new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+    for edge in new_graph.edges():
+        new_graph.edges[edge].update({'hash_tag': hash(random.random())})
+    return new_graph
+
+
 class Environment:
     """
     Creates an environment to train the agents
@@ -140,6 +169,7 @@ class Environment:
                (no selfloops and no parallel edges).
         """
         n_qubits, initial_graph = gm.read_graph(filename)
+
         if initial_graph.number_of_nodes() > MAX_STATE_SIZE:
             raise ValueError(
                 f'Graph is larger than the maximal state size:' +
@@ -233,9 +263,6 @@ if __name__ == '__main__':
     steps = []
     complete = False
     while not complete:
-        # matrix = np.zeros((MAX_STATE_SIZE, MAX_STATE_SIZE), dtype='int')
-        # matrix[environment.tril_indices] = environment.state
-        # print_int_matrix(matrix)
         print_int_tril_matrix(environment.state)
         print()
 
