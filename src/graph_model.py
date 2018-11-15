@@ -726,3 +726,93 @@ def draw_graph(graph, filename):
             with_labels=True,
     )
     plt.savefig(filename)
+
+
+def get_treewidth_from_peo(old_graph, peo):
+    """
+    This function checks the treewidth of a given peo.
+    The graph is simplified: all selfloops and parallel
+    edges are removed.
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+            graph to use
+    peo : list
+            list of nodes in the perfect elimination order
+
+    Returns
+    -------
+    treewidth : int
+            treewidth corresponding to peo
+    """
+    # Copy graph and make it simple
+    graph = nx.Graph(old_graph, copy=True)
+    selfloop_edges = list(graph.selfloop_edges())
+    graph.remove_edges_from(selfloop_edges)
+
+    treewidth = 0
+    for node in peo:
+        # Get the size of the next clique - 1
+        neighbors = list(graph[node])
+        n_neighbors = len(neighbors)
+        if len(neighbors) > 1:
+            edges = itertools.combinations(neighbors, 2)
+
+        # Treewidth is the size of the maximal clique - 1
+        treewidth = max(n_neighbors, treewidth)
+
+        graph.remove_node(node)
+
+        # Make the next clique
+        if edges is not None:
+            graph.add_edges_from(
+                edges, tensor=f'E{node}',
+                hash_tag=hash((f'E{node}',
+                               tuple(neighbors),
+                                random.random())))
+    return treewidth
+
+
+def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
+    """
+    Adds a clique on the specified indices. No checks is
+    done whether some edges exist in the clique. The name
+    of the clique is formed from the name_prefix and the
+    lowest element in the clique_nodes
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+            graph to modify
+    clique_nodes : list
+            list of nodes to include into clique
+    name_prefix : str
+            prefix for the clique name
+    Returns
+    -------
+    new_graph : type(graph)
+            New graph with clique
+    """
+    graph = copy.deepcopy(old_graph)
+
+    edges = itertools.combinations(clique_nodes, 2)
+    node = min(clique_nodes)
+    graph.add_edges_from(edges, tensor=name_prefix + f'{node}',
+                hash_tag=hash((name_prefix + f'{node}',
+                               tuple(clique_nodes),
+                random.random())))
+    return graph
+
+
+def get_equivalent_peo(peo, clique_vertices):
+    """
+    This function returns an equivalent peo with
+    the clique_indices in the rest of the new order
+    """
+    new_peo = copy.deepcopy(peo)
+    for node in clique_vertices:
+        new_peo.remove(node)
+
+    new_peo = new_peo + clique_vertices
+    return new_peo
