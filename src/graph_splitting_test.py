@@ -28,6 +28,7 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
     -------
           max_mem - maximal memory (if all intermediates are kept)
           min_mem - minimal possible memory for the algorithm
+          flops - number of floating point operations
           total_max_mem - maximal memory of all tasks combined
           total_min_mem - minimal memory of all tasks combined
           treewidth - treewidth returned by quickBB

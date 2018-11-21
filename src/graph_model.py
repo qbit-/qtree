@@ -362,7 +362,7 @@ def get_cost_by_node(graph, node):
     return memory, flops
 
 
-def eliminate_node(graph, node):
+def eliminate_node(graph, node, self_loops=True):
     """
     Eliminates node according to the tensor contraction rules.
     A new clique is formed, which includes all neighbors of the node.
@@ -373,6 +373,8 @@ def eliminate_node(graph, node):
             Graph containing the information about the contraction
             GETS MODIFIED IN THIS FUNCTION
     node : node to contract (such that graph can be indexed by it)
+    self_loops : bool
+           Whether to create selfloops on the neighbors. Default True.
 
     Returns
     -------
@@ -388,7 +390,7 @@ def eliminate_node(graph, node):
 
     if len(neighbors) > 1:
         edges = itertools.combinations(neighbors, 2)
-    elif len(neighbors) == 1:
+    elif len(neighbors) == 1 and self_loops:
         # This node had a single neighbor, add self loop to it
         edges = [[neighbors[0], neighbors[0]]]
     else:
@@ -728,6 +730,73 @@ def draw_graph(graph, filename):
     plt.savefig(filename)
 
 
+def wrap_general_graph_for_qtree(graph):
+    """
+    Modifies a general networkx graph to be compatible with
+    graph functions from qtree. Basically, we just renumerate nodes
+    from 1 and set attributes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.Multigraph
+            Input graph
+    Returns
+    -------
+    new_graph : type(graph)
+            Modified graph
+    """
+    # relabel nodes starting from 1
+    label_dict = dict(zip(
+        range(graph.number_of_nodes()),
+        range(1, graph.number_of_nodes()+1)
+    ))
+
+    # Add unique hash tags to edges
+    new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+    for edge in new_graph.edges():
+        new_graph.edges[edge].update({'hash_tag': hash(random.random())})
+    return new_graph
+
+
+def generate_random_graph(n_nodes, n_edges):
+    """
+    Generates a random graph with n_nodes and n_edges. Edges are
+    selected randomly from a uniform distribution over n*(n-1)/2
+    possible edges
+
+    Parameters
+    ----------
+    n_nodes : int
+          Number of nodes
+    n_edges : int
+          Number of edges
+    Returns
+    -------
+    graph : networkx.Graph
+          Random graph usable by graph_models
+    """
+
+    # Create a disconnected graph
+    graph = nx.Graph()
+    graph.add_nodes_from(range(n_nodes))
+
+    # Add edges
+    row, col = np.tril_indices(n_nodes)
+    idx_to_pair = dict(zip(
+        range(int(n_nodes*(n_nodes+1)//2)),
+        zip(row, col)
+    ))
+
+    edge_indices = np.random.choice(
+        range(int(n_nodes*(n_nodes+1)//2)),
+        n_edges,
+        replace=False
+    )
+    graph.add_edges_from(idx_to_pair[idx] for idx in edge_indices)
+
+    return wrap_general_graph_for_qtree(graph)
+
+
 def get_treewidth_from_peo(old_graph, peo):
     """
     This function checks the treewidth of a given peo.
@@ -770,7 +839,7 @@ def get_treewidth_from_peo(old_graph, peo):
                 edges, tensor=f'E{node}',
                 hash_tag=hash((f'E{node}',
                                tuple(neighbors),
-                                random.random())))
+                               random.random())))
     return treewidth
 
 
@@ -796,12 +865,15 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
     """
     graph = copy.deepcopy(old_graph)
 
+    if len(clique_nodes) == 0:
+        return graph
+
     edges = itertools.combinations(clique_nodes, 2)
     node = min(clique_nodes)
     graph.add_edges_from(edges, tensor=name_prefix + f'{node}',
-                hash_tag=hash((name_prefix + f'{node}',
-                               tuple(clique_nodes),
-                random.random())))
+                         hash_tag=hash((name_prefix + f'{node}',
+                                        tuple(clique_nodes),
+                                        random.random())))
     return graph
 
 
@@ -816,3 +888,77 @@ def get_equivalent_peo(peo, clique_vertices):
 
     new_peo = new_peo + clique_vertices
     return new_peo
+
+
+def get_node_min_fill_heuristic(graph):
+    """
+    Calculates the next node for the min-fill
+    heuristic, as described in V. Gogate and R.  Dechter
+    :url:`http://arxiv.org/abs/1207.4109`
+
+    Parameters
+    ----------
+    graph : networkx.Graph graph to estimate
+
+    Returns
+    -------
+    node : node-type
+           node with minimal degree
+    degree : int
+           degree of the node
+    """
+    min_fill = 0
+
+    for node in graph.nodes:
+        neighbors_g = graph.subgraph(
+            graph.neighbors(node))
+        degree = neighbors_g.number_of_nodes()
+        n_edges_filled = neighbors_g.number_of_edges()
+
+        # All possible edges without selfloops
+        n_edges_max = int(degree*(degree-1) // 2)
+        fill = n_edges_max - n_edges_filled
+        if fill <= min_fill:
+            min_fill_node = node
+            min_fill_degree = degree
+        min_fill = min(fill, min_fill)
+    return min_fill_node, min_fill_degree
+
+
+def get_upper_bound_peo(old_graph,
+                        node_heuristic_fn=get_node_min_fill_heuristic):
+    """
+    Calculates an upper bound on treewidth using one of the
+    heuristics given by the node_heuristic_fn.
+    Best is min-fill,
+    as described in V. Gogate and R. Dechter
+    :url:`http://arxiv.org/abs/1207.4109`
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+           graph to estimate
+    node_heuristic_fn : function
+           heuristic function, default min_fill_node
+
+    Returns
+    -------
+    peo : list
+           list of nodes in perfect elimination order
+    treewidth : int
+           treewidth corresponding to peo
+    """
+    graph = copy.deepcopy(old_graph)
+
+    node, max_degree = node_heuristic_fn(graph)
+    peo = [node]
+    eliminate_node(graph, node, self_loops=False)
+
+    for ii in range(graph.number_of_nodes()):
+        node, degree = node_heuristic_fn(graph)
+        peo.append(node)
+        max_degree = max(max_degree, degree)
+        eliminate_node(graph, node, self_loops=False)
+
+    return peo, max_degree  # this is clique size - 1
+

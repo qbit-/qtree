@@ -379,34 +379,6 @@ def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
     ))
 
 
-def what_is_terminal_tensor():
-    """
-    This functions shows what a terminal tensor (e.g. the one
-    we encounter when trying to calculate several amplitudes at a time)
-    should be. Here 4 qubits are considered. This tensor
-    is made of ones.
-    """
-    import itertools
-
-    def kron_list(operands):
-        res = operands[0].flatten()
-        shapes = [res.shape[0]]
-
-        for operand in operands[1:]:
-            shapes.append(operand.flatten().shape[0])
-            res = np.kron(res, operand.flatten())
-        return np.reshape(res, shapes)
-
-    u = np.array([0, 1])
-    d = np.array([1, 0])
-
-    a = np.zeros((2, 2, 2, 2))
-
-    for prod in itertools.product([u, d], repeat=4):
-        a += kron_list(prod)
-    print(a)
-
-
 def test_graph_reading(filename):
     """
     This function tests direct reading of circuits to graphs.
@@ -472,6 +444,34 @@ def test_bucket_reading(filename):
                  - np.array(amplitudes_reference)))
 
 
+def what_is_terminal_tensor():
+    """
+    This functions shows what a terminal tensor (e.g. the one
+    we encounter when trying to calculate several amplitudes at a time)
+    should be. Here 4 qubits are considered. This tensor
+    is made of ones.
+    """
+    import itertools
+
+    def kron_list(operands):
+        res = operands[0].flatten()
+        shapes = [res.shape[0]]
+
+        for operand in operands[1:]:
+            shapes.append(operand.flatten().shape[0])
+            res = np.kron(res, operand.flatten())
+        return np.reshape(res, shapes)
+
+    u = np.array([0, 1])
+    d = np.array([1, 0])
+
+    a = np.zeros((2, 2, 2, 2))
+
+    for prod in itertools.product([u, d], repeat=4):
+        a += kron_list(prod)
+    print(a)
+
+
 def eval_circuit_multiamp_np(filename, quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates
@@ -522,50 +522,10 @@ def eval_circuit_multiamp_np(filename, quickbb_command=QUICKBB_COMMAND):
     print(np.max(amplitudes - np.array(amplitudes_reference)))
 
 
-def test_reordering_hypothesis(filenames):
-    """
-    Test if the reordering hypotesis holds
-    """
-    import src.optimizer as opt
-    import src.graph_model as gm
-
-    for filename in filenames:
-        n_qubits, graph = gm.read_graph(filename)
-        n_free_variables = random.randint(1, n_qubits-1)
-        free_qubits = np.random.choice(range(n_qubits), n_free_variables, replace=False)
-        n_qubits, buckets, free_variables = opt.read_buckets(
-            filename,
-            free_qubits=free_qubits)
-
-        graph_initial = opt.buckets2graph(buckets)
-        graph = gm.make_clique_on(graph_initial, free_variables)
-
-        peo_original, treewidth_original = gm.get_peo(graph)
-
-        peo_new = gm.get_equivalent_peo(peo_original, free_variables)
-        treewidth_new = gm.get_treewidth_from_peo(graph, peo_new)
-
-        print(f'file: {filename}  free_variables: {free_variables}')
-        print(f'tw_orig: {treewidth_original} tw_new : {treewidth_new}')
-
-        if treewidth_new == treewidth_original:
-            print('OK')
-        else:
-            print('FAIL')
-
-
 if __name__ == "__main__":
-    # eval_circuit('inst_2x2_7_0.txt')
-    # eval_circuit_np('inst_2x2_7_0.txt')
-    # eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
-    # eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
-    # eval_contraction_cost('inst_2x2_7_0.txt')
-    # eval_circuit_multiamp_np('inst_2x2_7_0.txt')
-    test_reordering_hypothesis(
-        [
-            'inst_2x2_7_0.txt',
-            'test_circuits/inst/cz_v2/4x4/inst_4x4_10_3.txt',
-            'test_circuits/inst/cz_v2/5x5/inst_5x5_10_2.txt',
-            'test_circuits/inst/cz_v2/4x4/inst_4x4_20_4.txt',
-         ]
-    )
+    eval_circuit('inst_2x2_7_0.txt')
+    eval_circuit_np('inst_2x2_7_0.txt')
+    eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
+    eval_contraction_cost('inst_2x2_7_0.txt')
+    eval_circuit_multiamp_np('inst_2x2_7_0.txt')
