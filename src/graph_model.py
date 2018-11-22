@@ -907,7 +907,7 @@ def get_node_min_fill_heuristic(graph):
     degree : int
            degree of the node
     """
-    min_fill = 0
+    min_fill = np.inf
 
     for node in graph.nodes:
         neighbors_g = graph.subgraph(
@@ -922,6 +922,7 @@ def get_node_min_fill_heuristic(graph):
             min_fill_node = node
             min_fill_degree = degree
         min_fill = min(fill, min_fill)
+
     return min_fill_node, min_fill_degree
 
 
@@ -961,4 +962,3 @@ def get_upper_bound_peo(old_graph,
         eliminate_node(graph, node, self_loops=False)
 
     return peo, max_degree  # this is clique size - 1
-
