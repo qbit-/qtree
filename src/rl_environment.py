@@ -115,7 +115,7 @@ def degree_cost(graph, node):
     """
     Cost function that calculates degree
     """
-    return graph.degree(node)
+    return graph.degree(node) - 1
 
 
 class Environment:
