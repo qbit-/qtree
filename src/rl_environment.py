@@ -122,9 +122,12 @@ class Environment:
     """
     Creates an environment to train the agents
     """
-    def __init__(self, filename,
-                 cost_function=contraction_cost_flops,
-                 simple_graph=False):
+    def __init__(
+            self,
+            filename,
+            cost_function=contraction_cost_flops,
+            simple_graph=False,
+            square_index=False):
         """
         Creates an environment for the model from file
 
@@ -154,8 +157,9 @@ class Environment:
 
         self.initial_graph = initial_graph
         self.cost_function = cost_function
+        self.square_index = square_index
 
-        self.reset()
+        #self.reset()
 
     def reset(self):
         """
@@ -191,7 +195,7 @@ class Environment:
             )
 
         state = adj_matrix[np.tril_indices_from(adj_matrix)]
-        state_square = adj_matrix
+        self.state_square = adj_matrix
 
         # Store state and useful mappings
         self.node_to_row = node_to_row
@@ -200,9 +204,16 @@ class Environment:
         self.tril_indices = (row, col)
         self.graph = graph
         self.state = state
-        self.state_square = state_square
+        self.available_actions = np.zeros(
+            MAX_STATE_SIZE, dtype=np.int32)
+        self.available_actions[list(row_to_node.keys())] = 1
+        if self.square_index:
+            state = self.state_square
+        else:
+            state = self.state
+        return state
 
-    def step(self, index, square_index=False):
+    def step(self, index):
         """
         Takes 1 step in the graph elimination environment
 
@@ -215,10 +226,11 @@ class Environment:
               if True the index is taken as a row/column index in
               the square adjacency matrix 
         """
-        if not square_index:
-            node = self.idx_to_node[index]
-        else:
+        
+        if self.square_index:
             node = self.row_to_node[index]
+        else:
+            node = self.idx_to_node[index]
 
         # Calculate cost function
         cost = self.cost_function(self.graph, node)
@@ -228,13 +240,17 @@ class Environment:
         complete = self.graph.number_of_nodes() == 0
 
         adj_matrix = np.asarray(
-            sparse_graph_adjacency(self.graph, MAX_STATE_SIZE,
-                                   self.node_to_row).todense()
+            sparse_graph_adjacency(
+                self.graph, MAX_STATE_SIZE, self.node_to_row).todense()
         )
         self.state = adj_matrix[self.tril_indices]
         self.state_square = adj_matrix
-
-        return cost, complete
+        self.available_actions[index] = 0
+        if self.square_index:
+            state = self.state_square
+        else:
+            state = self.state
+        return state, cost, complete
 
 
 def wrap_general_graph_for_qtree(graph):
