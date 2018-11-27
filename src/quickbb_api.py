@@ -45,7 +45,8 @@ def gen_cnf(filename, old_graph):
 def run_quickbb(cnffile,
                 command=defs.QUICKBB_COMMAND,
                 outfile='output/quickbb_out.qbb',
-                statfile='output/quickbb_stat.qbb'):
+                statfile='output/quickbb_stat.qbb',
+                extra_args=" --min-fill-ordering --time 60 "):
     """
     Run QuickBB program and collect its output
 
@@ -59,6 +60,8 @@ def run_quickbb(cnffile,
          QuickBB output file
     statfile : str, optional
          QuickBB stat file
+    extra_args : str, optional
+         Optional commands to QuickBB. Default: --min-fill-ordering --time 60
     Returns
     -------
     output : str
@@ -70,13 +73,13 @@ def run_quickbb(cnffile,
     # except FileNotFoundError as e:
     #     log.warn(e)
     #     pass
-
     sh = command + " "
-    sh += "--min-fill-ordering "
-    sh += "--time 60 "
     # this makes Docker process too slow and sometimes fails
     # sh += f"--outfile {outfile} --statfile {statfile} "
     sh += f"--cnffile {cnffile} "
+    if extra_args is not None:
+        sh += extra_args
+
     log.info("excecuting quickbb: "+sh)
     process = subprocess.Popen(
         sh.split(), stdout=subprocess.PIPE)

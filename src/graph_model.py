@@ -172,7 +172,8 @@ def relabel_graph_nodes(graph, label_dict=None):
     return new_graph, label_dict
 
 
-def get_peo(old_graph):
+def get_peo(old_graph,
+            quickbb_extra_args=" --time 60 --min-fill-ordering "):
     """
     Calculates the elimination order for an undirected
     graphical model of the circuit. Optionally finds `n_qubit_parralel`
@@ -185,6 +186,8 @@ def get_peo(old_graph):
     ----------
     graph : networkx.Graph
             graph of the undirected graphical model to decompose
+    quickbb_extra_args : str, optional
+             Optional commands to QuickBB. Default: --min-fill-ordering --time 60
 
     Returns
     -------
