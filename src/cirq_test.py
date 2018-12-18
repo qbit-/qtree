@@ -472,7 +472,8 @@ def what_is_terminal_tensor():
     print(a)
 
 
-def eval_circuit_multiamp_np(filename, quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_multiamp_np(
+        filename, quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework

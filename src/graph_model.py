@@ -541,12 +541,12 @@ def get_node_by_betweenness(graph):
     -------
     nodes_by_beteenness : dict
     """
-    nodes_by_beteenness = list(
+    nodes_by_betweenness = list(
         nx.betweenness_centrality(
             graph,
             normalized=False, endpoints=True).items())
 
-    return nodes_by_beteenness
+    return nodes_by_betweenness
 
 
 def get_node_by_mem_reduction(old_graph):
@@ -598,7 +598,9 @@ def get_node_by_mem_reduction(old_graph):
 
 
 def split_graph_by_metric(
-        old_graph, n_var_parallel=0, metric_fn=get_node_by_degree):
+        old_graph, n_var_parallel=0,
+        metric_fn=get_node_by_degree,
+        forbidden_nodes=[]):
     """
     Parallel-splitted version of :py:meth:`get_peo` with nodes
     to split chosen according to the metric function. Metric
@@ -616,9 +618,12 @@ def split_graph_by_metric(
 
     n_var_parallel : int
                 number of variables to eliminate by parallelization
-    metric_fn : function
-                function to evaluate node metric
-
+    metric_fn : function, optional
+                function to evaluate node metric.
+                Default get_node_by_degree
+    forbidden_nodes : list, optional
+                nodes in this list will not be considered
+                for deletion. Default [].
     Returns
     -------
     idx_parallel : list
@@ -633,9 +638,13 @@ def split_graph_by_metric(
     nodes_by_metric = metric_fn(graph)
     nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
 
+    for idx, (node, metric) in enumerate(nodes_by_metric):
+        if node in forbidden_nodes:
+            nodes_by_metric.pop(idx)
+
     idx_parallel = []
     for ii in range(n_var_parallel):
-        node, degree = nodes_by_metric[ii]
+        node, metric = nodes_by_metric[ii]
         idx_parallel.append(node)
 
     for idx in idx_parallel:

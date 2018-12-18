@@ -376,6 +376,7 @@ def buckets2graph(buckets, ignore_variables=[]):
     Warning! Conversion of buckets to graphs destroys the information
     about permutations of the input tensors. The restored buckets
     may not evaluate to the same result as the original ones.
+    Do not restore buckets from a graph
     !!!!!!!!!
 
     Parameters

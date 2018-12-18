@@ -143,20 +143,29 @@ def get_cost_vs_amp_subset_size(filename, step_by=1, start_at=0, stop_at=None):
     ----------
     filename : str
            input file
+    start_at : int, optional
+           number of full qubits to start. Default 0
+    stop_at : int, optional
+           number of full qubits to stop at. Default all qubits
+    step_by : int, optional
+           add this number of full qubits in the next result. Default 1
     Returns
     -------
           max_mem - maximal memory (if all intermediates are kept)
           min_mem - minimal possible memory for the algorithm
+          flops - flops count
           max_mem_best - maximal memory if PEO would be optimal
           min_mem_best - minimal memory if PEO would be optimal
+          flops_best - flops count if PEO would be optimal
           treewidth - treewidth returned by quickBB
+          treewidth_best - treewidth if PEO would be optimal
           av_flop_per_mem - average memory access per flop
     """
     # Load graph and get the number of nodes
     n_qubits, buckets, free_vars = opt.read_buckets(filename)
 
     if stop_at is None or stop_at > n_qubits:
-        stop_at = n_qubits
+        stop_at = n_qubits + 1
 
     results = []
     for n_free_qubits in range(start_at, stop_at, step_by):
@@ -202,9 +211,135 @@ def get_cost_vs_amp_subset_size(filename, step_by=1, start_at=0, stop_at=None):
                         in zip(mem_cost, flop_cost)]
         av_flop_per_mem = sum(flop_per_mem) / len(flop_per_mem)
 
+        results.append((max_mem,
+                        min_mem,
+                        flops,
+                        max_mem_best,
+                        min_mem_best,
+                        flops_best,
+                        treewidth,
+                        treewidth_best,
+                        av_flop_per_mem))
+
+    return tuple(zip(*results))
+
+
+def get_cost_vs_amp_subset_size_parallel(
+        filename, step_by=1, start_at=0, stop_at=None,
+        n_var_parallel=0):
+    """
+    Calculates memory cost vs the number of calculated amplitudes
+    for a given circuit. Amplitudes are calculated in subsets up to the
+    full state vector
+
+    Parameters
+    ----------
+    filename : str
+           input file
+    start_at : int, optional
+           number of full qubits to start. Default 0
+    stop_at : int, optional
+           number of full qubits to stop at. Default all qubits
+    step_by : int, optional
+           add this number of full qubits in the next result. Default 1
+    n_var_parallel : int, optional
+           number of variables to parallelize over. Default 0
+    Returns
+    -------
+          max_mem - maximal memory (if all intermediates are kept)
+                    per task
+          min_mem - minimal possible memory for the algorithm per task
+          flops - flops count per task
+          total_mem_max - total amount of memory for all tasks
+          total_min_mem - total minimal amount of memory for all tasks
+          total_flops - total number of flops
+          max_mem_best - maximal memory if PEO would be optimal
+                         per task
+          min_mem_best - minimal memory if PEO would be optimal
+                         per task
+          flops_best - flops count if PEO would be optimal
+          treewidth - treewidth returned by quickBB
+          treewidth_best - treewidth if PEO would be optimal
+          av_flop_per_mem - average memory access per flop
+    """
+    # Load graph and get the number of nodes
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+
+    if stop_at is None or stop_at > n_qubits:
+        stop_at = n_qubits + 1
+
+    results = []
+    for n_free_qubits in range(start_at, stop_at, step_by):
+        free_qubits = range(n_free_qubits)
+
+        # Rebuild the graph with a given number of free qubits
+        n_qubits, buckets, free_variables = opt.read_buckets(
+            filename,
+            free_qubits=free_qubits)
+        graph_raw = opt.buckets2graph(buckets)
+
+        # Make a clique on the nodes we do not want to remove
+        graph = gm.make_clique_on(graph_raw, free_variables)
+
+        # Remove n_var_parallel variables from graph
+        # Currently, we do not remove output qubit variables
+        # This corresponds to the calculation of amplitude tensor
+        # in full for each subtask (not splitting it between
+        # different subtasks)
+        if n_var_parallel > graph.number_of_nodes() - len(free_variables):
+            n_var_parallel = graph.number_of_nodes() - len(free_variables)
+
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+            graph_raw, n_var_parallel)
+
+        # This is the best possible treewidth.
+        # Our method of PEO transformation yields larger values
+        peo_best, treewidth_best = gm.get_peo(reduced_graph)
+
+        peo = gm.get_equivalent_peo(peo_best, free_variables)
+        treewidth = gm.get_treewidth_from_peo(reduced_graph, peo)
+
+        graph_final, label_dict = gm.relabel_graph_nodes(
+            reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
+        )
+
+        mem_cost, flop_cost = gm.cost_estimator(graph_final)
+
+        max_mem = sum(mem_cost)
+        min_mem = max(mem_cost)
+        flops = sum(flop_cost)
+
+        total_mem_max = max_mem * (2**n_var_parallel)
+        total_min_mem = min_mem * (2**n_var_parallel)
+        total_flops = flops * (2**n_var_parallel)
+
+        graph_best, label_dict = gm.relabel_graph_nodes(
+            reduced_graph, dict(zip(peo_best, range(1, len(peo_best) + 1)))
+        )
+
+        mem_cost_best, flop_cost_best = gm.cost_estimator(graph_best)
+
+        max_mem_best = sum(mem_cost_best)
+        min_mem_best = max(mem_cost_best)
+        flops_best = sum(flop_cost_best)
+
+        total_mem_max_best = max_mem_best * (2**n_var_parallel)
+        total_min_mem_best = min_mem_best * (2**n_var_parallel)
+        total_flops_best = flops_best * (2**n_var_parallel)
+
+        flop_per_mem = [flop / mem for mem, flop
+                        in zip(mem_cost, flop_cost)]
+        av_flop_per_mem = sum(flop_per_mem) / len(flop_per_mem)
+
         results.append((max_mem, min_mem, flops,
+                        total_mem_max, total_min_mem,
+                        total_flops,
                         max_mem_best, min_mem_best,
-                        flops_best, treewidth,
+                        flops_best,
+                        total_mem_max_best,
+                        total_min_mem_best,
+                        total_flops_best,
+                        treewidth,
                         treewidth_best,
                         av_flop_per_mem))
 
@@ -214,47 +349,57 @@ def get_cost_vs_amp_subset_size(filename, step_by=1, start_at=0, stop_at=None):
 def plot_cost_vs_amp_subset_size(
         filename,
         fig_filename='flops_vs_amp_subset_size.png',
-        start_at=0, stop_at=None, step_by=5):
+        start_at=0, stop_at=None, step_by=5,
+        n_var_parallel=0):
     """
     Plots cost estimate for the evaluation of subsets of
     amplitudes
     """
-    costs = get_cost_vs_amp_subset_size(filename, start_at=start_at,
-                                        stop_at=stop_at, step_by=step_by)
-    x_range = list(range(start_at, start_at+len(costs[0])*step_by, step_by))
+    costs = get_cost_vs_amp_subset_size_parallel(
+        filename, start_at=start_at,
+        stop_at=stop_at, step_by=step_by,
+        n_var_parallel=n_var_parallel)
+    (max_mem, min_mem, flops,
+    total_mem_max, total_min_mem, total_flops,
+    max_mem_best, min_mem_best, flops_best,
+    total_mem_max_best, total_min_mem_best,
+    total_flops_best, treewidth, treewidth_best,
+    av_flop_per_mem) = costs
+
+    x_range = list(range(start_at,
+                         start_at+len(max_mem)*step_by, step_by))
     fig, axes = plt.subplots(1, 3, sharey=False, figsize=(18, 6))
 
-    # axes[0].semilogy(x_range, costs[0], label='per node')
-    # axes[0].semilogy(x_range, costs[3], label='total')
-    # axes[0].set_xlabel('parallelized variables')
-    # axes[0].set_ylabel('memory (in doubles)')
-    # axes[0].set_title('Maximal memory requirement')
-    # axes[0].legend()
-
-    axes[0].semilogy(x_range, costs[1], 'm-', label='current')
-    axes[0].semilogy(x_range, costs[4], 'b-', label='best')
+    axes[0].semilogy(x_range, min_mem, 'm-', label='as implemented')
+    axes[0].semilogy(x_range, min_mem_best, 'b-', label='best possible')
     num_amplitudes = [2**x for x in x_range]
-    mem_one_amplitude_equivalent = [costs[4][0] * num_amps for num_amps in num_amplitudes] 
-    axes[0].semilogy(x_range, mem_one_amplitude_equivalent, 'r-', label='1 amp at a time')
+    mem_one_amplitude_equivalent = [
+        min_mem[0] * num_amps for num_amps in num_amplitudes]
+    axes[0].semilogy(x_range,
+                     mem_one_amplitude_equivalent,
+                     'r-', label='1 amp at a time')
     axes[0].set_xlabel('number of full qubits')
     axes[0].set_ylabel('memory (in doubles)')
     axes[0].set_title('Minimal memory requirement')
     axes[0].legend()
 
-    axes[1].semilogy(x_range, costs[2], 'm-', label='current')
-    axes[1].semilogy(x_range, costs[5], 'b-', label='best')
+    axes[1].semilogy(x_range, flops, 'm-', label='as implemented')
+    axes[1].semilogy(x_range, flops_best, 'b-', label='best possible')
     num_amplitudes = [2**x for x in x_range]
-    flops_one_amplitude_equivalent = [costs[5][0] * num_amps for num_amps in num_amplitudes]
-    axes[1].semilogy(x_range, flops_one_amplitude_equivalent, 'r-', label='1 amp at a time')
+    flops_one_amplitude_equivalent = [
+        flops[0] * num_amps for num_amps in num_amplitudes]
+    axes[1].semilogy(
+        x_range,
+        flops_one_amplitude_equivalent, 'r-', label='1 amp at a time')
 
     axes[1].set_xlabel('number of full qubits')
     axes[1].set_ylabel('flops')
     axes[1].set_title('Flops cost')
     axes[1].legend(loc='lower right')
 
-    axes[2] = axes[2].twinx()
-    axes[2].plot(x_range, costs[6], 'm-', label='treewidth current')
-    axes[2].plot(x_range, costs[7], 'b-', label='treewidth best')
+    axes[2].plot(x_range, treewidth, 'm-',
+                 label='treewidth as implemented')
+    axes[2].plot(x_range, treewidth_best, 'b-', label='treewidth best')
     axes[2].set_xlabel('number of full qubits')
     axes[2].set_ylabel('treewidth')
     axes[2].legend(loc='upper left')
@@ -271,7 +416,22 @@ if __name__ == "__main__":
     #     start_at=0, step_by=1
     # )
     plot_cost_vs_amp_subset_size(
-        'test_circuits/inst/cz_v2/5x5/inst_5x5_25_0.txt',
-        fig_filename='costs_amp_subset_5x5_25.png',
-        start_at=0, step_by=1
+        'test_circuits/inst/cz_v2/7x7/inst_7x7_39_0.txt',
+        fig_filename='taihulight_amp_subset_7x7_39.png',
+        start_at=0, step_by=1, n_var_parallel=23
     )
+    # Taihuligh full vector estimate
+    costs = get_cost_vs_amp_subset_size_parallel(
+        'test_circuits/inst/cz_v2/7x7/inst_7x7_53_0.txt',
+        start_at=0, stop_at=1, step_by=1, n_var_parallel=48)
+    (max_mem, min_mem, flops,
+     total_mem_max, total_min_mem, total_flops,
+     max_mem_best, min_mem_best, flops_best,
+     total_mem_max_best, total_min_mem_best,
+     total_flops_best, treewidth, treewidth_best,
+     av_flop_per_mem) = costs
+
+    print(min_mem[0]/2**30)
+    print(np.log2(flops[0]))
+    print(flops[0] / 10**10)
+
