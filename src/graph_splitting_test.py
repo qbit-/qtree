@@ -14,6 +14,8 @@ import src.graph_model as gm
 from src.logger_setup import log
 from matplotlib import pyplot as plt
 
+from functools import partial
+
 
 def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
     """
@@ -74,7 +76,7 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
     return tuple(zip(*results))
 
 
-def get_treewidth_vs_parallel_size(filename, metric_function,
+def get_treewidth_vs_parallel_size(filename, splitter_function,
                                    start_at=0, stop_at=None,
                                    step_by=1):
     """
@@ -98,8 +100,8 @@ def get_treewidth_vs_parallel_size(filename, metric_function,
 
     results = []
     for n_var_parallel in range(start_at, stop_at, step_by):
-        idx_parallel, reduced_graph = gm.split_graph_by_metric(
-            graph_raw, n_var_parallel, metric_fn=metric_function)
+        idx_parallel, reduced_graph = splitter_function(
+            graph_raw, n_var_parallel=n_var_parallel)
         peo, treewidth = gm.get_peo(reduced_graph)
 
         results.append(treewidth)
@@ -181,7 +183,6 @@ def plot_flops_vs_n_var_parallel(
 
     ax.legend(loc='lower right')
     ax2.legend(loc='upper right')
-
     fig.savefig(fig_filename)
 
 
@@ -191,17 +192,27 @@ def plot_compare_parallelization_strategies(
     """
     Compares treewidth reduction strategies
     """
-    metric_functions = {
-        'degree': gm.get_node_by_degree,
-        'betweenness': gm.get_node_by_betweenness,
-        'bruteforce (Chen et al.)': gm.get_node_by_mem_reduction
+    splitter_functions = {
+        'degree': partial(gm.split_graph_by_metric,
+                          metric_fn=gm.get_node_by_degree),
+        'betweenness': partial(gm.split_graph_by_metric,
+                               metric_fn=gm.get_node_by_betweenness),
+        'by mem reduction 1 shot': partial(
+            gm.split_graph_by_metric,
+            metric_fn=gm.get_node_by_mem_reduction),
+        'by mem reduction iterative': partial(
+            gm.split_graph_dynamic_greedy,
+            metric_fn=gm.get_node_by_mem_reduction,
+            greedy_step_by=10
+        ),
     }
 
     results = {}
-    for name, metric_function in metric_functions.items():
+    for name, splitter_function in splitter_functions.items():
         treewidth_vs_n_var = get_treewidth_vs_parallel_size(
-            filename, metric_function=metric_function,
-            start_at=start_at, stop_at=stop_at, step_by=step_by)
+            filename, splitter_function=splitter_function,
+            start_at=start_at,
+            stop_at=stop_at, step_by=step_by)
         results.update({name: treewidth_vs_n_var})
 
     x_range = list(
@@ -233,6 +244,60 @@ def plot_compare_step(
     for step_by in steps:
         treewidth_vs_n_var = get_treewidth_vs_parallel_size(
             filename, metric_function=metric_function,
+            start_at=start_at, stop_at=stop_at, step_by=step_by)
+        results.update({step_by: treewidth_vs_n_var})
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+    for step_by, marker in zip(
+            sorted(results.keys()),
+            itertools.cycle(
+                ('.', '*', '+', 'x', '1', '2', '3', '4'))):
+        x_range = list(
+            range(
+                start_at,
+                start_at+len(results[step_by])*step_by,
+                step_by))
+        ax.plot(x_range, results[step_by],
+                label='step by {}'.format(step_by), marker=marker)
+    ax.set_xlabel('Number of parallelized variables')
+    ax.set_ylabel('treewidth')
+    ax.set_title('Step size influence')
+    ax.legend()
+
+    fig.savefig(fig_filename)
+
+
+def plot_compare_step_greedy(
+        filename, fig_filename='compare_step_greedy.png',
+        greedy_step_by=[1, 5],
+        start_at=0, stop_at=None, step_by=1):
+    """
+    Compares results of the greedy algorithm for different step
+    sizes
+
+    Parameters
+    ----------
+    filename : str
+             File containing a quantum program (and hence a graph)
+    fig_filename : str
+             File to output the figure    
+    greedy_step_by : list
+               list of step sizes used by the greedy algorithm
+               for greedy splitting algorithm.
+    start_at : int
+               Start size of the deletion set
+    stop_at : int
+               Stop size of the deletion set
+    step_by : int
+               Step used to increase the size of the deletion set
+    """
+    results = {}
+    metric_function = gm.get_node_by_mem_reduction
+    for step_by in greedy_step_by:
+        splitter_function = gm.split_graph_dynamic_greedy
+        treewidth_vs_n_var = get_treewidth_vs_parallel_size(
+            filename,
+            splitter_function=metric_function,
             start_at=start_at, stop_at=stop_at, step_by=step_by)
         results.update({step_by: treewidth_vs_n_var})
 
@@ -557,7 +622,7 @@ if __name__ == "__main__":
     n = 7
     d = 50
     idx = 2
-    step_by = 5
+    step_by = 10
 
     # plot_cost_vs_n_var_parallel(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
@@ -565,11 +630,11 @@ if __name__ == "__main__":
     #     start_at=0, stop_at=300, step_by=step_by
     # )
 
-    # plot_compare_parallelization_strategies(
-    #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
-    #     fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
-    #     start_at=0, stop_at=None, step_by=1
-    # )
+    plot_compare_parallelization_strategies(
+        filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
+        fig_filename=f'parallelization_strategies_{n}x{n}_{d}.png',
+        start_at=0, stop_at=None, step_by=step_by
+    )
 
     # plot_compare_step(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
@@ -602,10 +667,10 @@ if __name__ == "__main__":
     #     stop_at=40,
     #     step_by=1)
 
-    n_var_parallel = 23
-    plot_estimate_vs_depth_multiple(
-        f'cost_estimate_{n_var_parallel}.p',
-        fig_filename=f'estimate_vs_depth_multiple_{n_var_parallel}.png',
-        fps_per_node=1e12,
-        n_var_parallel_per_node=0
-    )
+    # n_var_parallel = 23
+    # plot_estimate_vs_depth_multiple(
+    #     f'cost_estimate_{n_var_parallel}.p',
+    #     fig_filename=f'estimate_vs_depth_multiple_{n_var_parallel}.png',
+    #     fps_per_node=1e12,
+    #     n_var_parallel_per_node=0
+    # )

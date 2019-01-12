@@ -721,6 +721,33 @@ def split_graph_with_mem_constraint(
     return idx_parallel, reduced_graph
 
 
+def split_graph_dynamic_greedy(
+        old_graph, n_var_parallel=0, metric_fn=get_node_by_mem_reduction,
+        greedy_step_by=1):
+    """
+    This function splits graph by greedily selecting next nodes
+    using the metric function and recomputing PEO after
+    each node elimination
+    """
+    # Simplify graph
+    graph = nx.Graph(copy.deepcopy(old_graph))
+    graph.remove_edges_from(graph.selfloop_edges())
+
+    idx_parallel = []
+    for ii in range(0, n_var_parallel, greedy_step_by):
+        # get nodes by metric in descending order
+        nodes_by_metric = metric_fn(graph)
+        nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
+
+        nodes, costs = zip(*nodes_by_metric[:greedy_step_by])
+        idx_parallel.append(nodes)
+
+        # Delete nodes
+        graph.remove_nodes_from(nodes)
+
+    return idx_parallel, graph
+
+
 def draw_graph(graph, filename):
     """
     Draws graph with spectral layout
