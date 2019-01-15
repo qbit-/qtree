@@ -186,8 +186,8 @@ def get_peo(old_graph,
     ----------
     graph : networkx.Graph
             graph of the undirected graphical model to decompose
-    quickbb_extra_args : str, optional
-             Optional commands to QuickBB. Default: --min-fill-ordering --time 60
+    quickbb_extra_args : str, default '--min-fill-ordering --time 60'
+             Optional commands to QuickBB.
 
     Returns
     -------
@@ -841,7 +841,7 @@ def get_treewidth_from_peo(old_graph, peo):
         if len(neighbors) > 1:
             edges = itertools.combinations(neighbors, 2)
         else:
-            edges = []
+            edges = None
 
         # Treewidth is the size of the maximal clique - 1
         treewidth = max(n_neighbors, treewidth)
@@ -849,7 +849,7 @@ def get_treewidth_from_peo(old_graph, peo):
         graph.remove_node(node)
 
         # Make the next clique
-        if len(edges) > 0:
+        if edges is not None:
             graph.add_edges_from(
                 edges, tensor=f'E{node}',
                 hash_tag=hash((f'E{node}',
@@ -1002,24 +1002,6 @@ def get_fillin_graph2(old_graph, peo):
     return graph
 
 
-def test_get_fillin_graph():
-    """
-    Test graph filling using the elimination order
-    """
-    import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
-
-    tim1 = time.time()
-    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
-    tim2 = time.time()
-    g2 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
-    tim3 = time.time()
-
-    assert nx.is_isomorphic(g1, g2)
-    print(tim2 - tim1, tim3 - tim2)
-
-
 def is_peo_zero_fillin(old_graph, peo):
     """
     Test if the elimination order corresponds to the zero
@@ -1104,25 +1086,30 @@ def is_peo_zero_fillin2(graph, peo):
     return True
 
 
-def test_is_zero_fillin():
+def is_clique(graph, vertices):
     """
-    Test graph filling using the elimination order
+    Tests if vertices induce a clique in the graph
+    Multigraphs are reduced to normal graphs
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+          graph
+    vertices : list
+          vertices which are tested
+    Returns
+    -------
+    bool
+        True if vertices induce a clique
     """
-    import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+    subgraph = graph.subgraph(vertices)
 
-    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    # Remove selfloops so the clique is well defined
+    selfloops = subgraph.selfloop_edges()
+    subgraph.remove_edges_from(selfloops)
 
-    tim1 = time.time()
-    print(
-        is_peo_zero_fillin(g1, list(range(1, g.number_of_nodes() + 1))))
-    tim2 = time.time()
-    print(
-        is_peo_zero_fillin2(g1, list(range(1, g.number_of_nodes() + 1))))
-    tim3 = time.time()
-
-    print(tim2 - tim1, tim3 - tim2)
+    all_edges = itertools.combinations(subgraph.nodes, 2)
+    return set(subgraph.edges()) == set(all_edges)
 
 
 def maximum_cardinality_search(
@@ -1151,12 +1138,6 @@ def maximum_cardinality_search(
 
     graph = copy.deepcopy(old_graph)
     n_nodes = graph.number_of_nodes()
-    # n_to_order = n_nodes - len(last_clique_vertices)
-
-    # if len(last_clique_vertices) > 0:
-    #     peo = last_clique_vertices
-    # else:
-    peo = []
 
     nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes)]
     for node in graph.nodes:
@@ -1164,14 +1145,29 @@ def maximum_cardinality_search(
         nodes_by_ordered_neighbors[0].append(node)
 
     last_nonempty = 0
+    peo = []
 
     for ii in range(n_nodes, 0, -1):
         # Take any unordered node with highest cardinality
-        # excluding the ones in the last_clique_vertices
-        # candidates = (set(nodes_by_ordered_neighbors[last_nonempty]) -
-        #               set(last_clique_vertices))
-        # node = candidates.pop()
-        node = nodes_by_ordered_neighbors[last_nonempty].pop()
+        # or the ones in the last_clique_vertices if it was provided
+
+        if len(last_clique_vertices) > 0:
+            # Forcibly select the node from the clique
+            node = last_clique_vertices.pop()
+            # The following should always be possible if
+            # last_clique_vertices induces a clique and I understood
+            # the theorem correctly. If it raises something is wrong
+            # with the algorithm/input is not a clique
+            try:
+                nodes_by_ordered_neighbors[last_nonempty].remove(node)
+            except ValueError:
+                if not is_clique(graph, last_clique_vertices):
+                    raise ValueError(
+                        'last_clique_vertices are not a clique')
+                else:
+                    raise AssertionError('Algorithmic error. Investigate')
+        else:
+            node = nodes_by_ordered_neighbors[last_nonempty].pop()
 
         peo = [node] + peo
         graph.node[node]['n_ordered_neighbors'] = -1
@@ -1199,22 +1195,6 @@ def maximum_cardinality_search(
                 break
 
     return peo
-
-
-# def test_maximum_cardinality_search():
-#     """Test maximum cardinality search algorithm"""
-nq, g = read_graph('inst_2x2_7_0.txt')
-peo, tw = get_peo(g)
-g_chordal = get_fillin_graph(g, peo)
-
-new_peo = maximum_cardinality_search(g_chordal)
-print(is_peo_zero_fillin(g_chordal, peo))
-print(is_peo_zero_fillin(g_chordal, new_peo))
-new_tw = get_treewidth_from_peo(g, new_peo)
-print( tw == new_tw)
-
-print('peo:', peo)
-print('new_peo:', new_peo)
 
 
 def get_equivalent_peo(peo, clique_vertices):
@@ -1302,3 +1282,67 @@ def get_upper_bound_peo(old_graph,
         eliminate_node(graph, node, self_loops=False)
 
     return peo, max_degree  # this is clique size - 1
+
+
+def test_get_fillin_graph():
+    """
+    Test graph filling using the elimination order
+    """
+    import time
+    nq, g = read_graph(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+
+    tim1 = time.time()
+    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    tim2 = time.time()
+    g2 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    tim3 = time.time()
+
+    assert nx.is_isomorphic(g1, g2)
+    print(tim2 - tim1, tim3 - tim2)
+
+
+def test_is_zero_fillin():
+    """
+    Test graph filling using the elimination order
+    """
+    import time
+    nq, g = read_graph(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+
+    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+
+    tim1 = time.time()
+    print(
+        is_peo_zero_fillin(g1, list(range(1, g.number_of_nodes() + 1))))
+    tim2 = time.time()
+    print(
+        is_peo_zero_fillin2(g1, list(range(1, g.number_of_nodes() + 1))))
+    tim3 = time.time()
+
+    print(tim2 - tim1, tim3 - tim2)
+
+
+def test_maximum_cardinality_search():
+    """Test maximum cardinality search algorithm"""
+
+    # Read graph and make its completion
+    nq, g = read_graph('inst_2x2_7_0.txt')
+    peo, tw = get_peo(g)
+    g_chordal = get_fillin_graph(g, peo)
+
+    # Select any clique
+    edge_set = set(g.edges()) - set(g.selfloop_edges())
+    some_edge = edge_set.pop()
+
+    # MCS will produce alternative PEO with this clique at the end
+    new_peo = maximum_cardinality_search(g_chordal, list(some_edge))
+
+    # Test if new peo is correct
+    assert is_peo_zero_fillin(g_chordal, peo)
+    assert is_peo_zero_fillin(g_chordal, new_peo)
+    new_tw = get_treewidth_from_peo(g, new_peo)
+    assert tw == new_tw
+
+    print('peo:', peo)
+    print('new_peo:', new_peo)
