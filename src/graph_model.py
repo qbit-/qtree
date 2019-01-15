@@ -732,7 +732,8 @@ def draw_graph(graph, filename):
             filename for image output
     """
     plt.figure(figsize=(10, 10))
-    pos = nx.spectral_layout(graph)
+    # pos = nx.spectral_layout(graph)
+    pos = nx.kamada_kawai_layout(graph)
     nx.draw(graph, pos,
             node_color=(list(graph.nodes())),
             node_size=100,
@@ -839,6 +840,8 @@ def get_treewidth_from_peo(old_graph, peo):
         n_neighbors = len(neighbors)
         if len(neighbors) > 1:
             edges = itertools.combinations(neighbors, 2)
+        else:
+            edges = []
 
         # Treewidth is the size of the maximal clique - 1
         treewidth = max(n_neighbors, treewidth)
@@ -846,7 +849,7 @@ def get_treewidth_from_peo(old_graph, peo):
         graph.remove_node(node)
 
         # Make the next clique
-        if edges is not None:
+        if len(edges) > 0:
             graph.add_edges_from(
                 edges, tensor=f'E{node}',
                 hash_tag=hash((f'E{node}',
@@ -887,6 +890,331 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
                                         tuple(clique_nodes),
                                         random.random())))
     return graph
+
+
+def get_fillin_graph(old_graph, peo):
+    """
+    Provided a graph and an order of its indices, returns a
+    triangulation of that graph corresponding to the order.
+
+    Parameters
+    ----------
+    old_graph : nx.Graph or nx.MultiGraph
+                graph to triangulate
+    peo : elimination order to use for triangulation
+
+    Returns
+    -------
+    nx.Graph or nx.MultiGraph
+                triangulated graph
+    """
+    # get a copy of graph in the elimination order
+    number_of_nodes = len(peo)
+    assert number_of_nodes == old_graph.number_of_nodes()
+
+    graph, label_dict = relabel_graph_nodes(
+        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+
+    # go over nodes and make adjacent all nodes higher in the order
+    for node in sorted(graph.nodes):
+        neighbors = list(graph[node])
+        higher_neighbors = [neighbor for neighbor
+                            in neighbors if neighbor > node]
+
+        # form all pairs of higher neighbors
+        if len(higher_neighbors) > 1:
+            edges = itertools.combinations(higher_neighbors, 2)
+
+            # Do not add edges over existing edges. This is
+            # done to work properly with MultiGraphs
+            existing_edges = graph.edges(higher_neighbors)
+            fillin_edges = [edge for edge
+                            in edges if edge not in existing_edges]
+        else:
+            fillin_edges = None
+
+        # Add edges between all neighbors
+        if fillin_edges is not None:
+            graph.add_edges_from(
+                fillin_edges, tensor=f'E{node}',
+                hash_tag=hash((f'E{node}',
+                               tuple(neighbors),
+                               random.random())))
+
+    # relabel graph back so peo is a correct elimination order
+    # of the resulting chordal graph
+    graph, _ = relabel_graph_nodes(graph, label_dict)
+    return graph
+
+
+def get_fillin_graph2(old_graph, peo):
+    """
+    Provided a graph and an order of its indices, returns a
+    triangulation of that graph corresponding to the order.
+
+    The algorithm is copied from
+    "Simple Linear Time Algorithm To Test Chordality of Graph"
+    by R. E. Tarjan and M. Yannakakis
+
+    Parameters
+    ----------
+    old_graph : nx.Graph or nx.MultiGraph
+                graph to triangulate
+    peo : elimination order to use for triangulation
+
+    Returns
+    -------
+    nx.Graph or nx.MultiGraph
+                triangulated graph
+    """
+    number_of_nodes = len(peo)
+    graph = copy.deepcopy(old_graph)
+
+    # Safeguard check. May be removed for partial triangulation
+    assert number_of_nodes == graph.number_of_nodes()
+
+    index = [0 for ii in range(number_of_nodes)]
+    f = [0 for ii in range(number_of_nodes)]
+
+    for ii in range(1, number_of_nodes+1):
+        w = peo[ii-1]
+        f[w-1] = w
+        index[w-1] = ii
+        neighbors = list(graph[w])
+        lower_neighbors = [v for v in neighbors
+                           if peo.index(v)+1 < ii]
+        hash_seed = random.random()
+        for v in lower_neighbors:
+            x = v
+            while index[x-1] < ii:
+                index[x-1] = ii
+                # Check that edge does not exist
+                # This may happen if peo is not ordered?
+                if (x, w) not in graph.edges(w):
+                    graph.add_edge(
+                        x, w,
+                        tensor=f'E{w}',
+                        hash_tag=hash((f'E{w}',
+                                       hash_seed)))
+                x = f[x-1]
+            if f[x-1] == x:
+                f[x-1] = w
+    return graph
+
+
+def test_get_fillin_graph():
+    """
+    Test graph filling using the elimination order
+    """
+    import time
+    nq, g = read_graph(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+
+    tim1 = time.time()
+    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    tim2 = time.time()
+    g2 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    tim3 = time.time()
+
+    assert nx.is_isomorphic(g1, g2)
+    print(tim2 - tim1, tim3 - tim2)
+
+
+def is_peo_zero_fillin(old_graph, peo):
+    """
+    Test if the elimination order corresponds to the zero
+    fillin of the graph.
+
+    Parameters
+    ----------
+    graph : nx.Graph or nx.MultiGraph
+                triangulated graph to test
+    peo : elimination order to use for testing
+
+    Returns
+    -------
+    bool
+            True if elimination order has zero fillin
+    """
+    # get a copy of graph in the elimination order
+
+    number_of_nodes = len(peo)
+    graph, label_dict = relabel_graph_nodes(
+        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+
+    # go over nodes and make adjacent all nodes higher in the order
+    for node in sorted(graph.nodes):
+        neighbors = list(graph[node])
+        higher_neighbors = [neighbor for neighbor
+                            in neighbors if neighbor > node]
+
+        # form all pairs of higher neighbors
+        if len(higher_neighbors) > 1:
+            edges = itertools.combinations(higher_neighbors, 2)
+
+            # Do not add edges over existing edges. This is
+            # done to work properly with MultiGraphs
+            existing_edges = graph.edges(higher_neighbors)
+            fillin_edges = [edge for edge
+                            in edges if edge not in existing_edges]
+        else:
+            fillin_edges = []
+
+        # Add edges between all neighbors
+        if len(fillin_edges) > 0:
+            return False
+    return True
+
+
+def is_peo_zero_fillin2(graph, peo):
+    """
+    Test if the elimination order corresponds to the zero
+    fillin of the graph.
+
+    Parameters
+    ----------
+    graph : nx.Graph or nx.MultiGraph
+                triangulated graph to test
+    peo : elimination order to use for testing
+
+    Returns
+    -------
+    bool
+            True if elimination order has zero fillin
+    """
+    number_of_nodes = len(peo)
+
+    index = [0 for ii in range(number_of_nodes)]
+    f = [0 for ii in range(number_of_nodes)]
+
+    for ii in range(1, number_of_nodes+1):
+        w = peo[ii-1]
+        f[w-1] = w
+        index[w-1] = ii
+        neighbors = list(graph[w])
+        lower_neighbors = [v for v in neighbors
+                           if peo.index(v)+1 < ii]
+        for v in lower_neighbors:
+            index[v-1] = ii
+            if f[v-1] == v:
+                f[v-1] = w
+        for v in lower_neighbors:
+            if index[f[v-1] - 1] < ii:
+                return False
+    return True
+
+
+def test_is_zero_fillin():
+    """
+    Test graph filling using the elimination order
+    """
+    import time
+    nq, g = read_graph(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+
+    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+
+    tim1 = time.time()
+    print(
+        is_peo_zero_fillin(g1, list(range(1, g.number_of_nodes() + 1))))
+    tim2 = time.time()
+    print(
+        is_peo_zero_fillin2(g1, list(range(1, g.number_of_nodes() + 1))))
+    tim3 = time.time()
+
+    print(tim2 - tim1, tim3 - tim2)
+
+
+def maximum_cardinality_search(
+        old_graph, last_clique_vertices=[]):
+    """
+    This function builds elimination order of a chordal graph
+    using maximum cardinality search algorithm.
+    If last_clique_vertices is
+    provided the algorithm will place these indices at the end
+    of the elimination list in the same order as provided.
+
+    Parameters
+    ----------
+    graph : nx.Graph or nx.MultiGraph
+            chordal graph to build the elimination order
+    last_clique_vertices : list, default []
+            list of vertices to be placed at the end of
+            the elimination order
+    Returns
+    -------
+    list
+        Perfect elimination order
+    """
+
+    # Check is last_clique_vertices is a clique
+
+    graph = copy.deepcopy(old_graph)
+    n_nodes = graph.number_of_nodes()
+    # n_to_order = n_nodes - len(last_clique_vertices)
+
+    # if len(last_clique_vertices) > 0:
+    #     peo = last_clique_vertices
+    # else:
+    peo = []
+
+    nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes)]
+    for node in graph.nodes:
+        graph.node[node]['n_ordered_neighbors'] = 0
+        nodes_by_ordered_neighbors[0].append(node)
+
+    last_nonempty = 0
+
+    for ii in range(n_nodes, 0, -1):
+        # Take any unordered node with highest cardinality
+        # excluding the ones in the last_clique_vertices
+        # candidates = (set(nodes_by_ordered_neighbors[last_nonempty]) -
+        #               set(last_clique_vertices))
+        # node = candidates.pop()
+        node = nodes_by_ordered_neighbors[last_nonempty].pop()
+
+        peo = [node] + peo
+        graph.node[node]['n_ordered_neighbors'] = -1
+
+        unordered_neighbors = [
+            (neighbor, graph.node[neighbor]['n_ordered_neighbors'])
+            for neighbor in graph[node]
+            if graph.node[neighbor]['n_ordered_neighbors'] >= 0]
+
+        # Increase number of ordered neighbors for all adjacent
+        # unordered nodes
+        for neighbor, n_ordered_neighbors in unordered_neighbors:
+            nodes_by_ordered_neighbors[n_ordered_neighbors].remove(
+                neighbor)
+            graph.node[neighbor][
+                'n_ordered_neighbors'] = n_ordered_neighbors + 1
+            nodes_by_ordered_neighbors[n_ordered_neighbors + 1].append(
+                neighbor)
+
+        last_nonempty += 1
+        while last_nonempty >= 0:
+            if len(nodes_by_ordered_neighbors[last_nonempty]) == 0:
+                last_nonempty -= 1
+            else:
+                break
+
+    return peo
+
+
+# def test_maximum_cardinality_search():
+#     """Test maximum cardinality search algorithm"""
+nq, g = read_graph('inst_2x2_7_0.txt')
+peo, tw = get_peo(g)
+g_chordal = get_fillin_graph(g, peo)
+
+new_peo = maximum_cardinality_search(g_chordal)
+print(is_peo_zero_fillin(g_chordal, peo))
+print(is_peo_zero_fillin(g_chordal, new_peo))
+new_tw = get_treewidth_from_peo(g, new_peo)
+print( tw == new_tw)
+
+print('peo:', peo)
+print('new_peo:', new_peo)
 
 
 def get_equivalent_peo(peo, clique_vertices):
