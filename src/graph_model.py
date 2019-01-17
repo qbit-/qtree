@@ -741,19 +741,28 @@ def split_graph_dynamic_greedy(
     each node elimination
     """
     # Simplify graph
-    graph = nx.Graph(copy.deepcopy(old_graph))
-    graph.remove_edges_from(graph.selfloop_edges())
+    graph = get_simple_graph(old_graph)
 
     idx_parallel = []
     for ii in range(0, n_var_parallel, greedy_step_by):
+        # Get optimal order
+        peo = get_peo(graph)
+        graph_optimal, inverse_order = relabel_graph_nodes(
+            graph, dict(zip(peo, range(1, len(peo)+1))))
+
         # get nodes by metric in descending order
-        nodes_by_metric = metric_fn(graph)
-        nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
+        nodes_by_metric_optimal = metric_fn(graph_optimal)
+        nodes_by_metric_optimal.sort(
+            key=lambda pair: pair[1], reverse=True)
 
-        nodes, costs = zip(*nodes_by_metric[:greedy_step_by])
-        idx_parallel.append(nodes)
+        # Take first nodes by cost and map them back to original
+        # order
+        nodes_optimal, costs = zip(
+            *nodes_by_metric_optimal[:greedy_step_by])
+        nodes = [inverse_order[n] for n in nodes_optimal]
 
-        # Delete nodes
+        # Update list and delete nodes
+        idx_parallel += nodes
         graph.remove_nodes_from(nodes)
 
     return idx_parallel, graph
