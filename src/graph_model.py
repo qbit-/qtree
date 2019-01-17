@@ -172,6 +172,17 @@ def relabel_graph_nodes(graph, label_dict=None):
     return new_graph, label_dict
 
 
+def get_simple_graph(old_graph):
+    """
+    Simplifies graph: MultiGraphs are converted to Graphs,
+    selfloops are removed
+    """
+    graph = nx.Graph(old_graph, copy=True)
+    graph.remove_edges_from(graph.selfloop_edges())
+
+    return graph
+
+
 def get_peo(old_graph,
             quickbb_extra_args=" --time 60 --min-fill-ordering "):
     """
@@ -628,23 +639,23 @@ def split_graph_by_metric(
     -------
     idx_parallel : list
           variables removed by parallelization
-    graph : networkx.Graph or networkx.MultiGraph
+    graph : networkx.Graph
           new graph without parallelized variables
     """
-    graph = nx.Graph(copy.deepcopy(old_graph))
-    graph.remove_edges_from(graph.selfloop_edges())
+    graph = get_simple_graph(old_graph)
 
     # get nodes by metric in descending order
     nodes_by_metric = metric_fn(graph)
     nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
 
-    for idx, (node, metric) in enumerate(nodes_by_metric):
-        if node in forbidden_nodes:
-            nodes_by_metric.pop(idx)
+    nodes_by_metric_allowed = []
+    for node, metric in nodes_by_metric:
+        if node not in forbidden_nodes:
+            nodes_by_metric_allowed.append((node, metric))
 
     idx_parallel = []
     for ii in range(n_var_parallel):
-        node, metric = nodes_by_metric[ii]
+        node, metric = nodes_by_metric_allowed[ii]
         idx_parallel.append(node)
 
     for idx in idx_parallel:
@@ -829,9 +840,7 @@ def get_treewidth_from_peo(old_graph, peo):
             treewidth corresponding to peo
     """
     # Copy graph and make it simple
-    graph = nx.Graph(old_graph, copy=True)
-    selfloop_edges = list(graph.selfloop_edges())
-    graph.remove_edges_from(selfloop_edges)
+    graph = get_simple_graph(old_graph)
 
     treewidth = 0
     for node in peo:
@@ -883,7 +892,8 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
     if len(clique_nodes) == 0:
         return graph
 
-    edges = itertools.combinations(clique_nodes, 2)
+    edges = [tuple(sorted(edge)) for edge in
+             itertools.combinations(clique_nodes, 2)]
     node = min(clique_nodes)
     graph.add_edges_from(edges, tensor=name_prefix + f'{node}',
                          hash_tag=hash((name_prefix + f'{node}',
@@ -1086,7 +1096,7 @@ def is_peo_zero_fillin2(graph, peo):
     return True
 
 
-def is_clique(graph, vertices):
+def is_clique(old_graph, vertices):
     """
     Tests if vertices induce a clique in the graph
     Multigraphs are reduced to normal graphs
@@ -1102,14 +1112,19 @@ def is_clique(graph, vertices):
     bool
         True if vertices induce a clique
     """
-    subgraph = graph.subgraph(vertices)
+    subgraph = old_graph.subgraph(vertices)
 
     # Remove selfloops so the clique is well defined
-    selfloops = subgraph.selfloop_edges()
-    subgraph.remove_edges_from(selfloops)
+    have_edges = set(subgraph.edges()) - set(subgraph.selfloop_edges())
 
-    all_edges = itertools.combinations(subgraph.nodes, 2)
-    return set(subgraph.edges()) == set(all_edges)
+    # Sort all edges to be in the (low, up) order
+    have_edges = set([tuple(sorted(edge)) for edge in have_edges])
+
+    want_edges = set([
+        tuple(sorted(edge))
+        for edge in itertools.combinations(vertices, 2)
+    ])
+    return want_edges == have_edges
 
 
 def maximum_cardinality_search(
@@ -1197,16 +1212,21 @@ def maximum_cardinality_search(
     return peo
 
 
-def get_equivalent_peo(peo, clique_vertices):
+def get_equivalent_peo(old_graph, peo, clique_vertices):
     """
     This function returns an equivalent peo with
     the clique_indices in the rest of the new order
     """
-    new_peo = copy.deepcopy(peo)
-    for node in clique_vertices:
-        new_peo.remove(node)
+    # Ensure that the graph is simple
+    graph = get_simple_graph(old_graph)
 
-    new_peo = new_peo + clique_vertices
+    # Complete the graph
+    graph_chordal = get_fillin_graph(graph, peo)
+
+    # MCS will produce alternative PEO with this clique at the end
+    new_peo = maximum_cardinality_search(graph_chordal,
+                                         list(clique_vertices))
+
     return new_peo
 
 
@@ -1346,3 +1366,17 @@ def test_maximum_cardinality_search():
 
     print('peo:', peo)
     print('new_peo:', new_peo)
+
+
+def test_is_clique():
+    """Test is_clique"""
+    nq, g = read_graph('inst_2x2_7_0.txt')
+
+    # select some random vertices
+    vertices = list(np.random.choice(g.nodes, 4, replace=False))
+    while is_clique(g, vertices):
+        vertices = list(np.random.choice(g.nodes, 4, replace=False))
+
+    g_new = make_clique_on(g, vertices)
+
+    assert is_clique(g_new, vertices)
