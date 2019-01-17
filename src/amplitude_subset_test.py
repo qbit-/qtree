@@ -64,10 +64,11 @@ def eliminate_nodes_from(graph, peo_partial):
     for node in peo_partial:
         gm.eliminate_node(graph, node, self_loops=False)
 
+
 def test_reordering_hypothesis(filenames):
     """
     Test if the reordering hypotesis holds.
-    Hint: it fails in the current version
+    Wow, new method works!
     """
 
     for filename in filenames:
@@ -86,8 +87,9 @@ def test_reordering_hypothesis(filenames):
 
         peo_original, treewidth_original = gm.get_peo(graph)
         peo_upperbound, treewidth_upperbound = gm.get_upper_bound_peo(graph)
-
-        peo_new = gm.get_equivalent_peo(peo_original, free_variables)
+        # Magic procedure to transform peo using chordal graphs
+        peo_new = gm.get_equivalent_peo(
+            graph, peo_original, free_variables)
         treewidth_new = gm.get_treewidth_from_peo(graph, peo_new)
 
         # Check if we do not screw up anything with quickbb
@@ -181,10 +183,10 @@ def get_cost_vs_amp_subset_size(filename, step_by=1, start_at=0, stop_at=None):
         graph = gm.make_clique_on(graph_raw, free_variables)
 
         # This is the best possible treewidth.
-        # Our method of PEO transformation yields larger values
+        # What will our method produce?
         peo_best, treewidth_best = gm.get_peo(graph)
 
-        peo = gm.get_equivalent_peo(peo_best, free_variables)
+        peo = gm.get_equivalent_peo(graph, peo_best, free_variables)
         treewidth = gm.get_treewidth_from_peo(graph, peo)
 
         graph_final, label_dict = gm.relabel_graph_nodes(
@@ -290,13 +292,14 @@ def get_cost_vs_amp_subset_size_parallel(
             n_var_parallel = graph.number_of_nodes() - len(free_variables)
 
         idx_parallel, reduced_graph = gm.split_graph_by_metric(
-            graph_raw, n_var_parallel)
+            graph, n_var_parallel, forbidden_nodes=free_variables)
 
         # This is the best possible treewidth.
-        # Our method of PEO transformation yields larger values
+        # What will our method produce?
         peo_best, treewidth_best = gm.get_peo(reduced_graph)
 
-        peo = gm.get_equivalent_peo(peo_best, free_variables)
+        peo = gm.get_equivalent_peo(
+            reduced_graph, peo_best, free_variables)
         treewidth = gm.get_treewidth_from_peo(reduced_graph, peo)
 
         graph_final, label_dict = gm.relabel_graph_nodes(
@@ -360,11 +363,11 @@ def plot_cost_vs_amp_subset_size(
         stop_at=stop_at, step_by=step_by,
         n_var_parallel=n_var_parallel)
     (max_mem, min_mem, flops,
-    total_mem_max, total_min_mem, total_flops,
-    max_mem_best, min_mem_best, flops_best,
-    total_mem_max_best, total_min_mem_best,
-    total_flops_best, treewidth, treewidth_best,
-    av_flop_per_mem) = costs
+     total_mem_max, total_min_mem, total_flops,
+     max_mem_best, min_mem_best, flops_best,
+     total_mem_max_best, total_min_mem_best,
+     total_flops_best, treewidth, treewidth_best,
+     av_flop_per_mem) = costs
 
     x_range = list(range(start_at,
                          start_at+len(max_mem)*step_by, step_by))
@@ -408,13 +411,13 @@ def plot_cost_vs_amp_subset_size(
 
 
 if __name__ == "__main__":
-    #test_minfill_heuristic()
-    #test_reordering_hypothesis(['test_circuits/inst/cz_v2/4x4/inst_4x4_10_0.txt'])
-    # plot_cost_vs_amp_subset_size(
-    #     'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
-    #     fig_filename='costs_amp_subset_6x6_25.png',
-    #     start_at=0, step_by=1
-    # )
+    # test_minfill_heuristic()
+    # test_reordering_hypothesis(['test_circuits/inst/cz_v2/4x4/inst_4x4_10_0.txt'])
+    plot_cost_vs_amp_subset_size(
+        'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
+        fig_filename='costs_amp_subset_6x6_25.png',
+        start_at=0, step_by=1
+    )
     plot_cost_vs_amp_subset_size(
         'test_circuits/inst/cz_v2/7x7/inst_7x7_39_0.txt',
         fig_filename='taihulight_amp_subset_7x7_39.png',
@@ -434,4 +437,3 @@ if __name__ == "__main__":
     print(min_mem[0]/2**30)
     print(np.log2(flops[0]))
     print(flops[0] / 10**10)
-
