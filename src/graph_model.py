@@ -9,6 +9,7 @@ import networkx as nx
 import itertools
 import matplotlib.pyplot as plt
 import random
+import os
 
 from collections import Counter
 
@@ -184,7 +185,8 @@ def get_simple_graph(old_graph):
 
 
 def get_peo(old_graph,
-            quickbb_extra_args=" --time 60 --min-fill-ordering "):
+            quickbb_extra_args=" --time 60 --min-fill-ordering ",
+            input_suffix=None, keep_input=False):
     """
     Calculates the elimination order for an undirected
     graphical model of the circuit. Optionally finds `n_qubit_parralel`
@@ -199,7 +201,11 @@ def get_peo(old_graph,
             graph of the undirected graphical model to decompose
     quickbb_extra_args : str, default '--min-fill-ordering --time 60'
              Optional commands to QuickBB.
-
+    input_suffix : str, default None
+             Optional suffix for the folders. If None is provided a random
+             suffix is generated
+    keep_input : bool, default False
+             Whether to keep input files for debugging
     Returns
     -------
     peo : list
@@ -208,7 +214,10 @@ def get_peo(old_graph,
           treewidth of the decomposition
     """
 
-    cnffile = 'output/quickbb.cnf'
+    if input_suffix is None:
+        input_suffix = ''.join(str(random.randint(0, 9))
+                               for n in range(8))
+    cnffile = 'output/quickbb.' + input_suffix + '.cnf'
     initial_indices = old_graph.nodes()
     graph, label_dict = relabel_graph_nodes(old_graph)
 
@@ -246,6 +255,10 @@ def get_peo(old_graph,
 
     assert(sorted(peo) == sorted(initial_indices))
     log.info('Final peo from quickBB:\n{}'.format(peo))
+
+    # remove input file to honor EPA
+    if not keep_input:
+        os.remove(cnffile)
 
     return peo, treewidth
 
@@ -746,7 +759,7 @@ def split_graph_dynamic_greedy(
     idx_parallel = []
     for ii in range(0, n_var_parallel, greedy_step_by):
         # Get optimal order
-        peo = get_peo(graph)
+        peo, tw = get_peo(graph)
         graph_optimal, inverse_order = relabel_graph_nodes(
             graph, dict(zip(peo, range(1, len(peo)+1))))
 
@@ -807,7 +820,7 @@ def wrap_general_graph_for_qtree(graph):
     """
     # relabel nodes starting from 1
     label_dict = dict(zip(
-        range(graph.number_of_nodes()),
+        list(sorted(graph.nodes)),
         range(1, graph.number_of_nodes()+1)
     ))
 
@@ -1382,17 +1395,23 @@ def test_is_zero_fillin():
 def test_maximum_cardinality_search():
     """Test maximum cardinality search algorithm"""
 
-    # Read graph and make its completion
-    nq, g = read_graph('inst_2x2_7_0.txt')
+    # Read graph
+    nq, old_g = read_graph('inst_2x2_7_0.txt')
+
+    # Make random clique
+    vertices = list(np.random.choice(old_g.nodes, 4, replace=False))
+    while is_clique(old_g, vertices):
+        vertices = list(np.random.choice(old_g.nodes, 4, replace=False))
+
+    log.info(f"Clique on vertices: {vertices}")
+    g = make_clique_on(old_g, vertices)
+
+    # Make graph completion
     peo, tw = get_peo(g)
     g_chordal = get_fillin_graph(g, peo)
 
-    # Select any clique
-    edge_set = set(g.edges()) - set(g.selfloop_edges())
-    some_edge = edge_set.pop()
-
     # MCS will produce alternative PEO with this clique at the end
-    new_peo = maximum_cardinality_search(g_chordal, list(some_edge))
+    new_peo = maximum_cardinality_search(g_chordal, list(vertices))
 
     # Test if new peo is correct
     assert is_peo_zero_fillin(g_chordal, peo)
