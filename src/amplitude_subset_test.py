@@ -410,6 +410,94 @@ def plot_cost_vs_amp_subset_size(
     fig.savefig(fig_filename)
 
 
+def dump_nonequivalent_treewidth_graphs(
+        filename, out_filename,
+        step_by=1, start_at=0, stop_at=None,
+        n_var_parallel=0):
+    """
+    Performs an experiment on peo transformation.
+    Dumps the graphs and peo where treewidth of the
+    transformed graph does not match the original
+
+    It looks like graph_model.get_treewidth_from_peo()
+    returns the treewidth which is larger than quickbb reports
+    This larger treewidth does not change after the
+    transformation.
+    """
+    try:
+        data = pd.read_pickle(out_filename)
+    except FileNotFoundError:
+        # lays down the structure of data
+        data = pd.DataFrame(
+            [],
+            index=['clique_vertices', 'graph', 'graph_chordal', 'peo',
+                     'new_peo', 'treewidth', 'new_treewidth'],
+            columns=['clique_size']
+        )
+
+    # Load graph and get the number of nodes
+    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+
+    if stop_at is None or stop_at > n_qubits:
+        stop_at = n_qubits + 1
+
+    for n_free_qubits in range(start_at, stop_at, step_by):
+        free_qubits = range(n_free_qubits)
+
+        # Rebuild the graph with a given number of free qubits
+        n_qubits, buckets, free_variables = opt.read_buckets(
+            filename,
+            free_qubits=free_qubits)
+        graph_raw = opt.buckets2graph(buckets)
+
+        # Make a clique on the nodes we do not want to remove
+        graph = gm.make_clique_on(graph_raw, free_variables)
+
+        # Remove n_var_parallel variables from graph
+        if n_var_parallel > graph.number_of_nodes() - len(free_variables):
+            n_var_parallel = graph.number_of_nodes() - len(free_variables)
+
+        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+            graph, n_var_parallel, forbidden_nodes=free_variables)
+
+        # This is the best possible treewidth.
+        peo_best, treewidth_best = gm.get_peo(reduced_graph)
+
+        peo = gm.get_equivalent_peo(
+            reduced_graph, peo_best, free_variables)
+        treewidth = gm.get_treewidth_from_peo(reduced_graph, peo)
+
+        # Chordal graph
+        graph_chordal = gm.get_fillin_graph(reduced_graph, peo_best)
+
+        # Merge current result with the rest
+        data[n_free_qubits] = [
+            free_variables, reduced_graph, graph_chordal, peo_best,
+            peo, treewidth_best, treewidth]
+
+        data.to_pickle(out_filename)
+
+    return data
+
+
+def test_mcs_with_graphs():
+    """
+    This tests the MCS algorithm with hand-made graphs
+    """
+    g1 = nx.Graph()
+    g1.add_edges_from([(1, 2), (2, 3), (3, 1),
+                       (3, 4), (4, 5), (5, 6),
+                       (6, 4), (6, 7), (7, 8),
+                       (8, 9), (9, 7)])
+    g1 = gm.wrap_general_graph_for_qtree(g1)
+    gm.draw_graph(g1, 'testgr.png')
+
+    peo = gm.maximum_cardinality_search(
+        g1, last_clique_vertices=[4, 6, 5])
+
+    tw = gm.get_treewidth_from_peo(g1, peo)
+
+
 if __name__ == "__main__":
     # test_minfill_heuristic()
     # test_reordering_hypothesis(['test_circuits/inst/cz_v2/4x4/inst_4x4_10_0.txt'])
@@ -423,6 +511,12 @@ if __name__ == "__main__":
         fig_filename='taihulight_amp_subset_7x7_39.png',
         start_at=0, step_by=1, n_var_parallel=23
     )
+    # dump_nonequivalent_treewidth_graphs(
+    #     'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
+    #     out_filename='tw_graphs.p',
+    #     start_at=5, step_by=1, stop_at=16
+    # )
+
     # Taihuligh full vector estimate
     costs = get_cost_vs_amp_subset_size_parallel(
         'test_circuits/inst/cz_v2/7x7/inst_7x7_53_0.txt',
