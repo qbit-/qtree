@@ -203,7 +203,7 @@ def plot_compare_parallelization_strategies(
         'by mem reduction iterative': partial(
             gm.split_graph_dynamic_greedy,
             metric_fn=gm.get_node_by_mem_reduction,
-            greedy_step_by=10
+            greedy_step_by=step_by
         ),
     }
 
