@@ -1279,6 +1279,19 @@ def get_equivalent_peo(old_graph, peo, clique_vertices):
     return new_peo
 
 
+def get_equivalent_peo_naive(peo, clique_vertices):
+    """
+    This function returns an equivalent peo with
+    the clique_indices in the rest of the new order
+    """
+    new_peo = copy.deepcopy(peo)
+    for node in clique_vertices:
+        new_peo.remove(node)
+
+    new_peo = new_peo + clique_vertices
+    return new_peo
+
+
 def get_node_min_fill_heuristic(graph):
     """
     Calculates the next node for the min-fill
