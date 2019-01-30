@@ -86,7 +86,11 @@ def test_reordering_hypothesis(filenames):
         graph = gm.make_clique_on(graph_initial, free_variables)
 
         peo_original, treewidth_original = gm.get_peo(graph)
+        # Now calculate the real treewidth, as it may be higher then the value
+        # returned by quickbb
+        treewidth_original = gm.get_treewidth_from_peo(graph, peo_original)
         peo_upperbound, treewidth_upperbound = gm.get_upper_bound_peo(graph)
+
         # Magic procedure to transform peo using chordal graphs
         peo_new = gm.get_equivalent_peo(
             graph, peo_original, free_variables)
@@ -135,100 +139,9 @@ def test_reordering_hypothesis(filenames):
             print('FAIL')
 
 
-def get_cost_vs_amp_subset_size(filename, step_by=1, start_at=0, stop_at=None):
-    """
-    Calculates memory cost vs the number of calculated amplitudes
-    for a given circuit. Amplitudes are calculated in subsets up to the
-    full state vector
-
-    Parameters
-    ----------
-    filename : str
-           input file
-    start_at : int, optional
-           number of full qubits to start. Default 0
-    stop_at : int, optional
-           number of full qubits to stop at. Default all qubits
-    step_by : int, optional
-           add this number of full qubits in the next result. Default 1
-    Returns
-    -------
-          max_mem - maximal memory (if all intermediates are kept)
-          min_mem - minimal possible memory for the algorithm
-          flops - flops count
-          max_mem_best - maximal memory if PEO would be optimal
-          min_mem_best - minimal memory if PEO would be optimal
-          flops_best - flops count if PEO would be optimal
-          treewidth - treewidth returned by quickBB
-          treewidth_best - treewidth if PEO would be optimal
-          av_flop_per_mem - average memory access per flop
-    """
-    # Load graph and get the number of nodes
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
-
-    if stop_at is None or stop_at > n_qubits:
-        stop_at = n_qubits + 1
-
-    results = []
-    for n_free_qubits in range(start_at, stop_at, step_by):
-        free_qubits = range(n_free_qubits)
-
-        # Rebuild the graph with a given number of free qubits
-        n_qubits, buckets, free_variables = opt.read_buckets(
-            filename,
-            free_qubits=free_qubits)
-        graph_raw = opt.buckets2graph(buckets)
-
-        # Make a clique on the nodes we do not want to remove
-        graph = gm.make_clique_on(graph_raw, free_variables)
-
-        # This is the best possible treewidth.
-        # What will our method produce?
-        peo_best, treewidth_best = gm.get_peo(graph)
-
-        peo = gm.get_equivalent_peo(graph, peo_best, free_variables)
-        treewidth = gm.get_treewidth_from_peo(graph, peo)
-
-        graph_final, label_dict = gm.relabel_graph_nodes(
-            graph, dict(zip(peo, range(1, len(peo) + 1)))
-        )
-
-        mem_cost, flop_cost = gm.cost_estimator(graph_final)
-
-        max_mem = sum(mem_cost)
-        min_mem = max(mem_cost)
-        flops = sum(flop_cost)
-
-        graph_best, label_dict = gm.relabel_graph_nodes(
-            graph, dict(zip(peo_best, range(1, len(peo_best) + 1)))
-        )
-
-        mem_cost_best, flop_cost_best = gm.cost_estimator(graph_best)
-
-        max_mem_best = sum(mem_cost_best)
-        min_mem_best = max(mem_cost_best)
-        flops_best = sum(flop_cost_best)
-
-        flop_per_mem = [flop / mem for mem, flop
-                        in zip(mem_cost, flop_cost)]
-        av_flop_per_mem = sum(flop_per_mem) / len(flop_per_mem)
-
-        results.append((max_mem,
-                        min_mem,
-                        flops,
-                        max_mem_best,
-                        min_mem_best,
-                        flops_best,
-                        treewidth,
-                        treewidth_best,
-                        av_flop_per_mem))
-
-    return tuple(zip(*results))
-
-
 def get_cost_vs_amp_subset_size_parallel(
         filename, step_by=1, start_at=0, stop_at=None,
-        n_var_parallel=0):
+        n_var_parallel=0, peo_transform_fun=gm.get_equivalent_peo):
     """
     Calculates memory cost vs the number of calculated amplitudes
     for a given circuit. Amplitudes are calculated in subsets up to the
@@ -246,6 +159,10 @@ def get_cost_vs_amp_subset_size_parallel(
            add this number of full qubits in the next result. Default 1
     n_var_parallel : int, optional
            number of variables to parallelize over. Default 0
+    peo_transform_fun : function, default gm.get_equivalent_peo
+           function used to transform PEO. It's signature should be
+           f(graph, peo, end_indices)  -> new_peo
+
     Returns
     -------
           max_mem - maximal memory (if all intermediates are kept)
@@ -297,6 +214,9 @@ def get_cost_vs_amp_subset_size_parallel(
         # This is the best possible treewidth.
         # What will our method produce?
         peo_best, treewidth_best = gm.get_peo(reduced_graph)
+        # Recalculate treewidth as quickbb returns lower values
+        # than we actually have
+        treewidth_best = gm.get_treewidth_from_peo(graph, peo_best)
 
         peo = gm.get_equivalent_peo(
             reduced_graph, peo_best, free_variables)
@@ -353,7 +273,8 @@ def plot_cost_vs_amp_subset_size(
         filename,
         fig_filename='flops_vs_amp_subset_size.png',
         start_at=0, stop_at=None, step_by=5,
-        n_var_parallel=0):
+        n_var_parallel=0,
+        peo_transform_fun=gm.get_equivalent_peo):
     """
     Plots cost estimate for the evaluation of subsets of
     amplitudes
@@ -361,7 +282,8 @@ def plot_cost_vs_amp_subset_size(
     costs = get_cost_vs_amp_subset_size_parallel(
         filename, start_at=start_at,
         stop_at=stop_at, step_by=step_by,
-        n_var_parallel=n_var_parallel)
+        n_var_parallel=n_var_parallel,
+        peo_transform_fun=peo_transform_fun)
     (max_mem, min_mem, flops,
      total_mem_max, total_min_mem, total_flops,
      max_mem_best, min_mem_best, flops_best,

@@ -1279,7 +1279,7 @@ def get_equivalent_peo(old_graph, peo, clique_vertices):
     return new_peo
 
 
-def get_equivalent_peo_naive(peo, clique_vertices):
+def get_equivalent_peo_naive(graph, peo, clique_vertices):
     """
     This function returns an equivalent peo with
     the clique_indices in the rest of the new order
