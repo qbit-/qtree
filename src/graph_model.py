@@ -781,15 +781,16 @@ def split_graph_dynamic_greedy(
     return idx_parallel, graph
 
 
-def draw_graph(graph, filename):
+def draw_graph(graph, filename=''):
     """
     Draws graph with spectral layout
     Parameters
     ----------
     graph : networkx.Graph
             graph to draw
-    filename : str
-            filename for image output
+    filename : str, default ''
+            filename for image output.
+            If empty string is passed the graph is displayed
     """
     plt.figure(figsize=(10, 10))
     # pos = nx.spectral_layout(graph)
@@ -800,7 +801,10 @@ def draw_graph(graph, filename):
             cmap=plt.cm.Blues,
             with_labels=True,
     )
-    plt.savefig(filename)
+    if len(filename) == 0:
+        plt.show()
+    else:
+        plt.savefig(filename)
 
 
 def wrap_general_graph_for_qtree(graph):
@@ -948,6 +952,9 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
                          hash_tag=hash((name_prefix + f'{node}',
                                         tuple(clique_nodes),
                                         random.random())))
+    clique_size = len(clique_nodes)
+    log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
+
     return graph
 
 
@@ -1416,7 +1423,6 @@ def test_maximum_cardinality_search():
     while is_clique(old_g, vertices):
         vertices = list(np.random.choice(old_g.nodes, 4, replace=False))
 
-    log.info(f"Clique on vertices: {vertices}")
     g = make_clique_on(old_g, vertices)
 
     # Make graph completion

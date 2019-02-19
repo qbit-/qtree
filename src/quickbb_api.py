@@ -12,7 +12,7 @@ from src.logger_setup import log
 
 def gen_cnf(filename, old_graph):
     """
-    Genarate QuickBB input file for the graph.
+    Generate QuickBB input file for the graph.
     We always convert MultiGraph's to Graph' and remove self loops,
     because QuickBB does not understand these situations.
 

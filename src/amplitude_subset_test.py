@@ -216,7 +216,7 @@ def get_cost_vs_amp_subset_size_parallel(
         peo_best, treewidth_best = gm.get_peo(reduced_graph)
         # Recalculate treewidth as quickbb returns lower values
         # than we actually have
-        treewidth_best = gm.get_treewidth_from_peo(graph, peo_best)
+        treewidth_best = gm.get_treewidth_from_peo(reduced_graph, peo_best)
 
         peo = gm.get_equivalent_peo(
             reduced_graph, peo_best, free_variables)
@@ -295,7 +295,7 @@ def plot_cost_vs_amp_subset_size(
                          start_at+len(max_mem)*step_by, step_by))
     fig, axes = plt.subplots(1, 3, sharey=False, figsize=(18, 6))
 
-    axes[0].semilogy(x_range, min_mem, 'm-', label='as implemented')
+    axes[0].semilogy(x_range, min_mem, 'mo', label='transformed order')
     axes[0].semilogy(x_range, min_mem_best, 'b-', label='best possible')
     num_amplitudes = [2**x for x in x_range]
     mem_one_amplitude_equivalent = [
@@ -308,7 +308,7 @@ def plot_cost_vs_amp_subset_size(
     axes[0].set_title('Minimal memory requirement')
     axes[0].legend()
 
-    axes[1].semilogy(x_range, flops, 'm-', label='as implemented')
+    axes[1].semilogy(x_range, flops, 'mo', label='transformed order')
     axes[1].semilogy(x_range, flops_best, 'b-', label='best possible')
     num_amplitudes = [2**x for x in x_range]
     flops_one_amplitude_equivalent = [
@@ -322,8 +322,8 @@ def plot_cost_vs_amp_subset_size(
     axes[1].set_title('Flops cost')
     axes[1].legend(loc='lower right')
 
-    axes[2].plot(x_range, treewidth, 'm-',
-                 label='treewidth as implemented')
+    axes[2].plot(x_range, treewidth, 'mo',
+                 label='transformed order')
     axes[2].plot(x_range, treewidth_best, 'b-', label='treewidth best')
     axes[2].set_xlabel('number of full qubits')
     axes[2].set_ylabel('treewidth')
