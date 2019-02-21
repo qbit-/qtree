@@ -747,11 +747,38 @@ def split_graph_with_mem_constraint(
 
 def split_graph_dynamic_greedy(
         old_graph, n_var_parallel=0, metric_fn=get_node_by_mem_reduction,
-        greedy_step_by=1):
+        greedy_step_by=1, forbidden_nodes=[]):
     """
     This function splits graph by greedily selecting next nodes
     using the metric function and recomputing PEO after
     each node elimination
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+                graph to split by parallelizing over variables
+                and to contract
+
+                Parallel edges and self-loops in the graph are
+                removed (if any) before the calculation of metric
+
+    n_var_parallel : int
+                number of variables to eliminate by parallelization
+    metric_fn : function, optional
+                function to evaluate node metric.
+                Default get_node_by_mem_reduction
+    greedy_step_by : int, default 1
+                Step size for the greedy algorithm
+
+    forbidden_nodes : list, optional
+                nodes in this list will not be considered
+                for deletion. Default [].
+    Returns
+    -------
+    idx_parallel : list
+          variables removed by parallelization
+    graph : networkx.Graph
+          new graph without parallelized variables
     """
     # Simplify graph
     graph = get_simple_graph(old_graph)
@@ -768,10 +795,15 @@ def split_graph_dynamic_greedy(
         nodes_by_metric_optimal.sort(
             key=lambda pair: pair[1], reverse=True)
 
+        nodes_by_metric_allowed = []
+        for node, metric in nodes_by_metric_optimal:
+            if node not in forbidden_nodes:
+                nodes_by_metric_allowed.append((node, metric))
+
         # Take first nodes by cost and map them back to original
         # order
         nodes_optimal, costs = zip(
-            *nodes_by_metric_optimal[:greedy_step_by])
+            *nodes_by_metric_allowed[:greedy_step_by])
         nodes = [inverse_order[n] for n in nodes_optimal]
 
         # Update list and delete nodes
@@ -1371,6 +1403,422 @@ def get_upper_bound_peo(old_graph,
         eliminate_node(graph, node, self_loops=False)
 
     return peo, max_degree  # this is clique size - 1
+
+
+def make_test_graph():
+    """
+    Creates a graph from the Stack Overflow post:
+    https://stackoverflow.com/questions/23737690/
+    algorithm-for-generating-a-tree-decomposition/23739715#23739715
+    """
+    g = nx.Graph()
+    g.add_edges_from([
+        [0, 1], [0, 2], [0, 5], [0, 6],
+        [1, 2], [1, 6], [1, 7],
+        [2, 6], [2, 7], [2, 3], [2, 5],
+        [4, 5], [4, 6],
+        [5, 6]
+    ])
+    peo = [4, 3, 5, 7, 6, 2, 0, 1]
+    return g, peo
+
+
+def get_tree_from_peo(graph_old, peo):
+    """
+    Returns a tree decomposition of the chordal graph,
+    which corresponds to the given peo.
+    The nodes in the resulting tree are frozensets
+
+    Parameters
+    ----------
+    graph_old : networkx.Graph
+           graph to estimate
+    peo : list
+           elimination order
+
+    Returns
+    -------
+    tree : nx.Graph
+           Tree decomposition of the graph. Nodes are root nodes of
+           the maximal cliques, and cliques of the original graph
+           are stored in the frozensets
+
+    """
+    graph = copy.deepcopy(graph_old)
+    tree = nx.Graph()
+
+    # Go over the graph in order of peo and collect all cliques
+    cliquelist = []
+    for node in peo:
+        # Make a clique
+        neighbors = list(graph.neighbors(node))
+        if len(neighbors) > 1:
+            edges = itertools.combinations(neighbors, 2)
+            # Do not add edges over existing edges. This is
+            # done to work properly with MultiGraphs
+            existing_edges = graph.edges(neighbors)
+            fillin_edges = [edge for edge
+                            in edges if edge not in existing_edges]
+        else:
+            fillin_edges = None
+            if fillin_edges is not None:
+                graph.add_edges_from(fillin_edges)
+
+        # Add a clique to list
+        clique = set()
+        clique.add(node)
+        for neighbor in neighbors:
+            clique.add(neighbor)
+        cliquelist.append(frozenset(clique))
+
+        graph.remove_node(node)
+
+    # Now build a disconnected graph with resulting cliques
+    for clique in cliquelist:
+        tree.add_node(clique)
+
+    # Now connect cliques into a tree in order given by peo
+    for clique_idx, clique in enumerate(
+            cliquelist):
+        for neighbor_candidate, neighbor_root in zip(
+                cliquelist[clique_idx+1:], peo[clique_idx+1:]):
+            intersection = clique.intersection(neighbor_candidate)
+            if neighbor_root in intersection:
+                tree.add_edge(clique, neighbor_candidate)
+                break
+
+    # Now prune the tree to leave only maximal cliques
+    rcliquelist = list(reversed(cliquelist))
+    for clique_idx, clique in enumerate(rcliquelist):
+        if clique_idx == len(rcliquelist) - 1:
+            break  # reached root
+        parent = rcliquelist[clique_idx+1]
+        if clique.issubset(parent):
+            # reparent all clique neighbors if the clique
+            # is a subset of the parent clique (hence not maximal)
+            neighbors = tree.neighbors(clique)
+            for neighbor in neighbors:
+                if neighbor != parent:  # avoid self loops
+                    tree.add_edge(neighbor, parent)
+            tree.remove_node(clique)
+    return tree
+
+
+def get_node_by_subwidth(tree, nodelist):
+    """
+    Returns a dictionary {node: path}, where path is
+    a list containing sizes of tree vertices holding current node
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+           graph holding the tree decomposition
+    nodelist : list
+           list of nodes to order
+
+    Returns
+    -------
+    node_by_path : dict
+           Dictionary containing nodes as keys and their subtree widths
+           (widths of all nodes of their subtree in the full tree)
+           as values. The subwidth is stored as a list.
+
+    """
+    nodes_by_pathlength = {node: [] for node in nodelist}
+
+    def counter(node, clique, parent):
+        if node in clique:
+            nodes_by_pathlength[node].append(
+                len(clique))
+        children = [neighbor for neighbor
+                    in tree.neighbors(clique)
+                    if neighbor != parent]
+        if len(children) == 0:
+            return
+        for child in children:
+            counter(node, child, clique)
+
+    tree_root = next(iter(tree))
+    for node in nodelist:
+        counter(node, tree_root, None)
+    return nodes_by_pathlength
+
+
+def rm_node_in_tree(tree, node):
+    """
+    Removes a specified node from all subsets of the
+    tree decomposition
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+           graph holding the tree decomposition
+    node : int
+           node to remove
+
+    Returns
+    -------
+    new_tree : networkx.Graph()
+       new tree decomposition without
+       a subtree corresponding to the node
+
+    """
+    new_tree = nx.Graph()
+
+    def build_tree(node, clique, parent, updated_parent):
+        new_clique = clique - {node}
+        if updated_parent is not None:  # do it only for non-root nodes
+            new_tree.add_edge(updated_parent, new_clique)
+        else:
+            new_tree.add_node(new_clique)
+        children = [neighbor for neighbor
+                    in tree.neighbors(clique)
+                    if neighbor != parent]
+        if len(children) == 0:
+            return
+        for child in children:
+            build_tree(node, child, clique, new_clique)
+
+    tree_root = next(iter(tree))
+    build_tree(node, tree_root, None, None)
+
+    return new_tree
+
+
+def find_max_clique(tree):
+    """
+    Returns maximum clique in the tree decomposition tree
+    """
+    max_width = 0
+    max_clique = None
+    for clique in tree.nodes():
+        width = len(clique)
+        if width > max_width:
+            max_width = width
+            max_clique = clique
+    return max_clique
+
+
+def get_reduced_tree(tree, reduce_by):
+    """
+    Given a tree decomposition in tree and a required
+    size of reduction, produces a new tree decomposition
+    with treewidth reduced by the requested size and a list
+    of eliminated nodes.
+    We use a greedy algorithm to find nodes to eliminate.
+    This algorithm deletes variable subtrees from the maximal
+    node. The variables corresponding to larger subtrees are
+    deleted first. If the length of subtrees are equal then
+    subtrees passing
+    Parameters
+    ----------
+    tree : networkx.Graph
+           tree decomposition we need to reduce
+    reduce_by : int
+           reduce treewidth by this amount
+
+    Returns
+    -------
+    new_tree : networkx.Graph()
+               reduced tree decomposition
+    eliminated_nodes : list
+               list of eliminated nodes
+    """
+
+    max_clique = find_max_clique(tree)
+    treewidth = len(max_clique) - 1
+    current_treewidth = treewidth
+
+    if reduce_by < 0 or reduce_by > treewidth - 1:
+        raise ValueError(
+            'Requested reduce_by: {}, allowed range: [0, {}]'.format(
+                reduce_by, treewidth-1))
+
+    eliminated_nodes = []
+    new_tree = tree
+    while current_treewidth > treewidth - reduce_by:
+        nodes_by_subwidth = get_node_by_subwidth(tree, list(max_clique))
+
+        # get (node, path length, total subtree width)
+        nodes_in_rmorder = [(node, len(nodes_by_subwidth[node]),
+                             sum(nodes_by_subwidth[node]))
+                            for node in nodes_by_subwidth]
+        # sort by path length, then by total width of subtree
+        nodes_in_rmorder = sorted(
+            nodes_in_rmorder,
+            key=lambda x: (x[1], x[2]))
+
+        rmnode = nodes_in_rmorder[-1][0]
+        new_tree = rm_node_in_tree(new_tree, rmnode)
+        eliminated_nodes.append(rmnode)
+        max_clique = find_max_clique(new_tree)
+        current_treewidth = len(max_clique) - 1
+
+    return new_tree, eliminated_nodes
+
+
+def find_path_in_tree(tree, root, target):
+    """
+    Find path from nodeA to nodeB in tree. We use
+    BFS here, which is nothing fancy and will run in O(n)
+    for each query
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+           tree we search
+    root : hashable
+           Starting point of the node type
+    target : hashable
+           End point of the node type
+
+    Returns
+    -------
+    path : list
+           path from root to target including endpoints
+    """
+    def tree_traversal(path, node, parent):
+        path.append(node)
+        children = [neighbor for neighbor in tree.neighbors(node)
+                    if neighbor != parent]
+        if len(children) == 0:
+            return
+        if node == target:
+            return path
+        for child in children:
+            path = tree_traversal(path, child, node)
+            if path is not None:
+                return path
+        return
+
+    path = tree_traversal([], root, None)
+    return path
+
+
+def get_peo_from_tree(old_tree, clique_vertices=[]):
+    """
+    Given a tree and clique vertices, this function returns
+    a peo with clique vertices at the end of the list
+
+    Parameters
+    ----------
+    old_tree : networkx.Graph
+           tree decomposition to build peo
+    clique_vertices : list, default []
+           vertices of a clique we may want to place at the end of peo
+
+    Returns
+    -------
+    peo : list
+          perfect elimination order with possible restriction on the
+          final vertices
+    """
+    tree = copy.deepcopy(old_tree)
+
+    # First determine if clique_vertices are contained in any
+    # maximal clique in the tree (clique vertices may not be
+    # a maximal clique).
+    test_clique = frozenset(clique_vertices)
+    root_clique = None
+    for root_clique in tree.nodes():
+        if test_clique.issubset(root_clique):
+            break
+    if root_clique is None:
+        raise ValueError('Clique {} not found in tree'.format(
+            clique_vertices))
+
+    # Now take this clique as a root and add all leaves
+    # to peo with breadth-first search
+    peo = []
+
+    # import pdb
+    # pdb.set_trace()
+
+    for node in tree.nodes():
+        # find leaves or isolates
+        if (len(list(tree.neighbors(node))) <= 1
+           and node != root_clique):
+            break
+    watchdog = tree.number_of_nodes()
+    while node and watchdog > 0:
+        # process a single leaf
+        parent = next(tree.neighbors(node))
+        tree.remove_node(node)
+        intersection = node.intersection(parent)
+        for index in node - intersection:
+            peo.append(index)
+        # now we need to iterate over the intersection, which
+        # is a part of the parent. We do iteration only over
+        # intersection not in root. In case this is not empty, we alter
+        # parent (also if it is not root). Otherwise, we do not
+        # touch intersection as it may contain nodes from the test_clique
+        root_intersection = node.intersection(root_clique)
+        alterable_intersection = intersection - root_intersection
+        if parent != root_clique:
+            for index in alterable_intersection:
+                peo.append(index)
+            if len(alterable_intersection) > 0:
+                # replace parent if intersection is not empty
+                relatives = list(tree.neighbors(parent))
+                tree.remove_node(parent)
+                new_parent = parent - alterable_intersection
+                tree.add_node(new_parent)
+                for relative in relatives:
+                    tree.add_edge(relative, new_parent)
+
+        # take next leaf or isolate if it exists
+        for node in tree.nodes():
+            if (len(list(tree.neighbors(node))) <= 1
+               and node != root_clique):
+                break
+        watchdog -= 1 # safeguard in case graph is not a tree
+
+        if node == root_clique:  # reached root. We are done here
+            break
+    # We should have a root clique at this point. Otherwise something
+    # is wrong
+    assert node == root_clique
+
+    # Now process the root clique
+    difference = root_clique - test_clique
+    for index in difference:
+        peo.append(index)
+    # Finally, append last indices in the given order
+    for index in clique_vertices:
+        peo.append(index)
+    return peo
+
+
+def test_tree_reduction():
+    """
+    Tests the deletion of variables from tree
+    """
+    g, peo = make_test_graph()
+    f = get_tree_from_peo(g, peo)
+
+    ff = rm_node_in_tree(f, 2)
+    peo.remove(2)
+    g.remove_node(2)
+
+    tw1 = get_treewidth_from_peo(g, peo)
+    tw2 = len(find_max_clique(ff)) - 1
+    assert tw1 == tw2
+
+
+def test_tree_to_peo():
+    """
+    Test tree reduction algorithm and also
+    the conversion of tree to peo
+    """
+    g, peo = make_test_graph()
+    f = get_tree_from_peo(g, peo)
+
+    fd, el = get_reduced_tree(f, 1)
+    peo = get_peo_from_tree(fd, [5, 6])
+    g.remove_nodes_from(el)
+    tw1 = get_treewidth_from_peo(g, peo)
+    tw2 = len(find_max_clique(fd)) - 1
+    assert tw1 == tw2
 
 
 def test_get_fillin_graph():
