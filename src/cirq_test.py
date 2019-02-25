@@ -482,7 +482,7 @@ def eval_circuit_multiamp_np(
     n_qubits, _, _ = opt.read_buckets(filename)
 
     # Read buckets with all qubits set to free variables
-    free_qubits = list(range(n_qubits))
+    free_qubits = [1, 3]
     n_qubits, buckets, free_vars = opt.read_buckets(filename,
                                                     free_qubits)
     if len(free_vars) > 0:
@@ -491,12 +491,13 @@ def eval_circuit_multiamp_np(
         print('Free variables in the resulting expression:')
         print(free_vars)
 
-    graph = opt.buckets2graph(buckets)
-    graph_partial = opt.buckets2graph(buckets, free_vars)
+    graph_initial = opt.buckets2graph(buckets)
+    graph = gm.make_clique_on(graph_initial, free_vars)
 
     # Run quickbb
-    peo, treewidth = gm.get_peo(graph_partial)
-    peo = peo + free_vars
+    peo_initial, _ = gm.get_peo(graph)
+    treewidth = gm.get_treewidth_from_peo(graph, peo_initial)
+    peo = gm.get_equivalent_peo(graph, peo_initial, free_vars)
 
     # Apply calculated PEO
     perm_buckets = opt.reorder_buckets(buckets, peo)
@@ -504,7 +505,6 @@ def eval_circuit_multiamp_np(
         graph, dict(zip(peo, range(1, len(peo)+1))))
 
     # Finally make numpy buckets and calculate
-    # Can use any state here as all amplitudes are calculated
     np_buckets = npfr.get_np_buckets(
         perm_buckets, n_qubits, 0)
     amplitude = opt.bucket_elimination(
@@ -514,13 +514,28 @@ def eval_circuit_multiamp_np(
     # Take reverse of the amplitude
     amplitudes = amplitude.flatten()[::-1]
 
+    # Now calculate the reference
     amplitudes_reference = get_amplitudes_from_cirq(filename)
+
+    # Get a slice as we do not need full amplitude
+    computed_slice = []
+    for qubit_idx, qubit_val in zip(
+            range(n_qubits),
+            utils.int_to_bitstring(0, n_qubits)):
+        if qubit_idx in free_qubits:
+            computed_slice.append(slice(None))
+        else:
+            computed_slice.append(int(qubit_val))
+    slice_of_amplitudes = amplitudes_reference.reshape(
+        [2]*n_qubits)[tuple(computed_slice)]
+    slice_of_amplitudes = slice_of_amplitudes.flatten()
+
     print('Result:')
     print(np.round(amplitudes, 3))
     print('Reference:')
-    print(np.round(amplitudes_reference, 3))
+    print(np.round(slice_of_amplitudes, 3))
     print('Max difference:')
-    print(np.max(amplitudes - np.array(amplitudes_reference)))
+    print(np.max(amplitudes - slice_of_amplitudes))
 
 
 if __name__ == "__main__":
