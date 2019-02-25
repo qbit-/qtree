@@ -15,6 +15,8 @@ import src.graph_model as gm
 from src.logger_setup import log
 from matplotlib import pyplot as plt
 
+from functools import partial
+
 
 def test_minfill_heuristic():
     """
@@ -141,7 +143,8 @@ def test_reordering_hypothesis(filenames):
 
 def get_cost_vs_amp_subset_size_parallel(
         filename, step_by=1, start_at=0, stop_at=None,
-        n_var_parallel=0, peo_transform_fun=gm.get_equivalent_peo):
+        n_var_parallel=0, peo_transform_fun=gm.get_equivalent_peo,
+        splitting_fun=gm.split_graph_by_metric):
     """
     Calculates memory cost vs the number of calculated amplitudes
     for a given circuit. Amplitudes are calculated in subsets up to the
@@ -208,7 +211,7 @@ def get_cost_vs_amp_subset_size_parallel(
         if n_var_parallel > graph.number_of_nodes() - len(free_variables):
             n_var_parallel = graph.number_of_nodes() - len(free_variables)
 
-        idx_parallel, reduced_graph = gm.split_graph_by_metric(
+        idx_parallel, reduced_graph = splitting_fun(
             graph, n_var_parallel, forbidden_nodes=free_variables)
 
         # This is the best possible treewidth.
@@ -416,33 +419,44 @@ def test_mcs_with_graphs():
 
     peo = gm.maximum_cardinality_search(
         g1, last_clique_vertices=[4, 6, 5])
-
     tw = gm.get_treewidth_from_peo(g1, peo)
 
 
 if __name__ == "__main__":
     # test_minfill_heuristic()
     # test_reordering_hypothesis(['test_circuits/inst/cz_v2/4x4/inst_4x4_10_0.txt'])
-    plot_cost_vs_amp_subset_size(
-        'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
-        fig_filename='costs_amp_subset_6x6_25.png',
-        start_at=0, step_by=1
-    )
-    plot_cost_vs_amp_subset_size(
-        'test_circuits/inst/cz_v2/7x7/inst_7x7_39_0.txt',
-        fig_filename='taihulight_amp_subset_7x7_39.png',
-        start_at=0, step_by=1, n_var_parallel=23
-    )
+
+    # plot_cost_vs_amp_subset_size(
+    #     'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
+    #     fig_filename='costs_amp_subset_6x6_25.png',
+    #     start_at=0, step_by=1
+    # )
+
+    # plot_cost_vs_amp_subset_size(
+    #     'test_circuits/inst/cz_v2/7x7/inst_7x7_39_0.txt',
+    #     fig_filename='taihulight_amp_subset_7x7_39.png',
+    #     start_at=0, step_by=1, n_var_parallel=23
+    # )
+
+    # plot_cost_vs_amp_subset_size(
+    #     'test_circuits/inst/cz_v2/7x7/inst_7x7_25_0.txt',
+    #     fig_filename='costs_amp_subset_7x7_25.png',
+    #     start_at=0, step_by=1
+    # )
+
     # dump_nonequivalent_treewidth_graphs(
     #     'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
     #     out_filename='tw_graphs.p',
     #     start_at=5, step_by=1, stop_at=16
     # )
 
-    # Taihuligh full vector estimate
+    # Taihuligh single amplitude estimate
     costs = get_cost_vs_amp_subset_size_parallel(
-        'test_circuits/inst/cz_v2/7x7/inst_7x7_53_0.txt',
-        start_at=0, stop_at=1, step_by=1, n_var_parallel=48)
+        'test_circuits/inst/cz_v2/8x8/inst_8x8_44_0.txt',
+        start_at=0, stop_at=1, step_by=1, n_var_parallel=23,
+        splitting_fun=partial(gm.split_graph_dynamic_greedy,
+                              greedy_step_by=1)
+    )
     (max_mem, min_mem, flops,
      total_mem_max, total_min_mem, total_flops,
      max_mem_best, min_mem_best, flops_best,

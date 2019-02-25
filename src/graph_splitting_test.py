@@ -78,7 +78,7 @@ def get_cost_vs_parallel_size(filename, step_by=1, start_at=0, stop_at=None):
 
 def get_treewidth_vs_parallel_size(filename, splitter_function,
                                    start_at=0, stop_at=None,
-                                   step_by=1):
+                                   step_by=1, out_filename=''):
     """
     Calculates treewidth vs the number of parallelized
     variables for a given circuit.
@@ -102,10 +102,15 @@ def get_treewidth_vs_parallel_size(filename, splitter_function,
     for n_var_parallel in range(start_at, stop_at, step_by):
         idx_parallel, reduced_graph = splitter_function(
             graph_raw, n_var_parallel=n_var_parallel)
-        peo, treewidth = gm.get_peo(reduced_graph)
+        peo, _ = gm.get_peo(reduced_graph)
+        treewidth = gm.get_tree_from_peo(reduced_graph, peo)
 
         results.append(treewidth)
 
+    if len(out_filename) > 0:
+        data = pd.Series(
+            data=results, index=range(start_at, stop_at, step_by))
+        pd.to_pickle(data, out_filename)
     return results
 
 

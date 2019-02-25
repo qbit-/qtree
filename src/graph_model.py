@@ -611,7 +611,7 @@ def get_node_by_mem_reduction(old_graph):
             reduced_graph, dict(zip(order, range(1, number_of_nodes)))
         )
         mem, flop = cost_estimator(reduced_graph)
-        delta = np.sum(initial_mem) - np.sum(mem)
+        delta = sum(initial_mem) - sum(mem)
 
         # Get original node number for this node
         old_node = label_dict[node]
