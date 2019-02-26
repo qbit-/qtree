@@ -1425,7 +1425,7 @@ def make_test_graph():
 
 def get_tree_from_peo(graph_old, peo):
     """
-    Returns a tree decomposition of the chordal graph,
+    Returns a tree decomposition of the graph,
     which corresponds to the given peo.
     The nodes in the resulting tree are frozensets
 
@@ -1488,19 +1488,34 @@ def get_tree_from_peo(graph_old, peo):
                 break
 
     # Now prune the tree to leave only maximal cliques
-    rcliquelist = list(reversed(cliquelist))
-    for clique_idx, clique in enumerate(rcliquelist):
-        if clique_idx == len(rcliquelist) - 1:
-            break  # reached root
-        parent = rcliquelist[clique_idx+1]
-        if clique.issubset(parent):
-            # reparent all clique neighbors if the clique
-            # is a subset of the parent clique (hence not maximal)
-            neighbors = tree.neighbors(clique)
-            for neighbor in neighbors:
-                if neighbor != parent:  # avoid self loops
-                    tree.add_edge(neighbor, parent)
-            tree.remove_node(clique)
+    def prune_tree_dfs(clique, parent):
+        prunable = True
+        while prunable:
+            prunable = False
+            children = [neighbor for neighbor
+                        in tree.neighbors(clique)
+                        if neighbor != parent]
+            for child in children:
+                # if child is not a maximal clique,
+                # reparent its children to the current node
+                # and test is they are maximal on the next iteration
+                if child.issubset(clique):
+                    prunable = True
+                    grandchildren = [neighbor for neighbor
+                                     in tree.neighbors(child)
+                                     if neighbor != child
+                                     and neighbor != clique]
+                    tree.remove_node(child)
+                    for grandchild in grandchildren:
+                        tree.add_edge(clique, grandchild)
+
+        if len(children) == 0:  # reached leaf
+            return
+        for child in children:
+            prune_tree_dfs(child, clique)
+
+    # Execute pruning
+    prune_tree_dfs(cliquelist[0], None)
     return tree
 
 
