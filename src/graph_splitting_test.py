@@ -93,6 +93,10 @@ def get_treewidth_vs_parallel_size(filename, splitter_function,
     """
     n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
+    peo, _ = gm.get_peo(graph_raw)
+    graph = gm.relabel_graph_nodes(
+        graph_raw,
+        dict(zip(peo, range(1, len(peo) + 1))))
 
     n_var_total = graph_raw.number_of_nodes()
     if stop_at is None or stop_at > n_var_total:
@@ -101,9 +105,9 @@ def get_treewidth_vs_parallel_size(filename, splitter_function,
     results = []
     for n_var_parallel in range(start_at, stop_at, step_by):
         idx_parallel, reduced_graph = splitter_function(
-            graph_raw, n_var_parallel=n_var_parallel)
+            graph, n_var_parallel=n_var_parallel)
         peo, _ = gm.get_peo(reduced_graph)
-        treewidth = gm.get_tree_from_peo(reduced_graph, peo)
+        treewidth = gm.get_treewidth_from_peo(reduced_graph, peo)
 
         results.append(treewidth)
 
@@ -198,18 +202,14 @@ def plot_compare_parallelization_strategies(
     Compares treewidth reduction strategies
     """
     splitter_functions = {
-        'degree': partial(gm.split_graph_by_metric,
-                          metric_fn=gm.get_node_by_degree),
-        'betweenness': partial(gm.split_graph_by_metric,
-                               metric_fn=gm.get_node_by_betweenness),
-        'by mem reduction 1 shot': partial(
+        'by degree': partial(gm.split_graph_by_metric,
+                             metric_fn=gm.get_node_by_degree),
+        'by betweenness': partial(gm.split_graph_by_metric,
+                                  metric_fn=gm.get_node_by_betweenness),
+        'by mem reduction': partial(
             gm.split_graph_by_metric,
             metric_fn=gm.get_node_by_mem_reduction),
-        'by mem reduction iterative': partial(
-            gm.split_graph_dynamic_greedy,
-            metric_fn=gm.get_node_by_mem_reduction,
-            greedy_step_by=step_by
-        ),
+        'by tree trimming': gm.split_graph_by_tree_trimming,
     }
 
     results = {}
@@ -217,7 +217,8 @@ def plot_compare_parallelization_strategies(
         treewidth_vs_n_var = get_treewidth_vs_parallel_size(
             filename, splitter_function=splitter_function,
             start_at=start_at,
-            stop_at=stop_at, step_by=step_by)
+            stop_at=stop_at, step_by=step_by,
+            out_filename=name + '.p')
         results.update({name: treewidth_vs_n_var})
 
     x_range = list(

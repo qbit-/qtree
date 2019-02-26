@@ -576,7 +576,9 @@ def get_node_by_betweenness(graph):
 def get_node_by_mem_reduction(old_graph):
     """
     Returns a list of pairs (node : reduction_in_flop_cost) for the
-    provided graph. This is the algorithm Alibaba used
+    provided graph. The graph is **ASSUMED** to be in the optimal
+    elimination order, e.g. the nodes have to be relabelled by
+    peo
 
     Parameters
     ----------
@@ -586,15 +588,9 @@ def get_node_by_mem_reduction(old_graph):
     -------
     nodes_by_degree : dict
     """
-    # First find the initial flop cost
-    # Find elimination order
-    peo, treewidth = get_peo(old_graph)
-    number_of_nodes = len(peo)
 
-    # Transform graph to this order
-    graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(1, number_of_nodes+1)))
-    )
+    number_of_nodes = old_graph.number_of_nodes()
+    graph = copy.deepcopy(old_graph)
 
     # Get flop cost of the bucket elimination
     initial_mem, initial_flop = cost_estimator(graph)
@@ -614,9 +610,9 @@ def get_node_by_mem_reduction(old_graph):
         delta = sum(initial_mem) - sum(mem)
 
         # Get original node number for this node
-        old_node = label_dict[node]
+        # old_node = label_dict[node]
 
-        nodes_by_flop_reduction.append((old_node, delta))
+        nodes_by_flop_reduction.append((node, delta))
 
     return nodes_by_flop_reduction
 
@@ -680,6 +676,63 @@ def split_graph_by_metric(
     return sorted(idx_parallel), graph
 
 
+def split_graph_by_tree_trimming(
+        old_graph, n_var_parallel):
+    """
+    Splits graph by removing variables from its tree decomposition.
+    The graph is **ASSUMED** to be in the perfect elimination order,
+    e.g. it has to be relabelled before calling split function.
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+                graph to split by parallelizing over variables
+
+                Parallel edges and self-loops in the graph are
+                removed (if any)
+
+    n_var_parallel : int
+                number of variables to eliminate by parallelization
+    Returns
+    -------
+    idx_parallel : list
+          variables removed by parallelization
+    graph : networkx.Graph
+          new graph without parallelized variables
+    """
+    graph = copy.deepcopy(old_graph)
+
+    # Produce a tree from the ordering of the graph
+    # and get a maximal clique
+    tree = get_tree_from_peo(
+        old_graph, list(range(1, graph.number_of_nodes()+1)))
+    max_clique = find_max_clique(tree)
+
+    eliminated_nodes = []
+    new_tree = tree
+    for ii in range(n_var_parallel):
+        nodes_by_subwidth = get_node_by_subwidth(tree, list(max_clique))
+
+        # get (node, path length, total subtree width)
+        nodes_in_rmorder = [(node, len(nodes_by_subwidth[node]),
+                             sum(nodes_by_subwidth[node]))
+                            for node in nodes_by_subwidth]
+        # sort by path length, then by total width of subtree
+        nodes_in_rmorder = sorted(
+            nodes_in_rmorder,
+            key=lambda x: (x[1], x[2]))
+        rmnode = nodes_in_rmorder[-1][0]
+        new_tree = rm_node_in_tree(new_tree, rmnode)
+        eliminated_nodes.append(rmnode)
+        max_clique = find_max_clique(new_tree)
+
+    # we are done with finding the set for removal.
+    # Remove nodes from the graph and return
+
+    graph.remove_nodes_from(eliminated_nodes)
+    return graph, eliminated_nodes
+
+
 def split_graph_with_mem_constraint(
         old_graph,
         n_var_parallel_min=0,
@@ -690,6 +743,10 @@ def split_graph_with_mem_constraint(
     """
     Calculates memory cost vs the number of parallelized
     variables for a given graph.
+
+    !!!!!!!!!!!!!!!!!!!!!
+    Rewrite this function to be a wrapper
+    !!!!!!!!!!!!!!!!!!!!!
 
     Parameters
     ----------
@@ -752,6 +809,10 @@ def split_graph_dynamic_greedy(
     This function splits graph by greedily selecting next nodes
     using the metric function and recomputing PEO after
     each node elimination
+
+    !!!!!!!!!!!!!!!!!!!!!
+    Rewrite this function to be a wrapper
+    !!!!!!!!!!!!!!!!!!!!!
 
     Parameters
     ----------
