@@ -94,7 +94,7 @@ def get_treewidth_vs_parallel_size(filename, splitter_function,
     n_qubits, buckets, free_vars = opt.read_buckets(filename)
     graph_raw = opt.buckets2graph(buckets)
     peo, _ = gm.get_peo(graph_raw)
-    graph = gm.relabel_graph_nodes(
+    graph, _ = gm.relabel_graph_nodes(
         graph_raw,
         dict(zip(peo, range(1, len(peo) + 1))))
 
@@ -275,7 +275,7 @@ def plot_compare_step(
 
 def plot_compare_step_greedy(
         filename, fig_filename='compare_step_greedy.png',
-        greedy_step_by=[1, 5],
+        greedy_steps=[1, 5],
         start_at=0, stop_at=None, step_by=1):
     """
     Compares results of the greedy algorithm for different step
@@ -287,7 +287,7 @@ def plot_compare_step_greedy(
              File containing a quantum program (and hence a graph)
     fig_filename : str
              File to output the figure    
-    greedy_step_by : list
+    greedy_steps_by : list
                list of step sizes used by the greedy algorithm
                for greedy splitting algorithm.
     start_at : int
@@ -298,12 +298,15 @@ def plot_compare_step_greedy(
                Step used to increase the size of the deletion set
     """
     results = {}
-    metric_function = gm.get_node_by_mem_reduction
-    for step_by in greedy_step_by:
-        splitter_function = gm.split_graph_dynamic_greedy
+    for greedy_step in greedy_steps:
+        splitter_function = partial(
+            gm.split_graph_by_metric_greedy,
+            metric_fn=gm.get_node_by_treewidth_reduction,
+            greedy_step_by=greedy_step)
+
         treewidth_vs_n_var = get_treewidth_vs_parallel_size(
             filename,
-            splitter_function=metric_function,
+            splitter_function=splitter_function,
             start_at=start_at, stop_at=stop_at, step_by=step_by)
         results.update({step_by: treewidth_vs_n_var})
 
@@ -340,8 +343,9 @@ def test_split_with_mem_constraint(filename, constraints, step_by=1):
 
     results = []
     for mem_constraint in constraints:
-        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
-             graph_raw, 0, mem_constraint, step_by=step_by)
+        (idx_parallel,
+         reduced_graph) = gm.split_graph_with_mem_constraint_greedy(
+            graph_raw, 0, mem_constraint, step_by=step_by)
 
         peo, treewidth = gm.get_peo(reduced_graph)
 
@@ -629,6 +633,7 @@ if __name__ == "__main__":
     d = 50
     idx = 2
     step_by = 10
+    constraints = [10, 100, 1000]
 
     # plot_cost_vs_n_var_parallel(
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',

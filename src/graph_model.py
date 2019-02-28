@@ -254,11 +254,14 @@ def get_peo(old_graph,
     peo = peo + sorted(list(missing_indices))
 
     assert(sorted(peo) == sorted(initial_indices))
-    log.info('Final peo from quickBB:\n{}'.format(peo))
+    # log.info('Final peo from quickBB:\n{}'.format(peo))
 
     # remove input file to honor EPA
     if not keep_input:
-        os.remove(cnffile)
+        try:
+            os.remove(cnffile)
+        except FileNotFoundError:
+            pass
 
     return peo, treewidth
 
@@ -503,6 +506,10 @@ def cost_estimator(old_graph, free_vars=[]):
     graph = copy.deepcopy(old_graph)
     nodes = sorted(graph.nodes)
 
+    # Early return if graph is empty
+    if len(nodes) == 0:
+        return [1], [1]
+
     results = []
     for n, node in enumerate(nodes):
         if node not in free_vars:
@@ -586,7 +593,7 @@ def get_node_by_mem_reduction(old_graph):
 
     Returns
     -------
-    nodes_by_degree : dict
+    nodes_by_mem_reduction : dict
     """
 
     number_of_nodes = old_graph.number_of_nodes()
@@ -595,7 +602,7 @@ def get_node_by_mem_reduction(old_graph):
     # Get flop cost of the bucket elimination
     initial_mem, initial_flop = cost_estimator(graph)
 
-    nodes_by_flop_reduction = []
+    nodes_by_mem_reduction = []
     for node in graph.nodes(data=False):
         reduced_graph = copy.deepcopy(graph)
         # Take out one node
@@ -609,12 +616,51 @@ def get_node_by_mem_reduction(old_graph):
         mem, flop = cost_estimator(reduced_graph)
         delta = sum(initial_mem) - sum(mem)
 
-        # Get original node number for this node
-        # old_node = label_dict[node]
+        nodes_by_mem_reduction.append((node, delta))
 
-        nodes_by_flop_reduction.append((node, delta))
+    return nodes_by_mem_reduction
 
-    return nodes_by_flop_reduction
+
+def get_node_by_treewidth_reduction(old_graph):
+    """
+    Returns a list of pairs (node : reduction_in_treewidth) for the
+    provided graph. The graph is **ASSUMED** to be in the optimal
+    elimination order, e.g. the nodes have to be relabelled by
+    peo
+
+    Parameters
+    ----------
+    graph : networkx.Graph without self-loops and parallel edges
+
+    Returns
+    -------
+    nodes_by_treewidth_reduction : dict
+    """
+    number_of_nodes = old_graph.number_of_nodes()
+    graph = copy.deepcopy(old_graph)
+
+    # Get flop cost of the bucket elimination
+    initial_treewidth = get_treewidth_from_peo(
+        graph, list(range(1, number_of_nodes + 1)))
+
+    nodes_by_treewidth_reduction = []
+    for node in graph.nodes(data=False):
+        reduced_graph = copy.deepcopy(graph)
+        # Take out one node
+        reduced_graph.remove_node(node)
+        # Renumerate graph nodes to be consequtive ints (may be redundant)
+        order = (list(range(1, node))
+                 + list(range(node + 1, number_of_nodes + 1)))
+        reduced_graph, _ = relabel_graph_nodes(
+            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
+        )
+        treewidth = get_treewidth_from_peo(
+            reduced_graph, list(range(1, number_of_nodes)))
+        delta = initial_treewidth - treewidth
+
+        nodes_by_treewidth_reduction.append((node, delta))
+
+    return nodes_by_treewidth_reduction
 
 
 def split_graph_by_metric(
@@ -711,7 +757,8 @@ def split_graph_by_tree_trimming(
     eliminated_nodes = []
     new_tree = tree
     for ii in range(n_var_parallel):
-        nodes_by_subwidth = get_node_by_subwidth(tree, list(max_clique))
+        nodes_by_subwidth = get_subtree_by_length_width(
+            tree, list(max_clique))
 
         # get (node, path length, total subtree width)
         nodes_in_rmorder = [(node, len(nodes_by_subwidth[node]),
@@ -730,23 +777,23 @@ def split_graph_by_tree_trimming(
     # Remove nodes from the graph and return
 
     graph.remove_nodes_from(eliminated_nodes)
-    return graph, eliminated_nodes
+    return eliminated_nodes, graph
 
 
-def split_graph_with_mem_constraint(
+def split_graph_with_mem_constraint_greedy(
         old_graph,
         n_var_parallel_min=0,
         mem_constraint=defs.MAXIMAL_MEMORY,
-        metric_function=get_node_by_degree,
         step_by=5,
-        n_var_parallel_max=None):
+        n_var_parallel_max=None,
+        metric_fn=get_node_by_mem_reduction,
+        forbidden_nodes=[]):
     """
-    Calculates memory cost vs the number of parallelized
-    variables for a given graph.
-
-    !!!!!!!!!!!!!!!!!!!!!
-    Rewrite this function to be a wrapper
-    !!!!!!!!!!!!!!!!!!!!!
+    This function splits graph by greedily selecting next nodes
+    up to the n_var_parallel
+    using the metric function and recomputing PEO after
+    each node elimination. The graph is **ASSUMED** to be in
+    the perfect elimination order
 
     Parameters
     ----------
@@ -767,52 +814,73 @@ def split_graph_with_mem_constraint(
     -------
     idx_parallel : list
              list of removed variables
-    reduced_graph : networkx.Graph
+    graph : networkx.Graph
              reduced contraction graph
     """
 
+    graph = copy.deepcopy(old_graph)
     n_var_total = old_graph.number_of_nodes()
     if n_var_parallel_max is None:
         n_var_parallel_max = n_var_total
 
-    mem_cost, flop_cost = cost_estimator(copy.deepcopy(old_graph))
+    mem_cost, flop_cost = cost_estimator(graph)
     max_mem = sum(mem_cost)
 
-    for n_var_parallel in range(n_var_parallel_min,
-                                n_var_parallel_max, step_by):
-        idx_parallel, reduced_graph = split_graph_by_metric(
-             old_graph, n_var_parallel, metric_fn=metric_function)
+    idx_parallel = []
+    for n_var_parallel in range(0, n_var_parallel_max, step_by):
+        # Get optimal order
+        peo, tw = get_peo(graph)
+        graph_optimal, inverse_order = relabel_graph_nodes(
+            graph, dict(zip(peo, range(1, len(peo)+1))))
 
-        peo, treewidth = get_peo(reduced_graph)
+        # get nodes by metric in descending order
+        nodes_by_metric_optimal = metric_fn(graph_optimal)
+        nodes_by_metric_optimal.sort(
+            key=lambda pair: pair[1], reverse=True)
 
-        graph_parallel, label_dict = relabel_graph_nodes(
-            reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
-        )
+        nodes_by_metric_allowed = []
+        for node, metric in nodes_by_metric_optimal:
+            if inverse_order[node] not in forbidden_nodes:
+                nodes_by_metric_allowed.append(
+                    (inverse_order[node], metric))
 
-        mem_cost, flop_cost = cost_estimator(graph_parallel)
+        # Take first nodes by cost and map them back to original
+        # order
+        nodes, costs = zip(
+            *nodes_by_metric_allowed[:step_by])
+
+        # Update list and update graph
+        idx_parallel += nodes
+        graph.remove_nodes_from(nodes)
+
+        # Renumerate graph nodes to be consequtive ints (may be redundant)
+        label_dict = dict(zip(sorted(graph.nodes),
+                              range(1, len(graph.nodes())+1)))
+
+        graph_relabelled, _ = relabel_graph_nodes(graph, label_dict)
+        mem_cost, flop_cost = cost_estimator(graph_relabelled)
 
         max_mem = sum(mem_cost)
 
-        if max_mem <= mem_constraint:
+        if (max_mem <= mem_constraint
+           and n_var_parallel >= n_var_parallel_min):
             break
 
     if max_mem > mem_constraint:
         raise ValueError('Maximal memory constraint is not met')
 
-    return idx_parallel, reduced_graph
+    return idx_parallel, graph
 
 
-def split_graph_dynamic_greedy(
-        old_graph, n_var_parallel=0, metric_fn=get_node_by_mem_reduction,
+def split_graph_by_metric_greedy(
+        old_graph, n_var_parallel=0,
+        metric_fn=get_node_by_treewidth_reduction,
         greedy_step_by=1, forbidden_nodes=[]):
     """
     This function splits graph by greedily selecting next nodes
+    up to the n_var_parallel
     using the metric function and recomputing PEO after
     each node elimination
-
-    !!!!!!!!!!!!!!!!!!!!!
-    Rewrite this function to be a wrapper
-    !!!!!!!!!!!!!!!!!!!!!
 
     Parameters
     ----------
@@ -858,16 +926,16 @@ def split_graph_dynamic_greedy(
 
         nodes_by_metric_allowed = []
         for node, metric in nodes_by_metric_optimal:
-            if node not in forbidden_nodes:
-                nodes_by_metric_allowed.append((node, metric))
+            if inverse_order[node] not in forbidden_nodes:
+                nodes_by_metric_allowed.append(
+                    (inverse_order[node], metric))
 
         # Take first nodes by cost and map them back to original
         # order
-        nodes_optimal, costs = zip(
+        nodes, costs = zip(
             *nodes_by_metric_allowed[:greedy_step_by])
-        nodes = [inverse_order[n] for n in nodes_optimal]
 
-        # Update list and delete nodes
+        # Update list and update graph
         idx_parallel += nodes
         graph.remove_nodes_from(nodes)
 
@@ -1580,10 +1648,15 @@ def get_tree_from_peo(graph_old, peo):
     return tree
 
 
-def get_node_by_subwidth(tree, nodelist):
+def get_subtree_by_length_width(tree, nodelist):
     """
-    Returns a dictionary {node: path}, where path is
-    a list containing sizes of tree vertices holding current node
+    For each node in nodelist this function finds its corresponding
+    subtree in the tree decomposition provided in tree. (As a reminder,
+    the tree in the tree decomposition is an intersection of subtrees
+    of each node of the original graph).
+    Returns a dictionary {node: subtree_path}, where subtree_path is
+    a list containing sizes of the tree vertices the node's subtree
+    passes through.
 
     Parameters
     ----------
@@ -1594,10 +1667,10 @@ def get_node_by_subwidth(tree, nodelist):
 
     Returns
     -------
-    node_by_path : dict
-           Dictionary containing nodes as keys and their subtree widths
-           (widths of all nodes of their subtree in the full tree)
-           as values. The subwidth is stored as a list.
+    node_by_subtree_path : dict
+           Dictionary containing nodes as keys and their subtree_path
+           (widths of all nodes their subtree contributes to in the
+           full tree) as values. The ssubtree_path is stored as a list.
 
     """
     nodes_by_pathlength = {node: [] for node in nodelist}
@@ -1713,7 +1786,8 @@ def get_reduced_tree(tree, reduce_by):
     eliminated_nodes = []
     new_tree = tree
     while current_treewidth > treewidth - reduce_by:
-        nodes_by_subwidth = get_node_by_subwidth(tree, list(max_clique))
+        nodes_by_subwidth = get_subtree_by_length_width(
+            tree, list(max_clique))
 
         # get (node, path length, total subtree width)
         nodes_in_rmorder = [(node, len(nodes_by_subwidth[node]),

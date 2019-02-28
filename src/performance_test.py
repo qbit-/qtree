@@ -157,7 +157,8 @@ def time_single_amplitude_tf_mpi(
         graph = opt.buckets2graph(buckets)
 
         # Split graphical model to parallelize
-        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
+        (idx_parallel,
+         reduced_graph) = gm.split_graph_with_mem_constraint_greedy(
             graph,
             n_var_parallel_min=n_var_parallel_min,
             mem_constraint=mem_constraint,
@@ -301,7 +302,8 @@ def time_single_amplitude_np_mpi(
         graph = opt.buckets2graph(buckets)
 
         # Split the graph to parallelize
-        idx_parallel, reduced_graph = gm.split_graph_with_mem_constraint(
+        (idx_parallel,
+         reduced_graph) = gm.split_graph_with_mem_constraint_greedy(
             graph,
             n_var_parallel_min=n_var_parallel_min,
             mem_constraint=mem_constraint,
