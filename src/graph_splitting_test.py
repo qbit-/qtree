@@ -209,7 +209,6 @@ def plot_compare_parallelization_strategies(
         'by mem reduction': partial(
             gm.split_graph_by_metric,
             metric_fn=gm.get_node_by_mem_reduction),
-        'by tree trimming': gm.split_graph_by_tree_trimming,
     }
 
     results = {}
