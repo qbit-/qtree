@@ -656,11 +656,11 @@ if __name__ == "__main__":
     #     filename=f'test_circuits/inst/cz_v2/{n}x{n}/inst_{n}x{n}_{d}_{idx}.txt',
     #     constraints=constraints, step_by=5)
 
-    # n_var_parallel = 23
-    # collect_costs(f'cost_estimate_{n_var_parallel}.p',
-    #               grid_sizes=[12],
-    #               depths=list(range(20, 70)),
-    #               n_var_parallel=n_var_parallel)
+    n_var_parallel = 0
+    collect_costs(f'cost_estimate_{n_var_parallel}.p',
+                  grid_sizes=[4],
+                  depths=list(range(20, 40)),
+                  n_var_parallel=n_var_parallel)
 
     # plot_cost_vs_depth(f'cost_estimate_{n_var_parallel}.p',
     #                    n_var_parallel=n_var_parallel,

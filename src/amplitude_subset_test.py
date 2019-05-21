@@ -12,10 +12,29 @@ import copy
 import src.optimizer as opt
 import src.graph_model as gm
 
-from src.logger_setup import log
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 
+from src.logger_setup import log
 from functools import partial
+
+SMALL_SIZE = 10
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 18
+
+# controls default text sizes
+plt.rc('font', size=SMALL_SIZE)
+# fontsize of the axes title
+plt.rc('axes', titlesize=BIGGER_SIZE)
+# fontsize of the x and y labels
+plt.rc('axes', labelsize=MEDIUM_SIZE)
+# fontsize of the tick labels
+plt.rc('xtick', labelsize=SMALL_SIZE)
+# fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)
+# legend fontsize
+plt.rc('legend', fontsize=MEDIUM_SIZE)
+# fontsize of the figure title
+plt.rc('figure', titlesize=BIGGER_SIZE)
 
 
 def test_minfill_heuristic():
@@ -144,7 +163,7 @@ def test_reordering_hypothesis(filenames):
 def get_cost_vs_amp_subset_size_parallel(
         filename, step_by=1, start_at=0, stop_at=None,
         n_var_parallel=0, peo_transform_fun=gm.get_equivalent_peo,
-        splitting_fun=gm.split_graph_by_metric):
+        splitting_fun=gm.split_graph_by_metric, out_filename=''):
     """
     Calculates memory cost vs the number of calculated amplitudes
     for a given circuit. Amplitudes are calculated in subsets up to the
@@ -165,7 +184,8 @@ def get_cost_vs_amp_subset_size_parallel(
     peo_transform_fun : function, default gm.get_equivalent_peo
            function used to transform PEO. It's signature should be
            f(graph, peo, end_indices)  -> new_peo
-
+    out_filename : str
+           Pandas pickle for possible output of the results
     Returns
     -------
           max_mem - maximal memory (if all intermediates are kept)
@@ -269,6 +289,20 @@ def get_cost_vs_amp_subset_size_parallel(
                         treewidth_best,
                         av_flop_per_mem))
 
+    if len(out_filename) > 0:
+        data = pd.DataFrame(
+            results,
+            columns=['max_mem', 'min_mem', 'flops',
+                     'total_mem_max', 'total_min_mem',
+                     'total_flops', 'max_mem_best', 'min_mem_best',
+                     'flops_best', 'total_mem_max_best',
+                     'total_min_mem_best', 'total_flops_best',
+                     'treewidth', 'treewidth_best',
+                     'av_flop_per_mem'],
+            )
+        data['n_var_parallel'] = list(range(start_at, stop_at, step_by))
+        pd.to_pickle(data, out_filename)
+
     return tuple(zip(*results))
 
 
@@ -280,7 +314,7 @@ def plot_cost_vs_amp_subset_size(
         peo_transform_fun=gm.get_equivalent_peo):
     """
     Plots cost estimate for the evaluation of subsets of
-    amplitudes
+    amplitudes. This is an old version which compared strategies
     """
     costs = get_cost_vs_amp_subset_size_parallel(
         filename, start_at=start_at,
@@ -331,6 +365,184 @@ def plot_cost_vs_amp_subset_size(
     axes[2].set_xlabel('number of full qubits')
     axes[2].set_ylabel('treewidth')
     axes[2].legend(loc='upper left')
+
+    fig.savefig(fig_filename)
+
+
+def plot_cost_vs_amp_subset_size2(
+        filename,
+        fig_filename='flops_mem_vs_amp_subset_size.png',
+        start_at=0, stop_at=None, step_by=5,
+        n_var_parallel=0,
+        peo_transform_fun=gm.get_equivalent_peo):
+    """
+    Plots cost estimates for the evaluation of subsets of
+    amplitudes. This is a new improved version
+    """
+    costs = get_cost_vs_amp_subset_size_parallel(
+        filename, start_at=start_at,
+        stop_at=stop_at, step_by=step_by,
+        n_var_parallel=n_var_parallel,
+        peo_transform_fun=peo_transform_fun,
+        out_filename=fig_filename+'_out.p')
+    (max_mem, min_mem, flops,
+     total_mem_max, total_min_mem, total_flops,
+     max_mem_best, min_mem_best, flops_best,
+     total_mem_max_best, total_min_mem_best,
+     total_flops_best, treewidth, treewidth_best,
+     av_flop_per_mem) = costs
+
+    x_range = list(range(start_at,
+                         start_at+len(max_mem)*step_by, step_by))
+    fig, axes = plt.subplots(1, 3, sharey=False, figsize=(18, 6))
+
+    axes[0].semilogy(x_range, min_mem, 'm-', label='batches of amplitudes')
+    num_amplitudes = [2**x for x in x_range]
+    mem_one_amplitude_equivalent = [
+        min_mem[0] for num_amps in num_amplitudes]
+    axes[0].semilogy(x_range,
+                     mem_one_amplitude_equivalent,
+                     'r-', label='1 amplitude at a time')
+    axes[0].set_xlabel('number of full qubits')
+    axes[0].set_ylabel('memory per task (in doubles)')
+    axes[0].set_title('Minimal memory requirement')
+    axes[0].legend()
+
+    axes[1].semilogy(x_range, flops, 'm-', label='batches of amplitudes')
+    num_amplitudes = [2**x for x in x_range]
+    flops_one_amplitude_equivalent = [
+        flops[0] * num_amps for num_amps in num_amplitudes]
+    axes[1].semilogy(
+        x_range,
+        flops_one_amplitude_equivalent, 'r-', label='1 amplitude at a time')
+
+    axes[1].set_xlabel('number of full qubits')
+    axes[1].set_ylabel('total flops (all tasks)')
+    axes[1].set_title('Flops cost')
+    axes[1].legend(loc='upper left')
+
+    # tw_one_amplitude_equivalent = [
+    #     treewidth[0] for num_amps in num_amplitudes]
+    # axes[2].plot(x_range, tw_one_amplitude_equivalent, 'r-',
+    #              label='1 amplitude at a time')
+    # axes[2].plot(x_range, treewidth, 'm-',
+    #              label='batches of amplitudes')
+    # axes[2].set_xlabel('number of full qubits')
+    # axes[2].set_ylabel('treewidth')
+    # axes[2].legend(loc='upper left')
+
+    axes[2].plot(x_range, av_flop_per_mem, 'm-',
+                 label='batches of amplitudes')
+    axes[2].set_xlabel('number of full qubits')
+    axes[2].set_ylabel('flops per memory access')
+    axes[2].legend(loc='upper left')
+
+    fig.savefig(fig_filename)
+
+
+def plot_flops_vs_amp_subset_size_multiple(
+        filename_base,
+        grid_sizes=[5, 6],
+        fig_filename='flops_vs_amp_subset_size.eps'):
+    """
+    Plots cost estimates for the evaluation of subsets of
+    amplitudes. This is a new improved version
+    """
+    fig, axes = plt.subplots(1, len(grid_sizes),
+                             sharey=False, figsize=(6*len(grid_sizes), 6))
+    for ii, grid_size in enumerate(grid_sizes):
+        data = pd.read_pickle(filename_base
+                              + f'_{grid_size}x{grid_size}.p')
+        n_var_parallel = data['n_var_parallel']
+        flops = data['flops']
+        axes[ii].semilogy(n_var_parallel, flops, 'm-',
+                          label='batches of amplitudes')
+
+        num_amplitudes = [2**x for x in n_var_parallel]
+
+        flops_one_amplitude_equivalent = [
+            flops[0] * num_amps for num_amps in num_amplitudes]
+        axes[ii].semilogy(
+            n_var_parallel,
+            flops_one_amplitude_equivalent, 'r-',
+            label='1 amplitude at a time')
+
+        axes[ii].set_xlabel('number of full qubits')
+        axes[ii].set_title(f'{grid_size}x{grid_size}')
+        axes[ii].set_ylabel('total flops (all tasks)')
+        axes[ii].legend(loc='upper left')
+
+    # fig.suptitle('Flops cost')
+    fig.savefig(fig_filename)
+
+
+def plot_mem_vs_amp_subset_size_multiple(
+        filename_base,
+        grid_sizes=[5, 6],
+        fig_filename='mem_vs_amp_subset_size.eps'):
+    """
+    Plots cost estimates for the evaluation of subsets of
+    amplitudes. This is a new improved version
+    """
+    fig, axes = plt.subplots(1, len(grid_sizes),
+                             sharey=False, figsize=(6*len(grid_sizes), 6))
+    for ii, grid_size in enumerate(grid_sizes):
+        data = pd.read_pickle(filename_base
+                              + f'_{grid_size}x{grid_size}.p')
+        n_var_parallel = data['n_var_parallel']
+        min_mem = data['min_mem']
+        axes[ii].semilogy(n_var_parallel, min_mem, 'm-',
+                          label='batches of amplitudes')
+
+        num_amplitudes = [2**x for x in n_var_parallel]
+
+        mem_one_amplitude_equivalent = [
+            min_mem[0] for num_amps in num_amplitudes]
+        axes[ii].semilogy(
+            n_var_parallel,
+            mem_one_amplitude_equivalent, 'r-',
+            label='1 amplitude at a time')
+
+        axes[ii].set_xlabel('number of full qubits')
+        axes[ii].set_title(f'{grid_size}x{grid_size}')
+        axes[ii].set_ylabel('memory per task (in floats)')
+        axes[ii].legend(loc='upper left')
+
+    # fig.suptitle('Minimal memory requirement')
+    fig.savefig(fig_filename)
+
+
+def plot_fpm_vs_amp_subset_multiple(
+        filename_base,
+        grid_sizes=[5, 6],
+        fig_filename='fpm_vs_amp_subset_size.eps'):
+    """
+    Plots cost estimates for the evaluation of subsets of
+    amplitudes. This is a new improved version
+    """
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+
+    fig, ax = plt.subplots(1, 1,
+                           sharey=False, figsize=(6, 6))
+
+    jet = plt.get_cmap('rainbow')
+    cNorm  = colors.Normalize(vmin=0, vmax=len(grid_sizes))
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)
+
+    for ii, grid_size in enumerate(grid_sizes):
+        data = pd.read_pickle(filename_base
+                              + f'_{grid_size}x{grid_size}.p')
+        n_var_parallel = data['n_var_parallel']
+        av_flop_per_mem = data['av_flop_per_mem']
+        ax.plot(n_var_parallel, av_flop_per_mem,
+                color=scalarMap.to_rgba(ii), marker=None,
+                label=f'{grid_size}x{grid_size}')
+
+
+    ax.set_xlabel(f'number of full qubits')
+    ax.set_ylabel('flops per memory access')
+    ax.legend(loc='lower right')
 
     fig.savefig(fig_filename)
 
@@ -438,11 +650,26 @@ if __name__ == "__main__":
     #     start_at=0, step_by=1, n_var_parallel=23
     # )
 
-    # plot_cost_vs_amp_subset_size(
-    #     'test_circuits/inst/cz_v2/7x7/inst_7x7_25_0.txt',
-    #     fig_filename='costs_amp_subset_7x7_25.png',
+    # plot_cost_vs_amp_subset_size2(
+    #     'test_circuits/inst/cz_v2/9x9/inst_9x9_25_0.txt',
+    #     fig_filename='costs_amp_subset2_9x9_25.eps',
     #     start_at=0, step_by=1
     # )
+
+    plot_mem_vs_amp_subset_size_multiple(
+        'costs_amp_subset2',
+        grid_sizes=[7, 8, 9],
+        fig_filename='mem_vs_amp_subset_size.eps')
+
+    plot_flops_vs_amp_subset_size_multiple(
+        'costs_amp_subset2',
+        grid_sizes=[7, 8, 9],
+        fig_filename='flops_vs_amp_subset_size.eps')
+
+    plot_fpm_vs_amp_subset_multiple(
+        'costs_amp_subset2',
+        grid_sizes=[7, 8, 9],
+        fig_filename='fpm_vs_amp_subset_size.eps')
 
     # dump_nonequivalent_treewidth_graphs(
     #     'test_circuits/inst/cz_v2/6x6/inst_6x6_25_0.txt',
@@ -451,19 +678,19 @@ if __name__ == "__main__":
     # )
 
     # Taihuligh single amplitude estimate
-    costs = get_cost_vs_amp_subset_size_parallel(
-        'test_circuits/inst/cz_v2/8x8/inst_8x8_44_0.txt',
-        start_at=0, stop_at=1, step_by=1, n_var_parallel=23,
-        splitting_fun=partial(gm.split_graph_dynamic_greedy,
-                              greedy_step_by=1)
-    )
-    (max_mem, min_mem, flops,
-     total_mem_max, total_min_mem, total_flops,
-     max_mem_best, min_mem_best, flops_best,
-     total_mem_max_best, total_min_mem_best,
-     total_flops_best, treewidth, treewidth_best,
-     av_flop_per_mem) = costs
+    # costs = get_cost_vs_amp_subset_size_parallel(
+    #     'test_circuits/inst/cz_v2/8x8/inst_8x8_44_0.txt',
+    #     start_at=0, stop_at=1, step_by=1, n_var_parallel=23,
+    #     splitting_fun=partial(gm.split_graph_dynamic_greedy,
+    #                           greedy_step_by=1)
+    # )
+    # (max_mem, min_mem, flops,
+    #  total_mem_max, total_min_mem, total_flops,
+    #  max_mem_best, min_mem_best, flops_best,
+    #  total_mem_max_best, total_min_mem_best,
+    #  total_flops_best, treewidth, treewidth_best,
+    #  av_flop_per_mem) = costs
 
-    print(min_mem[0]/2**30)
-    print(np.log2(flops[0]))
-    print(flops[0] / 10**10)
+    # print(min_mem[0]/2**30)
+    # print(np.log2(flops[0]))
+    # print(flops[0] / 10**10)

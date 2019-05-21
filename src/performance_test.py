@@ -20,6 +20,27 @@ from src.logger_setup import log
 from mpi4py import MPI
 from matplotlib import pyplot as plt
 
+from matplotlib.ticker import MaxNLocator
+
+SMALL_SIZE = 10
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 18
+
+# controls default text sizes
+plt.rc('font', size=SMALL_SIZE)
+# fontsize of the axes title
+plt.rc('axes', titlesize=BIGGER_SIZE)
+# fontsize of the x and y labels
+plt.rc('axes', labelsize=MEDIUM_SIZE)
+# fontsize of the tick labels
+plt.rc('xtick', labelsize=SMALL_SIZE)
+# fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)
+# legend fontsize
+plt.rc('legend', fontsize=MEDIUM_SIZE)
+# fontsize of the figure title
+plt.rc('figure', titlesize=BIGGER_SIZE)
+
 
 def profile_decorator(filename=None, comm=MPI.COMM_WORLD):
     def prof_decorator(f):
@@ -686,12 +707,12 @@ def extract_record_vs_gridsize(
     """
     data = pd.read_pickle(filename)
 
-    times = []
+    points = []
     for grid_size in grid_sizes:
-        time = data[(grid_size, depth)][rec_id]
-        times.append(time)
+        point = data[(grid_size, depth)][rec_id]
+        points.append(point)
 
-    return times, grid_sizes
+    return points, grid_sizes
 
 
 def extract_record_vs_depth(
@@ -927,8 +948,8 @@ def plot_par_efficiency(
 def plot_flops_per_sec_vs_depth(
         filename,
         fig_filename='fps_vs_depth.png',
-        grid_sizes=[6, 7],
-        depths=range(10, 16),
+        grid_sizes=[5, 6, 7],
+        depths=range(10, 25),
         interactive=False):
     """
     Plots flops per second vs depth for some number of grid sizes
@@ -1033,6 +1054,82 @@ def plot_fps_vs_n_var_parallel(
     fig.savefig(fig_filename)
 
 
+def plot_treewidth_vs_depth(
+        filename,
+        fig_filename='tw_vs_depth.eps',
+        grid_sizes=[4, 5],
+        depths=range(10, 30),
+        interactive=False):
+    """
+    Plots treewidth vs depth for some number of grid sizes
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(grid_sizes), sharey=True,
+                             figsize=(6*len(grid_sizes), 6))
+    if type(axes) is not np.ndarray:
+        axes = [axes]
+
+    for n, grid_size in enumerate(grid_sizes):
+        time, depths_labels = extract_record_vs_depth(
+            filename, depths, grid_size, rec_id='treewidth')
+        axes[n].plot(depths_labels, time, 'b-o', label='treewidth')
+        axes[n].set_xlabel(
+            'depth of {}x{} circuit'.format(grid_size, grid_size))
+        axes[n].set_ylabel('treewidth')
+        axes[n].xaxis.set_major_locator(
+            MaxNLocator(integer=True))
+        #axes[n].legend(loc='upper left')
+
+    # fig.suptitle('Treewidth dependence on\n the depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
+def plot_treewidth_vs_gridsize(
+        filename,
+        fig_filename='tw_vs_gridsize.eps',
+        grid_sizes=[5, 6],
+        depths=[20, 30],
+        interactive=False):
+    """
+    Plots treewidth vs depth for some number of grid sizes
+    Data is loaded from filename
+    """
+    if not interactive:
+        plt.switch_backend('agg')
+
+    # Create empty canvas
+    fig, axes = plt.subplots(1, len(depths), sharey=True,
+                             figsize=(6*len(depths), 6))
+    if type(axes) is not np.ndarray:
+        axes = [axes]
+
+    for n, depth in enumerate(depths):
+        time, depths_labels = extract_record_vs_gridsize(
+            filename, grid_sizes, depth, rec_id='treewidth')
+        axes[n].plot(depths_labels, time, 'b-o', label='treewidth')
+        axes[n].set_xlabel(
+            'lateral size of {} layer circuit'.format(depth))
+        axes[n].set_ylabel('treewidth')
+        axes[n].xaxis.set_major_locator(
+            MaxNLocator(integer=True))
+        #axes[n].legend(loc='upper left')
+
+    # fig.suptitle('Treewidth dependence on\n the depth of the circuit')
+
+    if interactive:
+        fig.show()
+
+    fig.savefig(fig_filename)
+
+
 if __name__ == "__main__":
     # collect_timings('test_np.p', [4, 5], list(range(10, 21)),
     #                 timing_fn=time_single_amplitude_np)
@@ -1065,9 +1162,9 @@ if __name__ == "__main__":
     #                     fig_filename='efficiency_np_hachiko.png',
     #                     interactive=True)
 
-    # plot_flops_per_sec_vs_depth('hachiko_np_7.p',
-    #                             fig_filename='fps_vs_depth_7.png',
-    #                             grid_sizes=[7, 7],
+    # plot_flops_per_sec_vs_depth('hachiko_np.p',
+    #                             fig_filename='fps_vs_depth.eps',
+    #                             grid_sizes=[5, 6, 7],
     #                             depths=range(10, 26))
     # collect_timings_npar(
     #     'test_circuits/inst/cz_v2/5x5/inst_5x5_18_2.txt',
@@ -1082,9 +1179,21 @@ if __name__ == "__main__":
     #     depths=[10, 15, 20],
     #     interactive=False)
 
-    grid_size = 7
-    depth = 20
-    plot_time_vs_n_var_parallel(
-        f'nvar_np_{grid_size}x{grid_size}_{depth}.p',
-        fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
+    # grid_size = 7
+    # depth = 20
+    # plot_time_vs_n_var_parallel(
+    #     f'nvar_np_{grid_size}x{grid_size}_{depth}.p',
+    #     fig_filename=f'time_vs_n_var_parallel_{grid_size}x{grid_size}_{depth}.png'
+    # )
+    plot_treewidth_vs_depth(
+        'output/cost_estimate_0.p',
+        grid_sizes=[8],
+        depths=range(20, 40),
+        interactive=True
+    )
+    plot_treewidth_vs_gridsize(
+        'output/cost_estimate_0.p',
+        grid_sizes=[4, 5, 6, 7, 8, 9, 10, 11, 12],
+        depths=[25],
+        interactive=True
     )
