@@ -16,165 +16,68 @@ from src.logger_setup import log
 random.seed(0)
 
 
-def read_buckets(filename, free_qubits=[], max_depth=None):
+class Idx(object):
     """
-    Reads circuit from filename and builds buckets for its contraction
-
-    Parameters
-    ----------
-    filename : str
-             circuit file in the format of Sergio Boixo
-    free_qubits : list, optional
-             qubits that have to be not contracted. Numeration
-             is zero based
-    max_depth : int
-             maximal depth of gates to read
-
-    Returns
-    -------
-    qubit_count : int
-            number of qubits in the circuit
-    buckets : list of lists
-            list of lists (buckets)
-    free_variables : list
-            possible free variable list
+    Class to store indices
     """
-    # perform the cirquit file processing
-    log.info(f'reading file {filename}')
+    def __init__(self, name, size=2):
+        self._name = name
+        self._size = size
 
-    with open(filename, 'r') as fp:
-        # read the number of qubits
-        qubit_count = int(fp.readline())
-        log.info("There are {:d} qubits in circuit".format(qubit_count))
+    @property
+    def name(self):
+        return self._name
 
-        n_ignored_layers = 0
-        current_layer = 0
+    @property
+    def size(self):
+        return self._size
 
-        # Build buckets for bucket elimination algorithm.
-        # we start with adding border 1-variable tensors
-        buckets = []
-        for ii in range(1, qubit_count+1):
-            buckets.append(
-                [[f'I{ii}', [ii]]]
-            )
+    def __str__(self):
+        return str(self._name)
 
-        layer_variables = list(range(1, qubit_count+1))
-        current_var = qubit_count
-
-        for idx, line in enumerate(fp):
-
-            # Read circuit layer by layer. Decipher contents of the line
-            m = re.search(r'(?P<layer>[0-9]+) (?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', line)
-            if m is None:
-                raise Exception("file format error at line {}".format(idx))
-            layer_num = int(m.group('layer'))
-
-            # Skip layers if max_depth is set
-            if max_depth is not None and layer_num > max_depth:
-                n_ignored_layers = layer_num - max_depth
-                continue
-            if layer_num > current_layer:
-                current_layer = layer_num
-
-            op_identif = m.group('operation')
-            if m.group('qubit2') is not None:
-                q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
-            else:
-                q_idx = (int(m.group('qubit1')),)
-
-            # Now apply what we got to build the graph
-            if op_identif == 'cz':
-                # cZ connects two variables with an edge
-                var1 = layer_variables[q_idx[0]]
-                var2 = layer_variables[q_idx[1]]
-
-                # append cZ gate to the bucket of lower variable index
-                min_var = min(var1, var2)
-                buckets[min_var-1].append(
-                    [op_identif, [var1, var2]]
-                )
-
-            # Skip Hadamard tensors - for now
-            elif op_identif == 'h':
-                pass
-
-            # Add selfloops for single variable gates
-            elif op_identif == 't':
-                var1 = layer_variables[q_idx[0]]
-                # Do not add any variables (buckets), but add tensor
-                # to the bucket
-                buckets[var1-1].append(
-                    [op_identif, [var1, ]]
-                )
-
-            # Process non-diagonal gates X and Y
-            else:
-                var1 = layer_variables[q_idx[0]]
-                var2 = current_var+1
-
-                # Append gate 2-variable tensor to the first variable's
-                # bucket. This yields buckets containing variables
-                # in increasing order (starting at least with bucket's
-                # variable)
-                buckets[var1-1].append(
-                    [op_identif, [var1, var2]]
-                )
-
-                # Create a new variable
-                buckets.append(
-                    []
-                )
-
-                current_var += 1
-                layer_variables[q_idx[0]] = current_var
-
-        # add border tensors for the last layer
-        for qubit_idx, var in zip(range(qubit_count),
-                                  layer_variables):
-            if qubit_idx not in free_qubits:
-                buckets[var-1].append(
-                    ['O{}'.format(qubit_idx+1), [var, ]]
-                )
-
-        # Now add Hadamards for free qubits
-        for qubit_idx in free_qubits:
-            var1 = layer_variables[qubit_idx]
-            var2 = current_var+1
-
-            # Append H gate
-            buckets[var1-1].append(
-                ['h', [var1, var2]]
-            )
-
-            # Create a new variable
-            buckets.append(
-                []
-            )
-            current_var += 1
-            layer_variables[qubit_idx] = current_var
-
-        # Collect free variables
-        free_variables = [layer_variables[qubit_idx]
-                          for qubit_idx in free_qubits]
-
-        # We are done, print stats
-        if n_ignored_layers > 0:
-            log.info("Ignored {} layers".format(n_ignored_layers))
-
-        n_variables = len(buckets)
-        n_tensors = 0
-        for bucket in buckets:
-            n_tensors += len(bucket)
-
-        log.info(
-            f"Generated buckets with {n_variables} variables" +
-            f" and {n_tensors} tensors")
-        log.info(f"last index contains from {layer_variables}")
-
-    return qubit_count, buckets, free_variables
+    def __repr__(self):
+        return self.__str__()
 
 
-def circ2buckets(circuit):
+class Tensor(object):
+    """
+    Placeholder tensor class. We use it to do manipulations of
+    tensors kind of symbolically and to not move around numpy arrays
+    """
+    def __init__(self, name, indices, data_key=None):
+        """
+        Initialize the tensor
+        name: str,
+              the name of the tensor. Used only for display/convenience.
+              May be not unique.
+        shape: tuple,
+              shape of a tensor
+        """
+        self._name = name
+        self._indices = indices
+        self._data_key = data_key
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def indices(self):
+        return self._indices
+
+    @property
+    def data_key(self):
+        return self._data_key
+
+    def __str__(self):
+        return '{}({})'.format(self._name, ','.join(
+            map(str, self.indices)))
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def circ2buckets(circuit, free_qubits=[], max_depth=None):
     """
     Takes circuit in the form of list of gate lists, builds
     its contraction graph and variable buckets. Buckets contain tuples
@@ -187,7 +90,6 @@ def circ2buckets(circuit):
     circuit : list of lists
             quantum circuit as returned by
             :py:meth:`operators.read_circuit_file`
-
     Returns
     -------
     buckets : list of lists
