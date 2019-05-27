@@ -204,7 +204,7 @@ def circ2buckets(circuit):
     # Let's build an undirected graph for variables
     # we start from 1 here to avoid problems with quickbb
     for var in range(1, qubit_count+1):
-        g.add_node(ii, name=utils.num_to_alnum(ii))
+        g.add_node(var, name=utils.num_to_alnum(var))
 
     # Add selfloops to the border nodes
     for var in range(1, qubit_count+1):
@@ -237,9 +237,9 @@ def circ2buckets(circuit):
 
                 g.add_node(var2, name=utils.num_to_alnum(var2))
                 g.add_edge(var1, var2,
-                           tensor=op.name,
+                           tensor=type(op).__name__,
                            hash_tag=hash((
-                               op.name, (var1, var2),
+                               type(op).__name__, (var1, var2),
                                random.random()))
                 )
 
@@ -248,7 +248,7 @@ def circ2buckets(circuit):
                 # in increasing order (starting at least with bucket's
                 # variable)
                 buckets[var1-1].append(
-                    [op.name, [var1, var2]]
+                    [type(op).__name__, [var1, var2]]
                 )
 
                 # Create a new variable
@@ -266,16 +266,16 @@ def circ2buckets(circuit):
                 # cZ connects two variables with an edge
                 g.add_edge(
                     var1, var2,
-                    tensor=op.name,
+                    tensor=type(op).__name__,
                     hash_tag=hash(
-                        (op.name, (var1, var2),
+                        (type(op).__name__, (var1, var2),
                          random.random()))
                 )
 
                 # append cZ gate to the bucket of lower variable index
                 min_var = min(var1, var2)
                 buckets[min_var-1].append(
-                    [op.name, [var1, var2]]
+                    [type(op).__name__, [var1, var2]]
                 )
 
             if isinstance(op, ops.T):
@@ -283,14 +283,14 @@ def circ2buckets(circuit):
                 # Do not add any variables (buckets), but add tensor
                 # to the bucket
                 buckets[var1-1].append(
-                    [op.name, [var1, ]]
+                    [type(op).__name__, [var1, ]]
                 )
                 # Add a selfloop for a 1-variable tensor
                 g.add_edge(
                     var1, var1,
-                    tensor=op.name,
+                    tensor=type(op).__name__,
                     hash_tag=hash(
-                        (op.name, (var1, var1),
+                        (type(op).__name__, (var1, var1),
                          random.random()))
                 )
 

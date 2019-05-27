@@ -34,7 +34,7 @@ def get_np_buckets(buckets, qubit_count, target_state):
 
     # Define ingredients
     matrices_dict = copy.deepcopy(
-        ops.operator_matrices_dict)
+        ops.operator_values_dict)
 
     # Add input vectors
 

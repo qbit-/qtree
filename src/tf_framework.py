@@ -109,7 +109,7 @@ def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
           Dictionary to feed in Tensorflow session
     """
     # Actual values of gates
-    values_dict = ops.operator_matrices_dict
+    values_dict = ops.operator_values_dict
 
     # Fill all common gate's placeholders
     feed_dict = {placeholder_dict[key]: values_dict[key]

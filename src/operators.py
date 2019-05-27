@@ -12,49 +12,13 @@ from cmath import exp
 import src.system_defs as defs
 
 
-class qOperation:
+class Gate:
     """
-    Factory class for quantum gates.
+    Base class for quantum gates.
     """
-
-    def factory(self, arg):
-        """
-        Creates appropriate gates from strings of the form:
-
-        | x_1_2 1
-        | cz 3 4
-
-        Parameters
-        ----------
-        arg : str
-              string to use
-        """
-        if isinstance(arg, str):
-            return self._create_from_string(arg)
-
-    def _create_from_string(sefl, s):
-        # log.debug("creating op from '{}'".format(s))
-        m = re.search(
-            r'(?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', s)
-        if m is None:
-            raise Exception("file format error in {}".format(s))
-        op_identif = m.group('operation')
-
-        if m.group('qubit2') is not None:
-            q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
-        else:
-            q_idx = int(m.group('qubit1'))
-
-        if op_identif == 'h':
-            return H(q_idx)
-        if op_identif == 't':
-            return T(q_idx)
-        if op_identif == 'cz':
-            return cZ(*q_idx)
-        if op_identif == 'x_1_2':
-            return X_1_2(q_idx)
-        if op_identif == 'y_1_2':
-            return Y_1_2(q_idx)
+    def __init__(self, *qubits):
+        self._check_qubit_count(qubits)
+        self._qubits = qubits
 
     def _check_qubit_count(self, qubits):
         if len(qubits) != self.n_qubit:
@@ -70,131 +34,135 @@ class qOperation:
         )
 
     def __str__(self):
-        return "<{} operator on {}>".format(self.name, self._qubits)
+        return "{}({})".format(type(self).__name__,
+                               ','.join(map(str, self._qubits)))
 
     def __repr__(self):
         return self.__str__()
 
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
 
-
-class H(qOperation):
+class H(Gate):
     """
     Hadamard gate
     """
-    matrix = 1/sqrt(2) * np.array([[1j,  1j],
+    tensor = 1/sqrt(2) * np.array([[1j,  1j],
                                    [1j, -1j]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'h'
     cirq_op = cirq.H
     diagonal = False
     n_qubit = 1
 
     cirq_op = cirq.H
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
 
-
-class cZ(qOperation):
+class cZ(Gate):
     """
     Controlled :math:`Z` gate
     """
-    matrix = np.array([[1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
-                       [0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [0.+0.j,  0.+0.j,  1,  0.+0.j],
-                       [0.+0.j,  0.+0.j,  0.+0.j, -1]],
-                      dtype=defs.NP_ARRAY_TYPE)
-    name = 'cz'
+    tensor = np.array([[1, 1],
+                       [1, -1]], dtype=defs.NP_ARRAY_TYPE)
+
     diagonal = True
     n_qubit = 2
 
     cirq_op = cirq.CZ
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
 
-
-class T(qOperation):
+class T(Gate):
     """
     :math:`T`-gate
     """
-    matrix = np.array([[exp(-1.j*pi/8),  0],
-                       [0,  exp(1.j*pi/8)]],
+    tensor = np.array([exp(-1.j*pi/8), exp(1.j*pi/8)],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 't'
     n_qubit = 1
 
     cirq_op = cirq.T
     diagonal = True
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+
+class S(Gate):
+    """
+    :math:`S`-gate
+    """
+    tensor = np.array([exp(-1.j*pi/4), exp(1.j*pi/4)],
+                      dtype=defs.NP_ARRAY_TYPE)
+    n_qubit = 1
+
+    cirq_op = cirq.T
+    diagonal = True
 
 
-class X_1_2(qOperation):
-    r"""
+class X_1_2(Gate):
+    """
     :math:`X^{1/2}`
     gate
     """
-    matrix = 1/sqrt(2) * np.array([[1, 1j],
+    tensor = 1/sqrt(2) * np.array([[1, 1j],
                                    [1j, 1]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'x_1_2'
     diagonal = False
     n_qubit = 1
 
     def cirq_op(self, x): return cirq.X(x)**0.5
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
 
-
-class Y_1_2(qOperation):
+class Y_1_2(Gate):
     r"""
     :math:`Y^{1/2}` gate
     """
-    matrix = 1/sqrt(2) * np.array([[1, -1],
+    tensor = 1/sqrt(2) * np.array([[1, -1],
                                    [1,  1]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'y_1_2'
     diagonal = False
     n_qubit = 1
 
     def cirq_op(self, x): return cirq.Y(x)**0.5
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
 
-
-class X(qOperation):
-    matrix = np.array([[0.+0.j, 1.+0j],
+class X(Gate):
+    tensor = np.array([[0.+0.j, 1.+0j],
                        [1.+0j, 0.+0j]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'x'
     diagonal = False
     n_qubit = 1
 
     def cirq_op(self, x): return cirq.X(x)
 
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+
+# class cX(Gate):
+#     raise NotImplemented
+#     diagonal = False
+#     n_qubit = 1
+
+#     def cirq_op(self, x): raise NotImplemented('No cX operation in Cirq')
 
 
-class Y(qOperation):
-    matrix = np.array([[0.-1j, 0.+0j],
+class Y(Gate):
+    tensor = np.array([[0.-1j, 0.+0j],
                        [0.+0j, 0.+1j]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'y'
     diagonal = False
     n_qubit = 1
+
+    def cirq_op(self, x): return cirq.Y(x)
+
+
+class ZP(Gate):
+    """Arbitrary :math:`Z` rotation"""
+
+    def __init__(self, *qubits, alpha):
+        super().__init__(*qubits)
+        self._alpha = alpha
+        self.tensor = np.array([1, exp(1.j*alpha)],
+                               dtype=defs.NP_ARRAY_TYPE)
+
+    def __str__(self):
+        return "{}[a={:.2f}]({})".format(type(self).__name__,
+                                         self._alpha,
+                                         ','.join(map(str, self._qubits)))
+    n_qubit = 1
+    cirq_op = cirq.T
+    diagonal = True
 
 
 def read_circuit_file(filename, max_depth=None):
@@ -216,6 +184,14 @@ def read_circuit_file(filename, max_depth=None):
     circuit : list of lists
             quantum circuit as a list of layers of gates
     """
+    label_to_gate_dict = {
+        'h': H,
+        't': T,
+        'cz': cZ,
+        'x_1_2': X_1_2,
+        'y_1_2': Y_1_2,
+    }
+
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
@@ -243,7 +219,18 @@ def read_circuit_file(filename, max_depth=None):
                 current_layer = layer_num
 
             op_str = line[m.end():]
-            op = qOperation().factory(op_str)
+            m = re.search(r'(?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', op_str)
+            if m is None:
+                raise Exception("file format error in {}".format(s))
+
+            op_identif = m.group('operation')
+
+            if m.group('qubit2') is not None:
+                q_idx = (int(m.group('qubit1')), int(m.group('qubit2')))
+            else:
+                q_idx = (int(m.group('qubit1')),)
+
+            op = label_to_gate_dict[op_identif](*q_idx)
             circuit_layer.append(op)
 
         circuit.append(circuit_layer)  # last layer
@@ -254,13 +241,14 @@ def read_circuit_file(filename, max_depth=None):
     return qubit_count, circuit
 
 
-# Dictionary containing (compressed) entries of all operators
-# in this module. Only nonzero entries are listed, which means diagonal
-# for diagonal matrices or double diagonal for diagonal fourth order tensors
-operator_matrices_dict = {
-    'h': H(1).matrix,
-    'x_1_2': X_1_2(1).matrix,
-    'y_1_2': Y_1_2(1).matrix,
-    't': np.diag(T(1).matrix),
-    'cz': np.diag(cZ(1, 1).matrix).reshape([2, 2])
+# Dictionary containing data of all operators
+# in this module. Only nonzero entries of tensors are listed, which means
+# diagonals of diagonal matrices or double diagonal for diagonal
+# fourth order tensors
+operator_values_dict = {
+    'h': H(1).tensor,
+    'x_1_2': X_1_2(1).tensor,
+    'y_1_2': Y_1_2(1).tensor,
+    't': T(1).tensor,
+    'cz': cZ(1, 1).tensor
 }
