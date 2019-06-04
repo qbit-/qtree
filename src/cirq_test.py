@@ -562,7 +562,7 @@ def eval_circuit_multiamp_np(
 
 
 if __name__ == "__main__":
-    eval_circuit_tf('inst_2x2_7_1.txt')
+    eval_circuit_tf('inst_2x2_7_1.txt', 1)
     eval_circuit_np('inst_2x2_7_1.txt', 1)
     eval_circuit_tf_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')

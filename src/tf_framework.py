@@ -44,7 +44,7 @@ def get_tf_buckets(buckets):
         tf_bucket = []
         for tensor in bucket:
             # sort tensor dimensions
-            transpose_order = np.argsort(tensor.indices)
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
             placeholder = tf.placeholder(defs.TF_ARRAY_TYPE,
                                          tensor.shape, tensor.name)
 
@@ -52,10 +52,10 @@ def get_tf_buckets(buckets):
             placeholder_dict[placeholder] = tensor.data_key
 
             # Create new tensor with a placeholder for data
-            new_tensor = opt.Tensor(tensor.name, tensor.indices,
-                                    tensor.shape, data=tf.transpose(
-                                        placeholder, transpose_order))
-            new_tensor.transpose(transpose_order)
+            new_tensor = tensor.copy(
+                indices=(tensor.indices[pp] for pp in transpose_order),
+                data=tf.transpose(placeholder, transpose_order))
+
             tf_bucket.append(new_tensor)
 
         tf_buckets.append(tf_bucket)
@@ -218,30 +218,26 @@ def process_bucket_tf(bucket):
     """
     result_data = bucket[0].data
     result_indices = bucket[0].indices
-    result_shape = bucket[0].shape
 
     for tensor in bucket[1:]:
-        expr = utils.get_einsum_expr(result_indices, tensor.indices)
+        expr = utils.get_einsum_expr(list(map(int, result_indices)),
+                                     list(map(int, tensor.indices)))
+
         result_data = tf.einsum(expr, result_data, tensor.data)
         # Merge and sort indices and shapes
-        result_indices = tuple(sorted(set(result_indices
-                                          + tensor.indices)))
-        shapes_dict = dict(zip(tensor.indices, tensor.shape))
-        shapes_dict.update(dict(zip(result_indices, result_shape)))
-
-        result_shape = tuple(shapes_dict[idx] for idx in result_indices)
+        result_indices = tuple(sorted(
+            set(result_indices + tensor.indices),
+            key=int))
 
     if len(result_indices) > 0:
         first_index, *result_indices = result_indices
-        result_shape = result_shape[1:]
+        tag = first_index.identity
     else:
-        first_index = 'f'
+        tag = 'f'
         result_indices = []
-        result_shape = []
 
     # reduce
-    result = opt.Tensor(f'E{first_index}', result_indices,
-                        result_shape,
+    result = opt.Tensor(f'E{tag}', result_indices,
                         data=tf.reduce_sum(result_data, axis=0))
     return result
 

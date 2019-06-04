@@ -62,17 +62,15 @@ def get_np_buckets(buckets, data_dict, initial_state,
         np_bucket = []
         for tensor in bucket:
             # sort tensor dimensions
-            transpose_order = np.argsort(tensor.indices)
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
             try:
                 data = data_dict[tensor.data_key]
             except KeyError:
                 data = terminals_data_dict[tensor.data_key]
 
-            new_tensor = opt.Tensor(tensor.name, tensor.indices,
-                                    tensor.shape, data=np.transpose(
-                                        data.copy(),
-                                        transpose_order))
-            new_tensor.transpose(transpose_order)
+            new_tensor = tensor.copy(
+                indices=(tensor.indices[pp] for pp in transpose_order),
+                data=np.transpose(data.copy(), transpose_order))
 
             np_bucket.append(new_tensor)
         np_buckets.append(np_bucket)
@@ -97,7 +95,7 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     Returns
     -------
     sliced_buckets : list of lists
-              buckets with sliced gates
+              buckets with sliced tensors
     """
     # import pdb
     # pdb.set_trace()
@@ -145,31 +143,29 @@ def process_bucket_np(bucket):
            wrapper tensor object holding the result
     """
     result_indices = bucket[0].indices
-    result_shape = bucket[0].shape
     result_data = bucket[0].data
 
     for tensor in bucket[1:]:
-        expr = utils.get_einsum_expr(result_indices, tensor.indices)
+        expr = utils.get_einsum_expr(
+            list(map(int, result_indices)), list(map(int, tensor.indices))
+        )
+
         result_data = np.einsum(expr, result_data, tensor.data)
 
         # Merge and sort indices and shapes
-        result_indices = tuple(sorted(set(result_indices
-                                          + tensor.indices)))
-        shapes_dict = dict(zip(tensor.indices, tensor.shape))
-        shapes_dict.update(dict(zip(result_indices, result_shape)))
-
-        result_shape = tuple(shapes_dict[idx] for idx in result_indices)
+        result_indices = tuple(sorted(
+            set(result_indices + tensor.indices),
+            key=int)
+        )
 
     if len(result_indices) > 0:
         first_index, *result_indices = result_indices
-        result_shape = result_shape[1:]
+        tag = first_index.identity
     else:
-        first_index = 'f'
+        tag = 'f'
         result_indices = []
-        result_shape = []
 
     # reduce
-    result = opt.Tensor(f'E{first_index}', result_indices,
-                        result_shape,
+    result = opt.Tensor(f'E{tag}', result_indices,
                         data=np.sum(result_data, axis=0))
     return result

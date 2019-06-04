@@ -16,12 +16,71 @@ from src.logger_setup import log
 random.seed(0)
 
 
+class Idx(object):
+    """
+    Index class. Primarily used to store index id:size pairs
+    """
+    def __init__(self, identity, size=2, name=None):
+        """
+        Initialize the index
+        identity: int
+              Index identifier. We use mainly integers here to
+              make it play nicely with graphical models.
+        size: int, optional
+              Size of the index. Default 2
+        name: str, optional
+              Optional name tag. Defaults to "v{identity}"
+        """
+        self._identity = identity
+        self._size = size
+        if name is None:
+            name = f"v[{identity}]"
+        self._name = name
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def size(self):
+        return self._size
+
+    @property
+    def identity(self):
+        return self._identity
+
+    def copy(self, identity=None, size=None, name=None):
+        if identity is None:
+            identity = self.identity
+        if size is None:
+            size = self.size
+
+        return Idx(identity, size, name)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __int__(self):
+        return int(self.identity)
+
+    def __hash__(self):
+        return hash((self.identity, self.size))
+
+    def __eq__(self, other):
+        return (isinstance(other, type(self))
+                and self.identity == other.identity
+                and self.size == other.size)
+
+
 class Tensor(object):
     """
     Placeholder tensor class. We use it to do manipulations of
     tensors kind of symbolically and to not move around numpy arrays
     """
-    def __init__(self, name, indices, shape,
+    def __init__(self, name, indices,
                  data_key=None, data=None):
         """
         Initialize the tensor
@@ -35,11 +94,11 @@ class Tensor(object):
         data_key: int
               Hash key to find tensor's data in the global storage
         data: np.array
-              Actual data of the tensor. Default None. Usually is not supplied at initialization.
+              Actual data of the tensor. Default None.
+              Usually is not supplied at initialization.
         """
         self._name = name
         self._indices = tuple(indices)
-        self._shape = tuple(shape)
         self._data_key = data_key
         self._data = data
 
@@ -53,7 +112,7 @@ class Tensor(object):
 
     @property
     def shape(self):
-        return self._shape
+        return tuple(idx.size for idx in self._indices)
 
     @property
     def data_key(self):
@@ -63,18 +122,20 @@ class Tensor(object):
     def data(self):
         return self._data
 
-    def size_of_index(self, index):
-        return dict(zip(self.indices, self.shape))[index]
-
-    def transpose(self, permutation):
-        if len(permutation) != len(self.indices):
-            raise ValueError('Wrong permutation')
-        self._indices = tuple(self._indices[pp] for pp in permutation)
-        self._shape = tuple(self._shape[pp] for pp in permutation)
+    def copy(self, name=None, indices=None, data_key=None, data=None):
+        if name is None:
+            name = self.name
+        if indices is None:
+            indices = self.indices
+        if data_key is None:
+            data_key = self.data_key
+        if data is None:
+            data = self.data
+        return Tensor(name, indices, data_key, data)
 
     def __str__(self):
         return '{}({})'.format(self._name, ','.join(
-            map('v[{}]'.format, self.indices)))
+            map(str, self.indices)))
 
     def __repr__(self):
         return self.__str__()
@@ -87,8 +148,7 @@ class Tensor(object):
         if self._data is None:
             raise ValueError(f'No data assigned in tensor {self.name}')
         if self.indices == other.indices:
-            return Tensor(self.name, self.indices,
-                          self.shape, data=self._data * other._data)
+            return self.copy(data=self._data * other._data)
         else:
             raise ValueError(f'Index mismatch in __mul__: {self.indices} times {other.indices}')
 
@@ -145,7 +205,7 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
     for qubit in range(qubit_count):
         if qubit not in free_qubits:
             var = layer_variables[qubit]
-            buckets[var].append(Tensor(f'O{qubit}', [var], [2],
+            buckets[var].append(Tensor(f'O{qubit}', [Idx(var, 2)],
                                        data_key=(f'O{qubit}', None)))
         else:
             free_variables.append(layer_variables[qubit])
@@ -159,19 +219,19 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
             # The order of indices
             # is always (a_new, a, b_new, b, ...), as
             # this is how gate tensors are chosen to be stored
-            indices = []
+            variables = []
             current_var_copy = current_var
             for qubit in op.qubits:
                 if qubit in op.changed_qubits:
-                    indices.extend(
+                    variables.extend(
                         [layer_variables[qubit],
                          current_var_copy])
                     current_var_copy += 1
                 else:
-                    indices.extend([layer_variables[qubit]])
+                    variables.extend([layer_variables[qubit]])
             # Build a tensor
-            shape = [2, ] * len(indices)
-            t = Tensor(op.name, indices, shape,
+            indices = [Idx(var, 2) for var in variables]
+            t = Tensor(op.name, indices,
                        data_key=(op.name, op.data_hash))
 
             # Insert tensor data into data dict
@@ -193,8 +253,9 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
         buckets[var].append(
-            Tensor(f'I{qubit}', indices=[layer_variables[qubit]],
-                   shape=[2], data_key=(f'I{qubit}', None))
+            Tensor(f'I{qubit}',
+                   indices=[Idx(layer_variables[qubit], 2)],
+                   data_key=(f'I{qubit}', None))
         )
 
     return buckets, free_variables, data_dict
@@ -232,7 +293,7 @@ def bucket_elimination(buckets, process_bucket_fn,
             if len(tensor.indices) > 0:
                 # tensor is not scalar.
                 # Move it to appropriate bucket
-                first_index = tensor.indices[0]
+                first_index = int(tensor.indices[0])
                 buckets[first_index].append(tensor)
             else:   # tensor is scalar
                 if result is not None:
@@ -279,11 +340,10 @@ def buckets2graph(buckets, ignore_variables=[]):
             for idx in tensor.indices:
                 # This may reintroduce the same node many times,
                 # be careful if using something other than
-                graph.add_node(idx,
-                               label=utils.num_to_alnum(idx),
-                               weight=tensor.size_of_index(idx)
+                graph.add_node(int(idx),
+                               size=idx.size
                 )
-                new_nodes.append(idx)
+                new_nodes.append(int(idx))
             if len(new_nodes) > 1:
                 edges = itertools.combinations(new_nodes, 2)
             else:
@@ -380,13 +440,15 @@ def reorder_buckets(old_buckets, permutation):
 
     for bucket in old_buckets:
         for tensor in bucket:
-            new_indices = [perm_table[ii] for ii in tensor.indices]
-            bucket_idx = sorted(new_indices)[0]
+            new_indices = [idx.copy(perm_table[idx.identity])
+                           for idx in tensor.indices]
+            bucket_idx = sorted(
+                new_indices, key=int)[0].identity
             # we leave the variables permuted, as the permutation
-            # will be needed to transform tensorflow tensor
+            # information has to be preserved
             new_buckets[bucket_idx].append(
-                Tensor(tensor.name, new_indices,
-                       tensor.shape, tensor.data_key))
+                tensor.copy(indices=new_indices)
+            )
 
     return new_buckets
 

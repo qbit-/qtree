@@ -16,6 +16,8 @@ from collections import Counter
 import src.system_defs as defs
 import src.utils as utils
 import src.optimizer as opt
+
+from src.optimizer import Idx, Tensor
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
@@ -177,17 +179,18 @@ def relabel_graph_nodes(graph, label_dict=None):
         if is_multigraph:
             for multiedge_key in graph[u][v].keys():
                 tensor = graph[u][v][multiedge_key]['tensor']
-                indices = [label_dict[idx] for idx in tensor.indices]
-            new_graph[u][v][multiedge_key]['tensor'] = opt.Tensor(
-                tensor.name, indices, tensor.shape, tensor.data_key)
+                indices = [idx.copy(label_dict[idx.identity])
+                           for idx in tensor.indices]
+            new_graph[u][v][multiedge_key]['tensor'] = tensor.copy(
+                indices=indices)
 
         elif graph[u][v].get('tensor'):
             tensor = graph[u][v]
-            indices = [label_dict[idx] for idx in tensor.indices]
-            new_graph[u][v]['tensor'] = opt.Tensor(
-                tensor.name, indices, tensor.shape, tensor.data_key)
+            indices = [idx.copy(label_dict[idx.identity])
+                       for idx in tensor.indices]
+            new_graph[u][v]['tensor'] = tensor.copy(indices=indices)
 
-    # then relabel nodes. Extra copy here, which is not optimal
+    # then relabel nodes.
     new_graph = nx.relabel_nodes(new_graph, label_dict, copy=True)
 
     # invert the dictionary
