@@ -5,8 +5,8 @@ for dependency disentanglement purposes.
 """
 import numpy as np
 
-UP = np.array([1, 0])
-DOWN = np.array([0, 1])
+ZERO = np.array([1, 0])
+ONE = np.array([0, 1])
 
 
 def int_to_bitstring(integer, width):
@@ -35,6 +35,7 @@ def qubit_vector_generator(target_state, n_qubits):
     """
     Generates a sequence of qubits corresponding to the
     binary representation of the target_state.
+    The qubits are generated in the big-endian order
 
     Parameters
     ----------
@@ -46,11 +47,11 @@ def qubit_vector_generator(target_state, n_qubits):
     Yields
     ------
     qubit : numpy.array of size [2]
-          UP or DOWN state of a single qubit
+          ZERO or ONE state of a single qubit
     """
     bitstring = int_to_bitstring(target_state, n_qubits)
     for bit in bitstring:
-        yield DOWN if bit == '0' else UP
+        yield ZERO if bit == '0' else ONE
 
 
 def slice_values_generator(comm_size, rank, idx_parallel):

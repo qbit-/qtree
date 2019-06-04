@@ -15,6 +15,7 @@ from collections import Counter
 
 import src.system_defs as defs
 import src.utils as utils
+import src.optimizer as opt
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
@@ -146,6 +147,8 @@ def relabel_graph_nodes(graph, label_dict=None):
     is relabelled (and returned) according to the label
     dictionary and an inverted dictionary is returned.
 
+    In contrast to the Networkx version this one also relabels
+    indices in the 'tensor' parameter of edges
     Parameters
     ----------
     graph : networkx.Graph
@@ -162,10 +165,30 @@ def relabel_graph_nodes(graph, label_dict=None):
     """
     if label_dict is None:
         label_dict = {old: num for num, old in
-                      enumerate(graph.nodes(data=False), 1)}
-        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
-    else:
-        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+                      enumerate(graph.nodes(data=False))}
+
+    new_graph = copy.deepcopy(graph)
+
+    # First relabel edges. Edges hold tensors, where the order of indices
+    # is preserved
+    is_multigraph = nx.is_multigraphical(graph)
+    for edge in graph.edges(data=True):
+        u, v, _ = edge
+        if is_multigraph:
+            for multiedge_key in graph[u][v].keys():
+                tensor = graph[u][v][multiedge_key]['tensor']
+                indices = [label_dict[idx] for idx in tensor.indices]
+            new_graph[u][v][multiedge_key]['tensor'] = opt.Tensor(
+                tensor.name, indices, tensor.shape, tensor.data_key)
+
+        elif graph[u][v].get('tensor'):
+            tensor = graph[u][v]
+            indices = [label_dict[idx] for idx in tensor.indices]
+            new_graph[u][v]['tensor'] = opt.Tensor(
+                tensor.name, indices, tensor.shape, tensor.data_key)
+
+    # then relabel nodes. Extra copy here, which is not optimal
+    new_graph = nx.relabel_nodes(new_graph, label_dict, copy=True)
 
     # invert the dictionary
     label_dict = {val: key for key, val in label_dict.items()}
@@ -189,11 +212,7 @@ def get_peo(old_graph,
             input_suffix=None, keep_input=False):
     """
     Calculates the elimination order for an undirected
-    graphical model of the circuit. Optionally finds `n_qubit_parralel`
-    qubits and splits the contraction over their values, such
-    that the resulting contraction is lowest possible cost.
-    Optionally fixes the values border nodes to calculate
-    full state vector.
+    graphical model of the circuit.
 
     Parameters
     ----------
@@ -202,8 +221,8 @@ def get_peo(old_graph,
     quickbb_extra_args : str, default '--min-fill-ordering --time 60'
              Optional commands to QuickBB.
     input_suffix : str, default None
-             Optional suffix for the folders. If None is provided a random
-             suffix is generated
+             Optional suffix to allow parallel execution.
+             If None is provided a random suffix is generated
     keep_input : bool, default False
              Whether to keep input files for debugging
     Returns
@@ -231,13 +250,14 @@ def get_peo(old_graph,
 
         peo = [int(ii) for ii in m['peo'].split()]
 
-        # Map peo back to original indices
-        peo = [label_dict[pp] for pp in peo]
+        # Map peo back to original indices. PEO in QuickBB is 1-based
+        # but we need it 0-based
+        peo = [label_dict[pp - 1] for pp in peo]
 
         treewidth = int(m['treewidth'])
     else:
         peo = []
-        treewidth = 1
+        treewidth = 0
 
     # find the rest of indices which quickBB did not spit out.
     # Those include isolated nodes (don't affect
@@ -608,10 +628,10 @@ def get_node_by_mem_reduction(old_graph):
         # Take out one node
         reduced_graph.remove_node(node)
         # Renumerate graph nodes to be consequtive ints (may be redundant)
-        order = (list(range(1, node))
-                 + list(range(node + 1, number_of_nodes + 1)))
+        order = (list(range(node))
+                 + list(range(node + 1, number_of_nodes)))
         reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
+            reduced_graph, dict(zip(order, range(number_of_nodes-1)))
         )
         mem, flop = cost_estimator(reduced_graph)
         delta = sum(initial_mem) - sum(mem)
@@ -641,7 +661,7 @@ def get_node_by_treewidth_reduction(old_graph):
 
     # Get flop cost of the bucket elimination
     initial_treewidth = get_treewidth_from_peo(
-        graph, list(range(1, number_of_nodes + 1)))
+        graph, list(range(number_of_nodes)))
 
     nodes_by_treewidth_reduction = []
     for node in graph.nodes(data=False):
@@ -649,13 +669,13 @@ def get_node_by_treewidth_reduction(old_graph):
         # Take out one node
         reduced_graph.remove_node(node)
         # Renumerate graph nodes to be consequtive ints (may be redundant)
-        order = (list(range(1, node))
-                 + list(range(node + 1, number_of_nodes + 1)))
+        order = (list(range(node))
+                 + list(range(node + 1, number_of_nodes)))
         reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
+            reduced_graph, dict(zip(order, range(number_of_nodes-1)))
         )
         treewidth = get_treewidth_from_peo(
-            reduced_graph, list(range(1, number_of_nodes)))
+            reduced_graph, list(range(number_of_nodes-1)))
         delta = initial_treewidth - treewidth
 
         nodes_by_treewidth_reduction.append((node, delta))
@@ -773,7 +793,7 @@ def split_graph_with_mem_constraint_greedy(
         # Get optimal order
         peo, tw = get_peo(graph)
         graph_optimal, inverse_order = relabel_graph_nodes(
-            graph, dict(zip(peo, range(1, len(peo)+1))))
+            graph, dict(zip(peo, range(len(peo)))))
 
         # get nodes by metric in descending order
         nodes_by_metric_optimal = metric_fn(graph_optimal)
@@ -797,7 +817,7 @@ def split_graph_with_mem_constraint_greedy(
 
         # Renumerate graph nodes to be consequtive ints (may be redundant)
         label_dict = dict(zip(sorted(graph.nodes),
-                              range(1, len(graph.nodes())+1)))
+                              range(len(graph.nodes()))))
 
         graph_relabelled, _ = relabel_graph_nodes(graph, label_dict)
         mem_cost, flop_cost = cost_estimator(graph_relabelled)
@@ -859,7 +879,7 @@ def split_graph_by_metric_greedy(
         # Get optimal order
         peo, tw = get_peo(graph)
         graph_optimal, inverse_order = relabel_graph_nodes(
-            graph, dict(zip(peo, range(1, len(peo)+1))))
+            graph, dict(zip(peo, range(len(peo)))))
 
         # get nodes by metric in descending order
         nodes_by_metric_optimal = metric_fn(graph_optimal)
@@ -1082,7 +1102,7 @@ def get_fillin_graph(old_graph, peo):
     assert number_of_nodes == old_graph.number_of_nodes()
 
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+        old_graph, dict(zip(peo, range(number_of_nodes))))
 
     # go over nodes and make adjacent all nodes higher in the order
     for node in sorted(graph.nodes):
@@ -1191,7 +1211,7 @@ def is_peo_zero_fillin(old_graph, peo):
 
     number_of_nodes = len(peo)
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+        old_graph, dict(zip(peo, range(number_of_nodes))))
 
     # go over nodes and make adjacent all nodes higher in the order
     for node in sorted(graph.nodes):

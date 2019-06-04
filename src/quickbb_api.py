@@ -34,8 +34,9 @@ def gen_cnf(filename, old_graph):
     for edge in graph.edges():
         u, v = edge
         # print only if this is not a self-loop
+        # Node numbering in QuickBB is 1-based
         if u != v:
-            cnf += '{} {} 0\n'.format(u, v)
+            cnf += '{} {} 0\n'.format(u+1, v+1)
 
     # print("cnf file:",cnf)
     with open(filename, 'w+') as fp:

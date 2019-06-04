@@ -8,6 +8,7 @@ import tensorflow as tf
 import cirq
 import random
 
+
 import src.operators as ops
 import src.optimizer as opt
 import src.graph_model as gm
@@ -21,7 +22,7 @@ from src.quickbb_api import gen_cnf, run_quickbb
 QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
 
 
-def get_amplitudes_from_cirq(filename):
+def get_amplitudes_from_cirq(filename, initial_state=0):
     """
     Calculates amplitudes for a circuit in file filename using Cirq
     """
@@ -36,11 +37,12 @@ def get_amplitudes_from_cirq(filename):
 
     print("Circuit:")
     print(cirq_circuit)
-    simulator = cirq.google.XmonSimulator()
+    simulator = cirq.Simulator()
 
-    result = simulator.simulate(cirq_circuit)
+    result = simulator.simulate(cirq_circuit, initial_state=initial_state)
     print("Simulation completed\n")
 
+    # Cirq for some reason computes all amplitudes with phase -1j
     return result.final_state
 
 
@@ -51,22 +53,26 @@ def get_optimal_graphical_model(
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, free_vars, data_dict = opt.circ2buckets(circuit)
     graph = opt.buckets2graph(buckets)
+    peo, tw = gm.get_peo(graph)
+    graph_optimal, label_dict = gm.relabel_graph_nodes(graph, dict(zip(
+        range(graph.number_of_nodes()), peo)))
+    return graph_optimal
 
-    cnffile = 'quickbb.cnf'
-    gen_cnf(cnffile, graph)
-    run_quickbb(cnffile, quickbb_command)
 
-
-def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_tf(filename, initial_state=0,
+                    quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with tensorflow tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Convert circuit to buckets
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+
     graph = opt.buckets2graph(buckets)
 
     # Run quickbb
@@ -77,28 +83,30 @@ def eval_circuit(filename, quickbb_command=QUICKBB_COMMAND):
         print('QuickBB skipped')
         perm_buckets = buckets
 
-    tf_buckets, placeholder_dict = tffr.get_tf_buckets(perm_buckets, n_qubits)
-    comput_graph = opt.bucket_elimination(
+    tf_buckets, placeholder_dict = tffr.get_tf_buckets(perm_buckets)
+    result = opt.bucket_elimination(
         tf_buckets, tffr.process_bucket_tf)
+    comput_graph = result.data
 
     amplitudes = []
     for target_state in range(2**n_qubits):
         feed_dict = tffr.assign_placeholder_values(
-            placeholder_dict,
-            target_state, n_qubits)
+            placeholder_dict, data_dict,
+            initial_state, target_state, n_qubits)
         amplitude = tffr.run_tf_session(comput_graph, feed_dict)
         amplitudes.append(amplitude)
 
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    amplitudes_reference = get_amplitudes_from_cirq(filename,
+                                                    initial_state)
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
     print(np.round(amplitudes_reference, 3))
     print('Max difference:')
-    print(np.max(np.array(amplitudes) - np.array(amplitudes_reference)))
+    print(np.max(np.abs(amplitudes - np.array(amplitudes_reference))))
 
 
-def prepare_parallel_evaluation(filename, n_var_parallel):
+def prepare_parallel_evaluation_tf(filename, n_var_parallel):
     """
     Prepares for parallel evaluation of the quantum circuit.
     Some of the variables in the circuit are parallelized over.
@@ -146,7 +154,7 @@ def prepare_parallel_evaluation(filename, n_var_parallel):
     return environment
 
 
-def eval_circuit_parallel_mpi(filename):
+def eval_circuit_tf_parallel_mpi(filename):
     """
     Evaluate quantum circuit using MPI to parallelize
     over some of the variables.
@@ -160,7 +168,7 @@ def eval_circuit_parallel_mpi(filename):
     # requirements
     n_var_parallel = 2
     if rank == 0:
-        env = prepare_parallel_evaluation(filename, n_var_parallel)
+        env = prepare_parallel_evaluation_tf(filename, n_var_parallel)
     else:
         env = None
 
@@ -213,14 +221,17 @@ def eval_circuit_parallel_mpi(filename):
                      - np.array(amplitudes_reference)))
 
 
-def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_np(filename, initial_state=0,
+                    quickbb_command=QUICKBB_COMMAND):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with Numpy tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Prepare graphical model
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+
     graph = opt.buckets2graph(buckets)
 
     # Run quickbb
@@ -234,18 +245,23 @@ def eval_circuit_np(filename, quickbb_command=QUICKBB_COMMAND):
     amplitudes = []
     for target_state in range(2**n_qubits):
         np_buckets = npfr.get_np_buckets(
-            perm_buckets, n_qubits, target_state)
-        amplitude = opt.bucket_elimination(
+            perm_buckets, data_dict, initial_state,
+            target_state, n_qubits)
+        result = opt.bucket_elimination(
             np_buckets, npfr.process_bucket_np)
-        amplitudes.append(amplitude)
+        amplitudes.append(result.data)
 
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    # Cirq returns the amplitudes in big endian (largest bit first)
+
+    amplitudes_reference = get_amplitudes_from_cirq(filename,
+                                                    initial_state)
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
-    print(np.round(amplitudes_reference, 3))
+    print(np.round(np.array(amplitudes_reference), 3))
     print('Max difference:')
-    print(np.max(np.array(amplitudes) - np.array(amplitudes_reference)))
+    print(np.max(np.abs(
+        np.array(amplitudes) - np.array(amplitudes_reference))))
 
 
 def prepare_parallel_evaluation_np(filename, n_var_parallel):
@@ -256,7 +272,9 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     are returned
     """
     # Prepare graphical model
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+
     graph = opt.buckets2graph(buckets)
 
     # Run quickBB and get contraction order
@@ -271,13 +289,14 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     environment = dict(
         n_qubits=n_qubits,
         idx_parallel=idx_parallel,
-        buckets=perm_buckets
+        buckets=perm_buckets,
+        data_dict=data_dict
     )
 
     return environment
 
 
-def eval_circuit_np_parallel_mpi(filename):
+def eval_circuit_np_parallel_mpi(filename, initial_state=0):
     """
     Evaluate quantum circuit using MPI to parallelize
     over some of the variables.
@@ -304,11 +323,14 @@ def eval_circuit_np_parallel_mpi(filename):
     n_qubits = env['n_qubits']
     idx_parallel = env['idx_parallel']
 
+    # restore data dictionary
+    data_dict = env['data_dict']
+
     # Loop over all amplitudes
     amplitudes = []
     for target_state in range(2**n_qubits):
         np_buckets = npfr.get_np_buckets(
-            buckets, n_qubits, target_state)
+            buckets, data_dict, initial_state, target_state, n_qubits)
 
         # main computation loop. Populate respective slices
         # and do contraction
@@ -318,8 +340,9 @@ def eval_circuit_np_parallel_mpi(filename):
                 comm_size, rank, idx_parallel):
             sliced_buckets = npfr.slice_np_buckets(
                 np_buckets, slice_dict, idx_parallel)
-            amplitude += opt.bucket_elimination(
+            result = opt.bucket_elimination(
                 sliced_buckets, npfr.process_bucket_np)
+            amplitude += result.data
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         amplitudes.append(amplitude)
@@ -535,13 +558,13 @@ def eval_circuit_multiamp_np(
     print('Reference:')
     print(np.round(slice_of_amplitudes, 3))
     print('Max difference:')
-    print(np.max(amplitudes - slice_of_amplitudes))
+    print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
 
 
 if __name__ == "__main__":
-    eval_circuit('inst_2x2_7_0.txt')
-    eval_circuit_np('inst_2x2_7_0.txt')
-    eval_circuit_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit_tf('inst_2x2_7_1.txt')
+    eval_circuit_np('inst_2x2_7_1.txt', 1)
+    eval_circuit_tf_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
     eval_contraction_cost('inst_2x2_7_0.txt')
     eval_circuit_multiamp_np('inst_2x2_7_0.txt')

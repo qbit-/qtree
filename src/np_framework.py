@@ -7,23 +7,29 @@ module, and example programs are listed in :py:mod:`cirq_test` module.
 import numpy as np
 import copy
 import src.operators as ops
+import src.optimizer as opt
 import src.utils as utils
 
 
-def get_np_buckets(buckets, qubit_count, target_state):
+def get_np_buckets(buckets, data_dict, initial_state,
+                   target_state, qubit_count):
     """
     Takes buckets and returns their Numpy counterparts.
 
     Parameters
     ----------
     buckets : list of list
-              buckets as returned by :py:meth:`read_buckets`
+              buckets as returned by :py:meth:`circ2buckets`
               and :py:meth:`reorder_buckets`.
+    data_dict : dict
+              dictionary containing values for the placeholder Tensors
+    initial_state : int
+              We estimate the amplitude of this initial_state state (ket).
+    target_state : int
+              We estimate the amplitude of target state (bra).
+              Thus we know the values of circuit outputs
     qubit_count : int
               total number of qubits
-    target_state : int
-              We estimate the amplitude of target state.
-              Thus we know the values of circuit outputs
     Returns
     -------
     np_buckets : list of lists
@@ -32,52 +38,43 @@ def get_np_buckets(buckets, qubit_count, target_state):
     # import pdb
     # pdb.set_trace()
 
-    # Define ingredients
-    matrices_dict = copy.deepcopy(
-        ops.operator_values_dict)
-
     # Add input vectors
 
-    input_layer_dict = {
-        'I{}'.format(qubit_idx): qubit_value @ matrices_dict['h']
-        for qubit_idx, qubit_value
-        in zip(
-            range(1, qubit_count+1),
-            utils.qubit_vector_generator(0, qubit_count)
-        )
-    }
-    matrices_dict.update(input_layer_dict)
+    # Create data for the input and output layers
+    terminals_data_dict = {}
 
-    # Add output vectors
+    for qubit_idx, qubit_value in enumerate(
+            utils.qubit_vector_generator(initial_state, qubit_count)
+    ):
+        terminals_data_dict.update({
+            (f'I{qubit_idx}', None): qubit_value
+        })
 
-    output_layer_dict = {
-        'O{}'.format(qubit_idx): matrices_dict['h'] @ qubit_value
-        for qubit_idx, qubit_value
-        in zip(
-            range(1, qubit_count+1),
-            utils.qubit_vector_generator(target_state, qubit_count)
-        )
-    }
-    matrices_dict.update(output_layer_dict)
+    for qubit_idx, qubit_value in enumerate(
+            utils.qubit_vector_generator(target_state, qubit_count)):
+        terminals_data_dict.update({
+            (f'O{qubit_idx}', None): qubit_value
+        })
 
-    # Create tf buckets from unordered buckets
+    # Create numpy buckets
     np_buckets = []
     for bucket in buckets:
         np_bucket = []
-        for label, variables in bucket:
+        for tensor in bucket:
+            # sort tensor dimensions
+            transpose_order = np.argsort(tensor.indices)
+            try:
+                data = data_dict[tensor.data_key]
+            except KeyError:
+                data = terminals_data_dict[tensor.data_key]
 
-            # sort tensor dimensions (reversed order)
-            transpose_order = np.argsort(variables)
-            variables = sorted(variables)
-            tensor = np.array(
-                matrices_dict[label],
-                copy=True)
-            np_bucket.append(
-                (
-                    np.transpose(tensor, transpose_order),
-                    variables
-                )
-            )
+            new_tensor = opt.Tensor(tensor.name, tensor.indices,
+                                    tensor.shape, data=np.transpose(
+                                        data.copy(),
+                                        transpose_order))
+            new_tensor.transpose(transpose_order)
+
+            np_bucket.append(new_tensor)
         np_buckets.append(np_bucket)
 
     return np_buckets
@@ -130,7 +127,7 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     return sliced_buckets
 
 
-def process_bucket_np(bucket, nosum=False):
+def process_bucket_np(bucket):
     """
     Process bucket in the bucket elimination algorithm.
     We multiply all tensors in the bucket and sum over the
@@ -141,26 +138,38 @@ def process_bucket_np(bucket, nosum=False):
     ----------
     bucket : list
            List containing tuples of tensors (gates) with their indices.
-    nosum : bool, optional
-           If we do not sum over the variable of the bucket
 
     Returns
     -------
-    tensor : tuple
-           array and a list of its indices
+    tensor : optimizer.Tensor
+           wrapper tensor object holding the result
     """
-    result, variables = bucket[0]
+    result_indices = bucket[0].indices
+    result_shape = bucket[0].shape
+    result_data = bucket[0].data
 
-    for tensor, variables_current in bucket[1:]:
-        expr = utils.get_einsum_expr(variables, variables_current)
-        result = np.einsum(expr, result, tensor)
-        variables = sorted(list(set(variables + variables_current)))
+    for tensor in bucket[1:]:
+        expr = utils.get_einsum_expr(result_indices, tensor.indices)
+        result_data = np.einsum(expr, result_data, tensor.data)
 
-    if len(variables) > 0:
-        new_variables = variables[1:]
+        # Merge and sort indices and shapes
+        result_indices = tuple(sorted(set(result_indices
+                                          + tensor.indices)))
+        shapes_dict = dict(zip(tensor.indices, tensor.shape))
+        shapes_dict.update(dict(zip(result_indices, result_shape)))
+
+        result_shape = tuple(shapes_dict[idx] for idx in result_indices)
+
+    if len(result_indices) > 0:
+        first_index, *result_indices = result_indices
+        result_shape = result_shape[1:]
+    else:
+        first_index = 'f'
+        result_indices = []
+        result_shape = []
 
     # reduce
-    if nosum:
-        return result, variables
-    else:
-        return np.sum(result, axis=0), new_variables
+    result = opt.Tensor(f'E{first_index}', result_indices,
+                        result_shape,
+                        data=np.sum(result_data, axis=0))
+    return result
