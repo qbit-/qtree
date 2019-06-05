@@ -173,19 +173,20 @@ def relabel_graph_nodes(graph, label_dict=None):
 
     # First relabel edges. Edges hold tensors, where the order of indices
     # is preserved
-    is_multigraph = nx.is_multigraphical(graph)
+
     for edge in graph.edges(data=True):
         u, v, _ = edge
-        if is_multigraph:
+        if graph.is_multigraph():
             for multiedge_key in graph[u][v].keys():
-                tensor = graph[u][v][multiedge_key]['tensor']
-                indices = [idx.copy(label_dict[idx.identity])
-                           for idx in tensor.indices]
-            new_graph[u][v][multiedge_key]['tensor'] = tensor.copy(
-                indices=indices)
+                if graph[u][v][multiedge_key].get('tensor'):
+                    tensor = graph[u][v][multiedge_key]['tensor']
+                    indices = [idx.copy(label_dict[idx.identity])
+                               for idx in tensor.indices]
+                    new_graph[u][v][multiedge_key][
+                        'tensor'] = tensor.copy(indices=indices)
 
         elif graph[u][v].get('tensor'):
-            tensor = graph[u][v]
+            tensor = graph[u][v]['tensor']
             indices = [idx.copy(label_dict[idx.identity])
                        for idx in tensor.indices]
             new_graph[u][v]['tensor'] = tensor.copy(indices=indices)
@@ -241,6 +242,7 @@ def get_peo(old_graph,
                                for n in range(8))
     cnffile = 'output/quickbb.' + input_suffix + '.cnf'
     initial_indices = old_graph.nodes()
+    # graph = get_simple_graph(old_graph)
     graph, label_dict = relabel_graph_nodes(old_graph)
 
     if graph.number_of_edges() - graph.number_of_selfloops() > 0:
@@ -304,25 +306,26 @@ def split_graph_random(old_graph, n_var_parallel=0):
 
     Returns
     -------
-    idx_parallel : list
+    idx_parallel : list of Idx
           variables removed by parallelization
     graph : networkx.Graph
           new graph without parallelized variables
     """
     graph = copy.deepcopy(old_graph)
 
-    indices = list(graph.nodes())
+    indices = [Idx(idx_id, params['size'])
+               for idx_id, params in graph.nodes(data=True)]
     idx_parallel = np.random.choice(
         indices, size=n_var_parallel, replace=False)
 
     for idx in idx_parallel:
-        graph.remove_node(idx)
+        graph.remove_node(int(idx))
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
     log.info("Removed {} variables".format(len(idx_parallel)))
     peo, treewidth = get_peo(graph)
 
-    return sorted(idx_parallel), graph
+    return sorted(idx_parallel, key=int), graph
 
 
 def get_cost_by_node(graph, node):
