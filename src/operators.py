@@ -84,8 +84,18 @@ class Gate:
         return self.__str__()
 
 
+class M(Gate):
+    """
+    Measurement gate. This is essentially the identity operator, but
+    it forces the inntroduction of a variable in the graphical model
+    """
+    tensor = np.array([[1, 0], [0, 1]], dtype=defs.NP_ARRAY_TYPE)
+    cirq_op = cirq.I
+    _changes_qubits = (0, )
+
+
 class I(Gate):
-    tensor = np.array([1,  1], dtype=defs.NP_ARRAY_TYPE)
+    tensor = np.array([1, 1], dtype=defs.NP_ARRAY_TYPE)
     cirq_op = cirq.I
     _changes_qubits = tuple()
 

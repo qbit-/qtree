@@ -4,6 +4,7 @@ operating on Buckets (without any specific framework) should
 go here.
 """
 
+import functools
 import itertools
 import random
 import re
@@ -16,20 +17,20 @@ from src.logger_setup import log
 random.seed(0)
 
 
-class Idx(object):
+class Var(object):
     """
-    Index class. Primarily used to store index id:size pairs
+    Index class. Primarily used to store variable id:size pairs
     """
     def __init__(self, identity, size=2, name=None):
         """
-        Initialize the index
+        Initialize the variable
         identity: int
               Index identifier. We use mainly integers here to
               make it play nicely with graphical models.
         size: int, optional
               Size of the index. Default 2
         name: str, optional
-              Optional name tag. Defaults to "v{identity}"
+              Optional name tag. Defaults to "v[{identity}]"
         """
         self._identity = identity
         self._size = size
@@ -55,7 +56,7 @@ class Idx(object):
         if size is None:
             size = self.size
 
-        return Idx(identity, size, name)
+        return Var(identity, size, name)
 
     def __str__(self):
         return self.name
@@ -67,12 +68,13 @@ class Idx(object):
         return int(self.identity)
 
     def __hash__(self):
-        return hash((self.identity, self.size))
+        return hash((self.identity, self.name, self.size))
 
     def __eq__(self, other):
         return (isinstance(other, type(self))
                 and self.identity == other.identity
-                and self.size == other.size)
+                and self.size == other.size
+                and self.name == other.name)
 
 
 class Tensor(object):
@@ -153,7 +155,7 @@ class Tensor(object):
             raise ValueError(f'Index mismatch in __mul__: {self.indices} times {other.indices}')
 
 
-def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
+def circ2buckets(qubit_count, circuit, max_depth=None):
     """
     Takes a circuit in the form of list of lists, builds
     corresponding buckets. Buckets contain Tensors
@@ -168,17 +170,18 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
     circuit : list of lists
             quantum circuit as returned by
             :py:meth:`operators.read_circuit_file`
-    free_qubits : list of int
-            numbers of qubits for which all amplitudes will be
-            evaluated
+    max_depth : int
+            Maximal depth of the circuit which should be used
     Returns
     -------
     buckets : list of lists
             list of lists (buckets)
-    free_variables: list
-            variables which should not be contracted
     data_dict : dict
             Dictionary with all tensor data
+    bra_variables : list
+            variables of the output qubits
+    ket_variables: list
+            variables of the input qubits
     """
     # import pdb
     # pdb.set_trace()
@@ -190,48 +193,50 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
 
     # Let's build buckets for bucket elimination algorithm.
     # The circuit is built from left to right, as it operates
-    # on the bra ( |0> ) from the left. We thus first place
-    # the ket ( <x| ) and then put gates in the reverse order
-
-    # First initialize buckets
-    buckets = [[] for qubit in range(qubit_count)]
+    # on the ket ( |0> ) from the left. We thus first place
+    # the bra ( <x| ) and then put gates in the reverse order
 
     # Fill the variable `frame`
-    current_var = qubit_count
-    layer_variables = list(range(qubit_count))
+    layer_variables = [Var(qubit, name=f'o[{qubit}]')
+                       for qubit in range(qubit_count)]
+    current_var_idx = qubit_count
 
-    # Add terminal bra tensors for variables which are not free
-    free_variables = []
+    # Save variables of the bra
+    bra_variables = [var for var in layer_variables]
+
+    # Initialize buckets
     for qubit in range(qubit_count):
-        if qubit not in free_qubits:
-            var = layer_variables[qubit]
-            buckets[var].append(Tensor(f'O{qubit}', [Idx(var, 2)],
-                                       data_key=(f'O{qubit}', None)))
-        else:
-            free_variables.append(layer_variables[qubit])
+        buckets = [[] for qubit in range(qubit_count)]
+
+    # Place safeguard measurement circuits before and after
+    # the circuit
+    measurement_circ = [[ops.M(qubit) for qubit in range(qubit_count)]]
+
+    combined_circ = functools.reduce(
+        lambda x, y: itertools.chain(x, y),
+        [measurement_circ, reversed(circuit[:max_depth])])
 
     # Start building the graph in reverse order
-    for layer in reversed(circuit[:max_depth]):
+    for layer in combined_circ:
         for op in layer:
             # build the indices of the gate. If gate
             # changes the basis of a qubit, a new variable
-            # has to be introduced and current_var is increased.
+            # has to be introduced and current_var_idx is increased.
             # The order of indices
             # is always (a_new, a, b_new, b, ...), as
             # this is how gate tensors are chosen to be stored
             variables = []
-            current_var_copy = current_var
+            current_var_idx_copy = current_var_idx
             for qubit in op.qubits:
                 if qubit in op.changed_qubits:
                     variables.extend(
                         [layer_variables[qubit],
-                         current_var_copy])
-                    current_var_copy += 1
+                         Var(current_var_idx_copy)])
+                    current_var_idx_copy += 1
                 else:
                     variables.extend([layer_variables[qubit]])
             # Build a tensor
-            indices = [Idx(var, 2) for var in variables]
-            t = Tensor(op.name, indices,
+            t = Tensor(op.name, variables,
                        data_key=(op.name, op.data_hash))
 
             # Insert tensor data into data dict
@@ -239,26 +244,39 @@ def circ2buckets(qubit_count, circuit, free_qubits=[], max_depth=None):
 
             # Append tensor to buckets
             first_qubit_var = layer_variables[op.qubits[0]]
-            buckets[first_qubit_var].append(t)
+            buckets[int(first_qubit_var)].append(t)
 
             # Create new buckets and update current variable frame
             for qubit in op.changed_qubits:
-                layer_variables[qubit] = current_var
+                layer_variables[qubit] = Var(current_var_idx)
                 buckets.append(
                     []
                 )
-                current_var += 1
+                current_var_idx += 1
 
-    # Finally append the input layer of terminal tensors
+    # Finally go over the qubits, append measurement gates
+    # and collect ket variables
+    ket_variables = []
+
+    op = ops.M(0)  # create a single measurement gate object
+    data_dict.update({(op.name, op.data_hash): op.tensor})
+
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
-        buckets[var].append(
-            Tensor(f'I{qubit}',
-                   indices=[Idx(layer_variables[qubit], 2)],
-                   data_key=(f'I{qubit}', None))
+        new_var = Var(current_var_idx,
+                      name=f'i[{qubit}]', size=2)
+        ket_variables.append(new_var)
+        # update buckets and variable `frame`
+        buckets[int(var)].append(
+            Tensor(op.name,
+                   indices=[var, new_var],
+                   data_key=(op.name, op.data_hash))
         )
+        buckets.append([])
+        layer_variables[qubit] = new_var
+        current_var_idx += 1
 
-    return buckets, free_variables, data_dict
+    return buckets, data_dict, bra_variables, ket_variables
 
 
 def bucket_elimination(buckets, process_bucket_fn,
@@ -340,10 +358,8 @@ def buckets2graph(buckets, ignore_variables=[]):
             for idx in tensor.indices:
                 # This may reintroduce the same node many times,
                 # be careful if using something other than
-                graph.add_node(int(idx),
-                               size=idx.size
-                )
-                new_nodes.append(int(idx))
+                graph.add_node(idx)
+                new_nodes.append(idx)
             if len(new_nodes) > 1:
                 edges = itertools.combinations(new_nodes, 2)
             else:
@@ -440,7 +456,7 @@ def reorder_buckets(old_buckets, permutation):
 
     for bucket in old_buckets:
         for tensor in bucket:
-            new_indices = [idx.copy(perm_table[idx.identity])
+            new_indices = [idx.copy(perm_table[idx])
                            for idx in tensor.indices]
             bucket_idx = sorted(
                 new_indices, key=int)[0].identity

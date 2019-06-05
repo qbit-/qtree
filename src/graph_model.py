@@ -17,7 +17,7 @@ import src.system_defs as defs
 import src.utils as utils
 import src.optimizer as opt
 
-from src.optimizer import Idx, Tensor
+from src.optimizer import Var, Tensor
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
@@ -141,21 +141,20 @@ def read_graph(filename, max_depth=None):
     return qubit_count, graph
 
 
-def relabel_graph_nodes(graph, label_dict=None):
+def relabel_graph_nodes(graph, label_dict):
     """
-    Relabel graph nodes to consequtive numbers. If label
-    dictionary is not provided, a relabelled graph and a
-    dict {new : old} will be returned. Otherwise, the graph
+    Relabel graph nodes.The graph
     is relabelled (and returned) according to the label
     dictionary and an inverted dictionary is returned.
 
     In contrast to the Networkx version this one also relabels
     indices in the 'tensor' parameter of edges
+
     Parameters
     ----------
     graph : networkx.Graph
             graph to relabel
-    label_dict : optional, dict-like
+    label_dict : dict-like
             dictionary for relabelling {old : new}
 
     Returns
@@ -165,9 +164,9 @@ def relabel_graph_nodes(graph, label_dict=None):
     label_dict : dict
             {new : old} dictionary for inverse relabeling
     """
-    if label_dict is None:
-        label_dict = {old: num for num, old in
-                      enumerate(graph.nodes(data=False))}
+    # if label_dict is None:
+    #     label_dict = {old: old.copy(num) for num, old in
+    #                   enumerate(graph.nodes(data=False))}
 
     new_graph = copy.deepcopy(graph)
 
@@ -180,18 +179,18 @@ def relabel_graph_nodes(graph, label_dict=None):
             for multiedge_key in graph[u][v].keys():
                 if graph[u][v][multiedge_key].get('tensor'):
                     tensor = graph[u][v][multiedge_key]['tensor']
-                    indices = [idx.copy(label_dict[idx.identity])
+                    indices = [label_dict[idx]
                                for idx in tensor.indices]
                     new_graph[u][v][multiedge_key][
                         'tensor'] = tensor.copy(indices=indices)
 
         elif graph[u][v].get('tensor'):
             tensor = graph[u][v]['tensor']
-            indices = [idx.copy(label_dict[idx.identity])
+            indices = [label_dict[idx]
                        for idx in tensor.indices]
             new_graph[u][v]['tensor'] = tensor.copy(indices=indices)
 
-    # then relabel nodes.
+    # Then relabel nodes.
     new_graph = nx.relabel_nodes(new_graph, label_dict, copy=True)
 
     # invert the dictionary
@@ -231,21 +230,32 @@ def get_peo(old_graph,
              Whether to keep input files for debugging
     Returns
     -------
-    peo : list
-          list containing indices in loptimal order of elimination
+    peo_dict : dict
+          containing indices in optimal order of elimination. Order
+          is in keys, and index objects are in values
     treewidth : int
           treewidth of the decomposition
     """
 
+    # save initial indices to ensure nothing is missed
+    initial_indices = old_graph.nodes()
+
+    # Remove selfloops and parallel edges. Critical
+    graph = get_simple_graph(old_graph)
+
+    # Relabel graph nodes to consequtive ints
+    var_initial_to_int = {var: ii for var, ii in zip(
+        graph.nodes(data=False), range(graph.number_of_nodes()))}
+    graph, int_to_var_initial = relabel_graph_nodes(
+        graph, var_initial_to_int)
+
+    # prepare environment
     if input_suffix is None:
         input_suffix = ''.join(str(random.randint(0, 9))
                                for n in range(8))
     cnffile = 'output/quickbb.' + input_suffix + '.cnf'
-    initial_indices = old_graph.nodes()
-    # graph = get_simple_graph(old_graph)
-    graph, label_dict = relabel_graph_nodes(old_graph)
 
-    if graph.number_of_edges() - graph.number_of_selfloops() > 0:
+    if graph.number_of_edges() > 0:
         gen_cnf(cnffile, graph)
         out_bytes = run_quickbb(cnffile, defs.QUICKBB_COMMAND)
 
@@ -257,7 +267,7 @@ def get_peo(old_graph,
 
         # Map peo back to original indices. PEO in QuickBB is 1-based
         # but we need it 0-based
-        peo = [label_dict[pp - 1] for pp in peo]
+        peo = [int_to_var_initial[pp - 1] for pp in peo]
 
         treewidth = int(m['treewidth'])
     else:
@@ -270,15 +280,15 @@ def get_peo(old_graph,
     # and something else
 
     isolated_nodes = nx.isolates(old_graph)
-    peo = peo + sorted(isolated_nodes)
+    peo = peo + sorted(isolated_nodes, key=int)
 
     # assert(set(initial_indices) - set(peo) == set())
     missing_indices = set(initial_indices)-set(peo)
     # The next line needs review. Why quickBB misses some indices?
     # It is here to make program work, but is it an optimal order?
-    peo = peo + sorted(list(missing_indices))
+    peo = peo + sorted(list(missing_indices), key=int)
 
-    assert(sorted(peo) == sorted(initial_indices))
+    assert(sorted(peo, key=int) == sorted(initial_indices, key=int))
     # log.info('Final peo from quickBB:\n{}'.format(peo))
 
     # remove input file to honor EPA
@@ -313,7 +323,7 @@ def split_graph_random(old_graph, n_var_parallel=0):
     """
     graph = copy.deepcopy(old_graph)
 
-    indices = [Idx(idx_id, params['size'])
+    indices = [Var(idx_id, params['size'])
                for idx_id, params in graph.nodes(data=True)]
     idx_parallel = np.random.choice(
         indices, size=n_var_parallel, replace=False)

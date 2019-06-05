@@ -54,11 +54,13 @@ def get_optimal_graphical_model(
     and finds its tree decomposition
     """
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, free_vars, data_dict = opt.circ2buckets(circuit)
-    graph = opt.buckets2graph(buckets)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+    graph = opt.buckets2graph(buckets, ignore_variables=bra_vars+ket_vars)
     peo, tw = gm.get_peo(graph)
-    graph_optimal, label_dict = gm.relabel_graph_nodes(graph, dict(zip(
-        range(graph.number_of_nodes()), peo)))
+    graph_optimal, label_dict = gm.relabel_graph_nodes(
+        graph, dict(zip(peo, range(len(peo))))
+    )
     return graph_optimal
 
 
@@ -230,31 +232,46 @@ def eval_circuit_np(filename, initial_state=0,
     """
     # Prepare graphical model
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
 
-    graph = opt.buckets2graph(buckets)
+    graph = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
 
     # Run quickbb
     if graph.number_of_edges() > 1:  # only if not elementary cliques
         peo, treewidth = gm.get_peo(graph)
+        # place bra and ket variables to end, so some
+        # of them can be left uncontracted
+        peo = peo + ket_vars + bra_vars
         perm_buckets = opt.reorder_buckets(buckets, peo)
     else:
         print('QuickBB skipped')
         perm_buckets = buckets
 
+    # Construct Numpy buckets
+    np_buckets = npfr.get_np_buckets(
+        perm_buckets, data_dict)
+
+    # Take the subtensor corresponding to the initial state
+    slice_dict = utils.slice_binary_from_bits(initial_state, ket_vars)
+
     amplitudes = []
     for target_state in range(2**n_qubits):
-        np_buckets = npfr.get_np_buckets(
-            perm_buckets, data_dict, initial_state,
-            target_state, n_qubits)
+        # Take appropriate subtensors for different target bitstrings
+        slice_dict.update(
+            utils.slice_binary_from_bits(target_state, bra_vars)
+        )
+        sliced_buckets = npfr.slice_np_buckets(np_buckets, slice_dict)
         result = opt.bucket_elimination(
-            np_buckets, npfr.process_bucket_np)
+            sliced_buckets, npfr.process_bucket_np)
         amplitudes.append(result.data)
 
     # Cirq returns the amplitudes in big endian (largest bit first)
 
-    amplitudes_reference = get_amplitudes_from_cirq(filename,
-                                                    initial_state)
+    amplitudes_reference = get_amplitudes_from_cirq(
+        filename, initial_state)
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
@@ -273,9 +290,11 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     """
     # Prepare graphical model
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
 
-    graph = opt.buckets2graph(buckets)
+    graph = opt.buckets2graph(
+        buckets, ignore_variables=bra_vars+ket_vars)
 
     # Run quickBB and get contraction order
     idx_parallel, reduced_graph = gm.split_graph_by_metric(

@@ -11,8 +11,7 @@ import src.optimizer as opt
 import src.utils as utils
 
 
-def get_np_buckets(buckets, data_dict, initial_state,
-                   target_state, qubit_count):
+def get_np_buckets(buckets, data_dict):
     """
     Takes buckets and returns their Numpy counterparts.
 
@@ -23,13 +22,6 @@ def get_np_buckets(buckets, data_dict, initial_state,
               and :py:meth:`reorder_buckets`.
     data_dict : dict
               dictionary containing values for the placeholder Tensors
-    initial_state : int
-              We estimate the amplitude of this initial_state state (ket).
-    target_state : int
-              We estimate the amplitude of target state (bra).
-              Thus we know the values of circuit outputs
-    qubit_count : int
-              total number of qubits
     Returns
     -------
     np_buckets : list of lists
@@ -38,24 +30,6 @@ def get_np_buckets(buckets, data_dict, initial_state,
     # import pdb
     # pdb.set_trace()
 
-    # Add input vectors
-
-    # Create data for the input and output layers
-    terminals_data_dict = {}
-
-    for qubit_idx, qubit_value in enumerate(
-            utils.qubit_vector_generator(initial_state, qubit_count)
-    ):
-        terminals_data_dict.update({
-            (f'I{qubit_idx}', None): qubit_value
-        })
-
-    for qubit_idx, qubit_value in enumerate(
-            utils.qubit_vector_generator(target_state, qubit_count)):
-        terminals_data_dict.update({
-            (f'O{qubit_idx}', None): qubit_value
-        })
-
     # Create numpy buckets
     np_buckets = []
     for bucket in buckets:
@@ -63,10 +37,7 @@ def get_np_buckets(buckets, data_dict, initial_state,
         for tensor in bucket:
             # sort tensor dimensions
             transpose_order = np.argsort(list(map(int, tensor.indices)))
-            try:
-                data = data_dict[tensor.data_key]
-            except KeyError:
-                data = terminals_data_dict[tensor.data_key]
+            data = data_dict[tensor.data_key]
 
             new_tensor = tensor.copy(
                 indices=(tensor.indices[pp] for pp in transpose_order),
@@ -78,7 +49,7 @@ def get_np_buckets(buckets, data_dict, initial_state,
     return np_buckets
 
 
-def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
+def slice_np_buckets(np_buckets, slice_dict):
     """
     Takes slices of the tensors in Numpy buckets
     over the variables in idx_parallel.
@@ -87,11 +58,9 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     ----------
     np_buckets : list of lists
               Buckets containing Numpy tensors
-    slice_var_dict : dict
-              Current values of the sliced variables
-    idx_parallel : list
-              Indices to parallelize over
-
+    slice_dict : dict
+              Current subtensor along the sliced variables
+              in the form {variable: slice}
     Returns
     -------
     sliced_buckets : list of lists
@@ -104,21 +73,15 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     sliced_buckets = []
     for bucket in np_buckets:
         sliced_bucket = []
-        for tensor, variables in bucket:
+        for tensor in bucket:
             slice_bounds = []
-            new_shape = []
-            for var in variables:
-                if var in idx_parallel:
-                    slice_bounds.append(slice_var_dict[f'q_{var}'])
-                    new_shape.append(1)
-                else:
+            for idx in tensor.indices:
+                try:
+                    slice_bounds.append(slice_dict[idx])
+                except KeyError:
                     slice_bounds.append(slice(None))
-                    new_shape.append(2)
             sliced_bucket.append(
-                (np.reshape(
-                    tensor[tuple(slice_bounds)],
-                    new_shape),
-                 variables)
+                tensor.copy(data=tensor.data[tuple(slice_bounds)])
             )
         sliced_buckets.append(sliced_bucket)
 

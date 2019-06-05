@@ -26,8 +26,10 @@ def int_to_bitstring(integer, width):
            string of binary representation of integer
     """
     bitstring = bin(integer)[2:]
-    if len(bitstring) < width:
+    if len(bitstring) <= width:
         bitstring = '0' * (width - len(bitstring)) + bitstring
+    else:
+        raise ValueError('Integer larger than the requested width!')
     return bitstring
 
 
@@ -52,6 +54,25 @@ def qubit_vector_generator(target_state, n_qubits):
     bitstring = int_to_bitstring(target_state, n_qubits)
     for bit in bitstring:
         yield ZERO if bit == '0' else ONE
+
+
+def slice_binary_from_bits(value, vars_to_slice):
+    """
+    Generates a 1x1x1x1x..x1 slice (a single entry) of a set of binary
+    variables. The order of binary variables is given by
+    the input list and the bits are calculated from the value.
+    The width of the value is the length of the variable list
+
+    value: int
+           Binary representation of the slice
+    vars_to_slice: list of Idx
+           Binary variables to slice
+    """
+    bitsting = int_to_bitstring(value, len(vars_to_slice))
+
+    slice_dict = {var: slice(int(bit), int(bit)+1) for var, bit
+                  in zip(vars_to_slice, bitsting)}
+    return slice_dict
 
 
 def slice_values_generator(comm_size, rank, idx_parallel):

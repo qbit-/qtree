@@ -10,22 +10,22 @@ import src.system_defs as defs
 from src.logger_setup import log
 
 
-def gen_cnf(filename, old_graph):
+def gen_cnf(filename, graph):
     """
     Generate QuickBB input file for the graph.
-    We always convert MultiGraph's to Graph' and remove self loops,
+    This function ALWAYS expects a simple Graph (not MultiGraph)
+    without self loops,
     because QuickBB does not understand these situations.
 
     Parameters
     ----------
     filename : str
            Output file name
-    graph : networkx.Graph or networkx.MultiGraph
+    graph : networkx.Graph
            Undirected graphical model
     """
-    graph = nx.Graph(old_graph)
     v = graph.number_of_nodes()
-    e = graph.number_of_edges() - graph.number_of_selfloops()
+    e = graph.number_of_edges()
     log.info(f"generating config file {filename}")
     cnf = "c a configuration of -qtree simulator\n"
     cnf += f"p cnf {v} {e}\n"
@@ -36,7 +36,7 @@ def gen_cnf(filename, old_graph):
         # print only if this is not a self-loop
         # Node numbering in QuickBB is 1-based
         if u != v:
-            cnf += '{} {} 0\n'.format(u+1, v+1)
+            cnf += '{} {} 0\n'.format(int(u)+1, int(v)+1)
 
     # print("cnf file:",cnf)
     with open(filename, 'w+') as fp:
