@@ -445,10 +445,19 @@ def reorder_buckets(old_buckets, permutation):
     -------
     new_buckets : list of lists
           buckets reordered according to permutation
+    new_peo : list
+          new variable objects (as IDs of variables change during
+          the reordering)
     """
     # import pdb
     # pdb.set_trace()
-    perm_table = dict(zip(permutation, range(len(permutation))))
+    perm_table = {}
+    for n, idx in enumerate(permutation):
+        if idx.name.startswith('v'):
+            perm_table[idx] = idx.copy(n)
+        else:
+            perm_table[idx] = idx.copy(n, name=idx.name)
+
     n_variables = len(old_buckets)
     new_buckets = []
     for ii in range(n_variables):
@@ -456,8 +465,7 @@ def reorder_buckets(old_buckets, permutation):
 
     for bucket in old_buckets:
         for tensor in bucket:
-            new_indices = [idx.copy(perm_table[idx])
-                           for idx in tensor.indices]
+            new_indices = [perm_table[idx] for idx in tensor.indices]
             bucket_idx = sorted(
                 new_indices, key=int)[0].identity
             # we leave the variables permuted, as the permutation
@@ -466,7 +474,7 @@ def reorder_buckets(old_buckets, permutation):
                 tensor.copy(indices=new_indices)
             )
 
-    return new_buckets
+    return new_buckets, sorted(perm_table.values(), key=int)
 
 
 def test_bucket_graph_conversion(filename):

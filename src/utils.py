@@ -65,7 +65,7 @@ def slice_binary_from_bits(value, vars_to_slice):
 
     value: int
            Binary representation of the slice
-    vars_to_slice: list of Idx
+    vars_to_slice: list of Var
            Binary variables to slice
     """
     bitsting = int_to_bitstring(value, len(vars_to_slice))

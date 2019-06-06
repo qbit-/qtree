@@ -240,19 +240,21 @@ def eval_circuit_np(filename, initial_state=0,
         ignore_variables=bra_vars+ket_vars)
 
     # Run quickbb
-    if graph.number_of_edges() > 1:  # only if not elementary cliques
-        peo, treewidth = gm.get_peo(graph)
-        # place bra and ket variables to end, so some
-        # of them can be left uncontracted
-        peo = peo + ket_vars + bra_vars
-        perm_buckets = opt.reorder_buckets(buckets, peo)
-    else:
-        print('QuickBB skipped')
-        perm_buckets = buckets
+    peo, treewidth = gm.get_peo(graph)
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, new_peo = opt.reorder_buckets(buckets, peo)
 
-    # Construct Numpy buckets
-    np_buckets = npfr.get_np_buckets(
-        perm_buckets, data_dict)
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted(
+        [idx for idx in new_peo if idx.name.startswith('i')],
+        key=str)
+
+    bra_vars = sorted(
+        [idx for idx in new_peo if idx.name.startswith('o')],
+        key=str)
 
     # Take the subtensor corresponding to the initial state
     slice_dict = utils.slice_binary_from_bits(initial_state, ket_vars)
@@ -263,7 +265,8 @@ def eval_circuit_np(filename, initial_state=0,
         slice_dict.update(
             utils.slice_binary_from_bits(target_state, bra_vars)
         )
-        sliced_buckets = npfr.slice_np_buckets(np_buckets, slice_dict)
+        sliced_buckets = npfr.get_sliced_np_buckets(
+            perm_buckets, data_dict, slice_dict)
         result = opt.bucket_elimination(
             sliced_buckets, npfr.process_bucket_np)
         amplitudes.append(result.data)
@@ -581,8 +584,8 @@ def eval_circuit_multiamp_np(
 
 
 if __name__ == "__main__":
-    eval_circuit_tf('inst_2x2_7_1.txt', 1)
-    eval_circuit_np('inst_2x2_7_1.txt', 1)
+    eval_circuit_tf('inst_2x2_7_1.txt')
+    eval_circuit_np('inst_2x2_7_1.txt')
     eval_circuit_tf_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
     eval_contraction_cost('inst_2x2_7_0.txt')

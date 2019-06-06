@@ -88,6 +88,62 @@ def slice_np_buckets(np_buckets, slice_dict):
     return sliced_buckets
 
 
+def get_sliced_np_buckets(buckets, data_dict, slice_dict):
+    """
+    Takes placeholder buckets and populates them with
+    actual sliced values. This function is a sum of
+    :func:`get_np_buckets` and :func:`slice_np_buckets`
+
+    Parameters
+    ----------
+    buckets : list of list
+              buckets as returned by :py:meth:`circ2buckets`
+              and :py:meth:`reorder_buckets`.
+    data_dict : dict
+              dictionary containing values for the placeholder Tensors
+    slice_dict : dict
+              Current subtensor along the sliced variables
+              in the form {variable: slice}
+    Returns
+    -------
+    sliced_buckets : list of lists
+              buckets with sliced Numpy tensors
+    """
+    # Create np buckets from buckets
+    sliced_buckets = []
+    for bucket in buckets:
+        sliced_bucket = []
+        for tensor in bucket:
+            # get data
+            # sort tensor dimensions
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
+            data = np.transpose(data_dict[tensor.data_key],
+                                transpose_order)
+            # transpose indices
+            indices_sorted = [tensor.indices[pp]
+                              for pp in transpose_order]
+
+            # slice data
+            slice_bounds = []
+            for idx in indices_sorted:
+                try:
+                    slice_bounds.append(slice_dict[idx])
+                except KeyError:
+                    slice_bounds.append(slice(None))
+
+            data = data[tuple(slice_bounds)]
+
+            # update indices
+            indices = [idx.copy(size=size) for idx, size in
+                       zip(indices_sorted, data.shape)]
+
+            sliced_bucket.append(
+                tensor.copy(indices=indices, data=data))
+        sliced_buckets.append(sliced_bucket)
+
+    return sliced_buckets
+
+
 def process_bucket_np(bucket):
     """
     Process bucket in the bucket elimination algorithm.
