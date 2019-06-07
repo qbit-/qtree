@@ -71,30 +71,53 @@ def eval_circuit_tf(filename, initial_state=0,
     using the bucket elimination algorithm (with tensorflow tensors).
     Same amplitudes are evaluated with Cirq for comparison.
     """
-    # Convert circuit to buckets
+    # Prepare graphical model
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, free_vars, data_dict = opt.circ2buckets(n_qubits, circuit)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
 
-    graph = opt.buckets2graph(buckets)
+    graph = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
 
     # Run quickbb
-    if graph.number_of_edges() > 1:  # only if not elementary cliques
-        peo, treewidth = gm.get_peo(graph)
-        perm_buckets = opt.reorder_buckets(buckets, peo)
-    else:
-        print('QuickBB skipped')
-        perm_buckets = buckets
+    peo, treewidth = gm.get_peo(graph)
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, new_peo = opt.reorder_buckets(buckets, peo)
 
-    tf_buckets, placeholder_dict = tffr.get_tf_buckets(perm_buckets)
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted(
+        [idx for idx in new_peo if idx.name.startswith('i')],
+        key=str)
+
+    bra_vars = sorted(
+        [idx for idx in new_peo if idx.name.startswith('o')],
+        key=str)
+
+    # Take the subtensor corresponding to the initial state
+    slice_dict = utils.slice_binary_from_bits(initial_state, ket_vars)
+
+    tf_buckets, placeholder_dict = tffr.get_sliced_tf_buckets(
+        perm_buckets, slice_dict)
+
+    # build the Tensorflow operation graph
     result = opt.bucket_elimination(
         tf_buckets, tffr.process_bucket_tf)
     comput_graph = result.data
 
+    # prepare static part of the feed_dict
+    feed_dict, dynamic_placeholders = tffr.assign_placeholder_values(
+        placeholder_dict, data_dict, slice_dict
+    )
     amplitudes = []
     for target_state in range(2**n_qubits):
-        feed_dict = tffr.assign_placeholder_values(
-            placeholder_dict, data_dict,
-            initial_state, target_state, n_qubits)
+        slice_dict = utils.slice_binary_from_bits(target_state, bra_vars)
+        dynamic_feed_dict, _ = tffr.assign_placeholder_values(
+            dynamic_placeholders, data_dict, slice_dict)
+        feed_dict.update(dynamic_feed_dict)
         amplitude = tffr.run_tf_session(comput_graph, feed_dict)
         amplitudes.append(amplitude)
 

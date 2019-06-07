@@ -35,7 +35,7 @@ class Var(object):
         self._identity = identity
         self._size = size
         if name is None:
-            name = f"v[{identity}]"
+            name = f"v_{identity}"
         self._name = name
 
     @property
@@ -197,7 +197,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     # the bra ( <x| ) and then put gates in the reverse order
 
     # Fill the variable `frame`
-    layer_variables = [Var(qubit, name=f'o[{qubit}]')
+    layer_variables = [Var(qubit, name=f'o_{qubit}')
                        for qubit in range(qubit_count)]
     current_var_idx = qubit_count
 
@@ -264,7 +264,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
         new_var = Var(current_var_idx,
-                      name=f'i[{qubit}]', size=2)
+                      name=f'i_{qubit}', size=2)
         ket_variables.append(new_var)
         # update buckets and variable `frame`
         buckets[int(var)].append(

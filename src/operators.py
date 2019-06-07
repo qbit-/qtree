@@ -25,7 +25,7 @@ class Gate:
             or does not (diagonal gate, like T). Multiqubit gates
             can be diagonal on some of the variables, and not diagonal on
             others (like ccX). The order of dimensions IS ALWAYS
-            (a, new_a, b, new_b, c, d, new_d, ...)
+            (new_a, a, b_new, b, c, d_new, d, ...)
 
     qubits: tuple
             Qubits the gate acts on
@@ -206,10 +206,13 @@ class ZPhase(Gate):
     """Arbitrary :math:`Z` rotation"""
 
     def __init__(self, *qubits, alpha):
-        super().__init__(*qubits)
         self._alpha = alpha
         self.tensor = np.array([1, exp(1.j*alpha*pi)],
                                dtype=defs.NP_ARRAY_TYPE)
+        self._qubits = tuple(qubits)
+
+        self._check_qubit_count(qubits)
+        self._data_hash = hash(self.tensor.tobytes())
 
     def __str__(self):
         return "{}[a={:.2f}]({})".format(type(self).__name__,
