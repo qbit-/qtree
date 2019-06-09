@@ -134,11 +134,11 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
             data = data[tuple(slice_bounds)]
 
             # update indices
-            indices = [idx.copy(size=size) for idx, size in
-                       zip(indices_sorted, data.shape)]
+            indices_sliced = [idx.copy(size=size) for idx, size in
+                              zip(indices_sorted, data.shape)]
 
             sliced_bucket.append(
-                tensor.copy(indices=indices, data=data))
+                tensor.copy(indices=indices_sliced, data=data))
         sliced_buckets.append(sliced_bucket)
 
     return sliced_buckets

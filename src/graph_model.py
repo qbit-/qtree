@@ -323,13 +323,12 @@ def split_graph_random(old_graph, n_var_parallel=0):
     """
     graph = copy.deepcopy(old_graph)
 
-    indices = [Var(idx_id, params['size'])
-               for idx_id, params in graph.nodes(data=True)]
+    indices = [var for var in graph.nodes(data=False)]
     idx_parallel = np.random.choice(
         indices, size=n_var_parallel, replace=False)
 
     for idx in idx_parallel:
-        graph.remove_node(int(idx))
+        graph.remove_node(idx)
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
     log.info("Removed {} variables".format(len(idx_parallel)))

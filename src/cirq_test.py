@@ -19,8 +19,6 @@ import src.utils as utils
 from mpi4py import MPI
 from src.quickbb_api import gen_cnf, run_quickbb
 
-QUICKBB_COMMAND = './quickbb/run_quickbb_64.sh'
-
 
 def get_amplitudes_from_cirq(filename, initial_state=0):
     """
@@ -47,8 +45,7 @@ def get_amplitudes_from_cirq(filename, initial_state=0):
 
 
 def get_optimal_graphical_model(
-        filename,
-        quickbb_command=QUICKBB_COMMAND):
+        filename):
     """
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
@@ -64,8 +61,7 @@ def get_optimal_graphical_model(
     return graph_optimal
 
 
-def eval_circuit_tf(filename, initial_state=0,
-                    quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_tf(filename, initial_state=0):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with tensorflow tensors).
@@ -85,22 +81,20 @@ def eval_circuit_tf(filename, initial_state=0,
     # place bra and ket variables to beginning, so these variables
     # will be contracted first
     peo = ket_vars + bra_vars + peo
-    perm_buckets, new_peo = opt.reorder_buckets(buckets, peo)
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
 
     # extract bra and ket variables from variable list and sort according
     # to qubit order
-    ket_vars = sorted(
-        [idx for idx in new_peo if idx.name.startswith('i')],
-        key=str)
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
 
-    bra_vars = sorted(
-        [idx for idx in new_peo if idx.name.startswith('o')],
-        key=str)
+    # Populate slice dict. Only shapes of slices are needed at this stage
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+    slice_dict.update(utils.slice_from_bits(
+        initial_state, bra_vars))
 
-    # Take the subtensor corresponding to the initial state
-    slice_dict = utils.slice_binary_from_bits(initial_state, ket_vars)
-
-    tf_buckets, placeholder_dict = tffr.get_sliced_tf_buckets(
+    # create placeholders with proper shapes
+    tf_buckets, placeholders_dict = tffr.get_sliced_tf_buckets(
         perm_buckets, slice_dict)
 
     # build the Tensorflow operation graph
@@ -109,15 +103,18 @@ def eval_circuit_tf(filename, initial_state=0,
     comput_graph = result.data
 
     # prepare static part of the feed_dict
-    feed_dict, dynamic_placeholders = tffr.assign_placeholder_values(
-        placeholder_dict, data_dict, slice_dict
-    )
+    feed_dict = tffr.assign_tensor_placeholders(
+        placeholders_dict, data_dict)
+
     amplitudes = []
     for target_state in range(2**n_qubits):
-        slice_dict = utils.slice_binary_from_bits(target_state, bra_vars)
-        dynamic_feed_dict, _ = tffr.assign_placeholder_values(
-            dynamic_placeholders, data_dict, slice_dict)
-        feed_dict.update(dynamic_feed_dict)
+        # Now the bounds of slices are needed
+        slice_dict.update(
+            utils.slice_from_bits(target_state, bra_vars))
+        # populate feed dict with slice variables
+        feed_dict.update(tffr.assign_variable_placeholders(
+            placeholders_dict, slice_dict))
+
         amplitude = tffr.run_tf_session(comput_graph, feed_dict)
         amplitudes.append(amplitude)
 
@@ -140,46 +137,63 @@ def prepare_parallel_evaluation_tf(filename, n_var_parallel):
     supporting information is returned
     """
     # Prepare graphical model
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
-    graph = opt.buckets2graph(buckets)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
 
-    # Run quickBB and get contraction order
-    idx_parallel, reduced_graph = gm.split_graph_by_metric(
-         graph, n_var_parallel)
-    peo, treewidth = gm.get_peo(reduced_graph)
+    graph = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
 
-    # Permute buckets to the order of optimal contraction
-    perm_buckets = opt.reorder_buckets(
-        buckets, peo + idx_parallel)
+    # find a reduced graph
+    vars_parallel, graph_reduced = gm.split_graph_random(
+        graph, n_var_parallel)
 
-    # Transform tensor labels in buckets to tensorflow placeholders
-    # Reset Tensorflow graph as it may store all tensors ever used before
+    # run quickbb once again to get peo and treewidth
+    peo, treewidth = gm.get_peo(graph_reduced)
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + vars_parallel + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+    vars_parallel = sorted([perm_dict[idx] for idx in vars_parallel],
+                           key=str)
+
+    # Populate slice dict. Only shapes of slices are needed at this stage
+    slice_dict = utils.slice_from_bits(
+        0, bra_vars + ket_vars + vars_parallel)
+
+    # create placeholders with proper shapes
     tf.reset_default_graph()
-    tf_buckets, placeholder_dict = tffr.get_tf_buckets(
-        perm_buckets, n_qubits)
-
-    # Apply slicing as we parallelize over some variables
-    sliced_tf_buckets, pdict_sliced = tffr.slice_tf_buckets(
-        tf_buckets, placeholder_dict, idx_parallel)
+    tf_buckets, placeholders_dict = tffr.get_sliced_tf_buckets(
+        perm_buckets, slice_dict)
+    # save only placeholder's names as they are not picklable
+    picklable_placeholders = {key.name: val for key, val in
+                              placeholders_dict.items()}
 
     # Do symbolic computation of the result
-    result = tf.identity(
-        opt.bucket_elimination(
-            sliced_tf_buckets, tffr.process_bucket_tf),
-        name='result'
-    )
+    result = opt.bucket_elimination(
+        tf_buckets, tffr.process_bucket_tf)
+    comput_graph = tf.identity(result.data, name='result')
 
     environment = dict(
-        n_qubits=n_qubits,
-        idx_parallel=idx_parallel,
-        input_names=list(pdict_sliced.keys()),
-        tf_graph_def=tf.get_default_graph().as_graph_def()
+        bra_vars=bra_vars,
+        ket_vars=ket_vars,
+        vars_parallel=vars_parallel,
+        tf_graph_def=tf.get_default_graph().as_graph_def(),
+        data_dict=data_dict,
+        picklable_placeholders=picklable_placeholders
     )
 
     return environment
 
 
-def eval_circuit_tf_parallel_mpi(filename):
+def eval_circuit_tf_parallel_mpi(filename, initial_state=0):
     """
     Evaluate quantum circuit using MPI to parallelize
     over some of the variables.
@@ -202,34 +216,48 @@ def eval_circuit_tf_parallel_mpi(filename):
     # restore tensorflow graph, extract inputs and outputs
     tf.reset_default_graph()
     tf.import_graph_def(env['tf_graph_def'], name='')
-    placeholder_dict = tffr.extract_placeholder_dict(
-        tf.get_default_graph(),
-        env['input_names']
-    )
-    result = tf.get_default_graph().get_tensor_by_name('result:0')
+    tgraph = tf.get_default_graph()
+    result = tgraph.get_tensor_by_name('result:0')
+
+    # restore placeholder and data dictionaries
+    picklable_placeholders = env['picklable_placeholders']
+    placeholder_dict = {tgraph.get_tensor_by_name(key): val
+                        for key, val in picklable_placeholders.items()}
+
+    data_dict = env['data_dict']
 
     # restore other parts of the environment
-    n_qubits = env['n_qubits']
-    idx_parallel = env['idx_parallel']
+    bra_vars = env['bra_vars']
+    ket_vars = env['ket_vars']
+    vars_parallel = env['vars_parallel']
+
+    # Construct slice dictionary for initial state
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    # Construct part of the feed dictionary
+    feed_dict = tffr.assign_tensor_placeholders(
+        placeholder_dict, data_dict)
+    feed_dict.update(tffr.assign_variable_placeholders(
+        placeholder_dict, slice_dict
+    ))
 
     # Loop over all amplitudes
     amplitudes = []
-    for target_state in range(2**n_qubits):
-        feed_dict = tffr.assign_placeholder_values(
-            placeholder_dict,
-            target_state, n_qubits)
-
-        # main computation loop. Populate respective slices
-        # and do contraction
+    for target_state in range(2**len(bra_vars)):
+        # Construct slice dictionary for the target state and
+        # populate feed dictionary with proper values
+        slice_dict = utils.slice_from_bits(target_state, bra_vars)
+        feed_dict.update(tffr.assign_variable_placeholders(
+            placeholder_dict, slice_dict))
 
         amplitude = 0
-        for slice_dict in utils.slice_values_generator(
-                comm_size, rank, idx_parallel):
-            parallel_vars_feed = {
-                placeholder_dict[key]: val for key, val
-                in slice_dict.items()}
+        for parallel_slice_dict in utils.slice_values_generator(
+                vars_parallel, rank, comm_size):
+            # Update feed dict with proper slices for parallelized
+            # variables
+            feed_dict.update(tffr.assign_variable_placeholders(
+                placeholder_dict, parallel_slice_dict))
 
-            feed_dict.update(parallel_vars_feed)
             amplitude += tffr.run_tf_session(result, feed_dict)
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
@@ -246,8 +274,7 @@ def eval_circuit_tf_parallel_mpi(filename):
                      - np.array(amplitudes_reference)))
 
 
-def eval_circuit_np(filename, initial_state=0,
-                    quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_np(filename, initial_state=0):
     """
     Loads circuit from file and evaluates all amplitudes
     using the bucket elimination algorithm (with Numpy tensors).
@@ -267,26 +294,21 @@ def eval_circuit_np(filename, initial_state=0,
     # place bra and ket variables to beginning, so these variables
     # will be contracted first
     peo = ket_vars + bra_vars + peo
-    perm_buckets, new_peo = opt.reorder_buckets(buckets, peo)
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
 
     # extract bra and ket variables from variable list and sort according
     # to qubit order
-    ket_vars = sorted(
-        [idx for idx in new_peo if idx.name.startswith('i')],
-        key=str)
-
-    bra_vars = sorted(
-        [idx for idx in new_peo if idx.name.startswith('o')],
-        key=str)
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
 
     # Take the subtensor corresponding to the initial state
-    slice_dict = utils.slice_binary_from_bits(initial_state, ket_vars)
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
 
     amplitudes = []
     for target_state in range(2**n_qubits):
         # Take appropriate subtensors for different target bitstrings
         slice_dict.update(
-            utils.slice_binary_from_bits(target_state, bra_vars)
+            utils.slice_from_bits(target_state, bra_vars)
         )
         sliced_buckets = npfr.get_sliced_np_buckets(
             perm_buckets, data_dict, slice_dict)
@@ -320,22 +342,51 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
         n_qubits, circuit)
 
     graph = opt.buckets2graph(
-        buckets, ignore_variables=bra_vars+ket_vars)
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
 
-    # Run quickBB and get contraction order
-    idx_parallel, reduced_graph = gm.split_graph_by_metric(
+    # find a reduced graph
+    vars_parallel, graph_reduced = gm.split_graph_random(
         graph, n_var_parallel)
-    peo, treewidth = gm.get_peo(reduced_graph)
 
-    # Permute buckets to the order of optimal contraction
-    perm_buckets = opt.reorder_buckets(
-        buckets, peo + idx_parallel)
+    # run quickbb once again to get peo and treewidth
+    peo, treewidth = gm.get_peo(graph_reduced)
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + vars_parallel + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+    vars_parallel = sorted([perm_dict[idx] for idx in vars_parallel],
+                           key=str)
+
+    # Populate slice dict. Only shapes of slices are needed at this stage
+    slice_dict = utils.slice_from_bits(
+        0, bra_vars + ket_vars + vars_parallel)
+
+    # create placeholders with proper shapes
+    tf.reset_default_graph()
+    tf_buckets, placeholders_dict = tffr.get_sliced_tf_buckets(
+        perm_buckets, slice_dict)
+    # save only placeholder's names as they are not picklable
+    picklable_placeholders = {key.name: val for key, val in
+                              placeholders_dict.items()}
+
+    # Do symbolic computation of the result
+    result = opt.bucket_elimination(
+        tf_buckets, tffr.process_bucket_tf)
+    comput_graph = tf.identity(result.data, name='result')
 
     environment = dict(
-        n_qubits=n_qubits,
-        idx_parallel=idx_parallel,
+        bra_vars=bra_vars,
+        ket_vars=ket_vars,
+        vars_parallel=vars_parallel,
         buckets=perm_buckets,
-        data_dict=data_dict
+        data_dict=data_dict,
     )
 
     return environment
@@ -361,32 +412,41 @@ def eval_circuit_np_parallel_mpi(filename, initial_state=0):
 
     env = comm.bcast(env, root=0)
 
+    # restore other parts of the environment
+    bra_vars = env['bra_vars']
+    ket_vars = env['ket_vars']
+    vars_parallel = env['vars_parallel']
+
     # restore buckets
     buckets = env['buckets']
-
-    # restore other parts of the environment
-    n_qubits = env['n_qubits']
-    idx_parallel = env['idx_parallel']
 
     # restore data dictionary
     data_dict = env['data_dict']
 
+    # Construct slice dictionary for initial state
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
     # Loop over all amplitudes
     amplitudes = []
-    for target_state in range(2**n_qubits):
-        np_buckets = npfr.get_np_buckets(
-            buckets, data_dict, initial_state, target_state, n_qubits)
+    for target_state in range(2**len(bra_vars)):
+        np_buckets = npfr.get_np_buckets(buckets, data_dict)
+
+        # Construct slice dictionary for the target state
+        slice_dict.update(
+            utils.slice_from_bits(target_state, bra_vars))
 
         # main computation loop. Populate respective slices
         # and do contraction
 
         amplitude = 0
-        for slice_dict in utils.slice_values_generator(
-                comm_size, rank, idx_parallel):
-            sliced_buckets = npfr.slice_np_buckets(
-                np_buckets, slice_dict, idx_parallel)
+        for parallel_slice_dict in utils.slice_values_generator(
+                vars_parallel, rank, comm_size):
+            slice_dict.update(parallel_slice_dict)
+            sliced_buckets = npfr.get_sliced_np_buckets(
+                buckets, data_dict, slice_dict)
             result = opt.bucket_elimination(
                 sliced_buckets, npfr.process_bucket_np)
+
             amplitude += result.data
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
@@ -403,7 +463,7 @@ def eval_circuit_np_parallel_mpi(filename, initial_state=0):
                      - np.array(amplitudes_reference)))
 
 
-def eval_contraction_cost(filename, quickbb_command=QUICKBB_COMMAND):
+def eval_contraction_cost(filename):
     """
     Loads circuit from file, evaluates contraction cost
     with and without optimization
@@ -455,7 +515,6 @@ def test_graph_reading(filename):
     of tensors (denoted by edges) is not kept during node
     relabelling
     """
-    import matplotlib.pyplot as plt
     import networkx as nx
     import pprint as pp
 
@@ -540,8 +599,7 @@ def what_is_terminal_tensor():
     print(a)
 
 
-def eval_circuit_multiamp_np(
-        filename, quickbb_command=QUICKBB_COMMAND):
+def eval_circuit_multiamp_np(filename):
     """
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
