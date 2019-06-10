@@ -146,8 +146,9 @@ def prepare_parallel_evaluation_tf(filename, n_var_parallel):
         ignore_variables=bra_vars+ket_vars)
 
     # find a reduced graph
-    vars_parallel, graph_reduced = gm.split_graph_random(
-        graph, n_var_parallel)
+    vars_parallel, graph_reduced = gm.split_graph_by_metric(
+        graph, n_var_parallel,
+        metric_fn=gm.get_node_by_mem_reduction)
 
     # run quickbb once again to get peo and treewidth
     peo, treewidth = gm.get_peo(graph_reduced)
@@ -346,8 +347,9 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
         ignore_variables=bra_vars+ket_vars)
 
     # find a reduced graph
-    vars_parallel, graph_reduced = gm.split_graph_random(
-        graph, n_var_parallel)
+    vars_parallel, graph_reduced = gm.split_graph_by_metric(
+        graph, n_var_parallel,
+        metric_fn=gm.get_node_by_mem_reduction)
 
     # run quickbb once again to get peo and treewidth
     peo, treewidth = gm.get_peo(graph_reduced)
@@ -363,23 +365,6 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
     vars_parallel = sorted([perm_dict[idx] for idx in vars_parallel],
                            key=str)
-
-    # Populate slice dict. Only shapes of slices are needed at this stage
-    slice_dict = utils.slice_from_bits(
-        0, bra_vars + ket_vars + vars_parallel)
-
-    # create placeholders with proper shapes
-    tf.reset_default_graph()
-    tf_buckets, placeholders_dict = tffr.get_sliced_tf_buckets(
-        perm_buckets, slice_dict)
-    # save only placeholder's names as they are not picklable
-    picklable_placeholders = {key.name: val for key, val in
-                              placeholders_dict.items()}
-
-    # Do symbolic computation of the result
-    result = opt.bucket_elimination(
-        tf_buckets, tffr.process_bucket_tf)
-    comput_graph = tf.identity(result.data, name='result')
 
     environment = dict(
         bra_vars=bra_vars,
@@ -429,8 +414,6 @@ def eval_circuit_np_parallel_mpi(filename, initial_state=0):
     # Loop over all amplitudes
     amplitudes = []
     for target_state in range(2**len(bra_vars)):
-        np_buckets = npfr.get_np_buckets(buckets, data_dict)
-
         # Construct slice dictionary for the target state
         slice_dict.update(
             utils.slice_from_bits(target_state, bra_vars))
@@ -469,8 +452,13 @@ def eval_contraction_cost(filename):
     with and without optimization
     """
     # Prepare graphical model
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
-    graph_raw = opt.buckets2graph(buckets)
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph_raw = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
 
     # estimate cost
     mem_raw, flop_raw = gm.cost_estimator(graph_raw)
@@ -481,7 +469,7 @@ def eval_contraction_cost(filename):
 
     # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(
-        graph_raw, dict(zip(peo, range(1, len(peo)+1)))
+        graph_raw, dict(zip(peo, sorted(graph_raw.nodes(), key=int)))
     )
     mem_opt, flop_opt = gm.cost_estimator(graph)
     mem_opt_tot = sum(mem_opt)
@@ -493,7 +481,8 @@ def eval_contraction_cost(filename):
     peo, treewidth = gm.get_peo(reduced_graph)
 
     graph_parallel, label_dict = gm.relabel_graph_nodes(
-        reduced_graph, dict(zip(peo, range(1, len(peo) + 1)))
+        reduced_graph, dict(zip(
+            peo, sorted(reduced_graph.nodes(), key=int)))
     )
 
     mem_par, flop_par = gm.cost_estimator(graph_parallel)
@@ -571,89 +560,87 @@ def test_bucket_reading(filename):
                  - np.array(amplitudes_reference)))
 
 
-def what_is_terminal_tensor():
-    """
-    This functions shows what a terminal tensor (e.g. the one
-    we encounter when trying to calculate several amplitudes at a time)
-    should be. Here 4 qubits are considered. This tensor
-    is made of ones.
-    """
-    import itertools
-
-    def kron_list(operands):
-        res = operands[0].flatten()
-        shapes = [res.shape[0]]
-
-        for operand in operands[1:]:
-            shapes.append(operand.flatten().shape[0])
-            res = np.kron(res, operand.flatten())
-        return np.reshape(res, shapes)
-
-    u = np.array([0, 1])
-    d = np.array([1, 0])
-
-    a = np.zeros((2, 2, 2, 2))
-
-    for prod in itertools.product([u, d], repeat=4):
-        a += kron_list(prod)
-    print(a)
-
-
-def eval_circuit_multiamp_np(filename):
+def eval_circuit_multiamp_np(filename, initial_state=0):
     """
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
     """
-    # Get the number of qubits
-    n_qubits, _, _ = opt.read_buckets(filename)
 
-    # Read buckets with all qubits set to free variables
+    filename = 'inst_2x2_7_0.txt'
+    initial_state = 0
+    target_state = 0
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    # Collect free qubit variables
     free_qubits = [1, 3]
-    n_qubits, buckets, free_vars = opt.read_buckets(filename,
-                                                    free_qubits)
-    if len(free_vars) > 0:
+    free_bra_vars = []
+    for ii in free_qubits:
+        try:
+            free_bra_vars.append(bra_vars[ii])
+        except IndexError:
+            pass
+    bra_vars = [var for var in bra_vars if var not in free_bra_vars]
+
+    if len(free_bra_vars) > 0:
         print('Evaluate subsets of amplitudes over qubits:')
         print(free_qubits)
         print('Free variables in the resulting expression:')
-        print(free_vars)
+        print(free_bra_vars)
 
-    graph_initial = opt.buckets2graph(buckets)
-    graph = gm.make_clique_on(graph_initial, free_vars)
+    graph_initial = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    graph = gm.make_clique_on(graph_initial, free_bra_vars)
 
     # Run quickbb
-    peo_initial, _ = gm.get_peo(graph)
-    treewidth = gm.get_treewidth_from_peo(graph, peo_initial)
-    peo = gm.get_equivalent_peo(graph, peo_initial, free_vars)
+    peo_initial, treewidth = gm.get_peo(graph)
 
-    # Apply calculated PEO
-    perm_buckets = opt.reorder_buckets(buckets, peo)
+    # transform peo so free_bra_vars are at the end
+    peo = gm.get_equivalent_peo(graph, peo_initial, free_bra_vars)
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    perm_buckets, perm_dict = opt.reorder_buckets(
+        buckets, bra_vars + ket_vars + peo)
     perm_graph, _ = gm.relabel_graph_nodes(
-        graph, dict(zip(peo, range(1, len(peo)+1))))
+        graph, perm_dict)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # make proper slice dictionaries. We choose ket = |0>,
+    # bra = |0> on fixed entries
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+    slice_dict.update(utils.slice_from_bits(target_state, bra_vars))
+    slice_dict.update({var: slice(None) for var in free_bra_vars})
 
     # Finally make numpy buckets and calculate
-    np_buckets = npfr.get_np_buckets(
-        perm_buckets, n_qubits, 0)
-    amplitude = opt.bucket_elimination(
-        np_buckets, npfr.process_bucket_np,
-        n_var_nosum=len(free_vars))
-
-    # Take reverse of the amplitude
-    amplitudes = amplitude.flatten()[::-1]
+    sliced_buckets = npfr.get_sliced_np_buckets(
+        perm_buckets, data_dict, slice_dict)
+    result = opt.bucket_elimination(
+        sliced_buckets, npfr.process_bucket_np,
+        n_var_nosum=len(free_bra_vars))
+    amplitudes = result.data.flatten()
 
     # Now calculate the reference
     amplitudes_reference = get_amplitudes_from_cirq(filename)
 
     # Get a slice as we do not need full amplitude
-    computed_slice = []
-    for qubit_idx, qubit_val in zip(
-            range(n_qubits),
-            utils.int_to_bitstring(0, n_qubits)):
-        if qubit_idx in free_qubits:
-            computed_slice.append(slice(None))
-        else:
-            computed_slice.append(int(qubit_val))
+    bra_slices = {var: slice_dict[var] for var in slice_dict
+                  if var.name.startswith('o')}
+
+    # sort slice in the big endian order for Cirq
+    computed_subtensor = [slice_dict[var]
+                          for var in sorted(bra_slices, key=str)]
+
     slice_of_amplitudes = amplitudes_reference.reshape(
-        [2]*n_qubits)[tuple(computed_slice)]
+        [2]*n_qubits)[tuple(computed_subtensor)]
     slice_of_amplitudes = slice_of_amplitudes.flatten()
 
     print('Result:')
@@ -665,8 +652,8 @@ def eval_circuit_multiamp_np(filename):
 
 
 if __name__ == "__main__":
-    eval_circuit_tf('inst_2x2_7_1.txt')
-    eval_circuit_np('inst_2x2_7_1.txt')
+    eval_circuit_tf('inst_2x2_7_0.txt')
+    eval_circuit_np('inst_2x2_7_0.txt')
     eval_circuit_tf_parallel_mpi('inst_2x2_7_0.txt')
     eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
     eval_contraction_cost('inst_2x2_7_0.txt')

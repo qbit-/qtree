@@ -15,9 +15,8 @@ from collections import Counter
 
 import src.system_defs as defs
 import src.utils as utils
-import src.optimizer as opt
 
-from src.optimizer import Var, Tensor
+from src.optimizer import Tensor
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
@@ -371,36 +370,36 @@ def get_cost_by_node(graph, node):
     if graph.is_multigraph():
         edges_from_node = [list(graph[node][neighbor].values())
                            for neighbor in neighbors]
-        tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-                            in edges_from_node
-                            for edge in edges_of_neighbor]
+        tensors = [edge['tensor'] for edges_of_neighbor
+                   in edges_from_node
+                   for edge in edges_of_neighbor]
     else:
-        tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                            for neighbor in neighbors]
+        tensors = [graph[node][neighbor]['tensor']
+                   for neighbor in neighbors]
 
     # Now find all self loops (single variable tensors)
     if graph.is_multigraph():
         selfloops_from_node = [list(graph[node][neighbor].values())
                                for neighbor in neighbors
                                if neighbor == node]
-        selfloop_tensor_hash_tags = [edge['hash_tag']
-                                     for selfloop_of_node
-                                     in selfloops_from_node
-                                     for edge in selfloop_of_node]
+        selfloop_tensors = [edge['tensor']
+                            for selfloop_of_node
+                            in selfloops_from_node
+                            for edge in selfloop_of_node]
     else:
-        selfloop_tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                                     for neighbor in neighbors
-                                     if neighbor == node]
+        selfloop_tensors = [graph[node][neighbor]['tensor']
+                            for neighbor in neighbors
+                            if neighbor == node]
 
     # The order of tensor in each term is the number of neighbors
     # having edges with the same hash tag + 1 (the node itself),
     # except for self-loops, where the order is 1
     neighbor_tensor_orders = {}
-    for hash_tag, count in Counter(tensor_hash_tags).items():
-        if hash_tag in selfloop_tensor_hash_tags:
-            tensor_order = {hash_tag: count}
+    for tensor, count in Counter(tensors).items():
+        if tensor in selfloop_tensors:
+            tensor_order = {tensor: count}
         else:
-            tensor_order = {hash_tag: count+1}
+            tensor_order = {tensor: count+1}
         neighbor_tensor_orders.update(tensor_order)
 
     # memory estimation: the size of the result + all sizes of terms
@@ -408,7 +407,7 @@ def get_cost_by_node(graph, node):
     for order in neighbor_tensor_orders.values():
         memory += 2**order
 
-    n_unique_tensors = len(set(tensor_hash_tags))
+    n_unique_tensors = len(set(tensors))
 
     # there are number_of_terms - 1 multiplications
     if n_unique_tensors == 0:
@@ -466,8 +465,12 @@ def eliminate_node(graph, node, self_loops=True):
 
     if edges is not None:
         graph.add_edges_from(
-            edges, tensor=f'E{node}',
-            hash_tag=hash((f'E{node}', tuple(neighbors), random.random())))
+            edges,
+            tensor=Tensor(
+                name='E{}'.format(int(node)),
+                indices=tuple(neighbors)
+                )
+        )
 
 
 def get_mem_requirement(graph):
@@ -539,7 +542,7 @@ def cost_estimator(old_graph, free_vars=[]):
               Flop cost for steps of the bucket elimination algorithm
     """
     graph = copy.deepcopy(old_graph)
-    nodes = sorted(graph.nodes)
+    nodes = sorted(graph.nodes, key=int)
 
     # Early return if graph is empty
     if len(nodes) == 0:
@@ -631,8 +634,9 @@ def get_node_by_mem_reduction(old_graph):
     nodes_by_mem_reduction : dict
     """
 
-    number_of_nodes = old_graph.number_of_nodes()
+    # number_of_nodes = old_graph.number_of_nodes()
     graph = copy.deepcopy(old_graph)
+    # nodes = sorted(graph.nodes(), key=int)
 
     # Get flop cost of the bucket elimination
     initial_mem, initial_flop = cost_estimator(graph)
@@ -643,11 +647,11 @@ def get_node_by_mem_reduction(old_graph):
         # Take out one node
         reduced_graph.remove_node(node)
         # Renumerate graph nodes to be consequtive ints (may be redundant)
-        order = (list(range(node))
-                 + list(range(node + 1, number_of_nodes)))
-        reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(order, range(number_of_nodes-1)))
-        )
+        # order = (nodes[:int(node)] + nodes[int(node)+1:])
+        # reduced_graph, _ = relabel_graph_nodes(
+        #     reduced_graph, dict(zip(
+        #         order, nodes[:-1])
+        #     ))
         mem, flop = cost_estimator(reduced_graph)
         delta = sum(initial_mem) - sum(mem)
 
@@ -736,7 +740,7 @@ def split_graph_by_metric(
 
     # get nodes by metric in descending order
     nodes_by_metric = metric_fn(graph)
-    nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
+    nodes_by_metric.sort(key=lambda pair: int(pair[1]), reverse=True)
 
     nodes_by_metric_allowed = []
     for node, metric in nodes_by_metric:
@@ -754,7 +758,7 @@ def split_graph_by_metric(
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
     log.info("Removed {} variables".format(len(idx_parallel)))
 
-    return sorted(idx_parallel), graph
+    return sorted(idx_parallel, key=int), graph
 
 
 def split_graph_with_mem_constraint_greedy(
@@ -1083,13 +1087,12 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
     if len(clique_nodes) == 0:
         return graph
 
-    edges = [tuple(sorted(edge)) for edge in
+    edges = [tuple(sorted(edge, key=int)) for edge in
              itertools.combinations(clique_nodes, 2)]
-    node = min(clique_nodes)
-    graph.add_edges_from(edges, tensor=name_prefix + f'{node}',
-                         hash_tag=hash((name_prefix + f'{node}',
-                                        tuple(clique_nodes),
-                                        random.random())))
+    node_idx = min(map(int, clique_nodes))
+    graph.add_edges_from(edges,
+                         tensor=Tensor(name=name_prefix + f'{node_idx}',
+                                       indices=clique_nodes))
     clique_size = len(clique_nodes)
     log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
 
@@ -1117,13 +1120,14 @@ def get_fillin_graph(old_graph, peo):
     assert number_of_nodes == old_graph.number_of_nodes()
 
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(number_of_nodes))))
+        old_graph, dict(zip(peo, sorted(old_graph.nodes, key=int))))
 
     # go over nodes and make adjacent all nodes higher in the order
-    for node in sorted(graph.nodes):
+    for node in sorted(graph.nodes, key=int):
         neighbors = list(graph[node])
         higher_neighbors = [neighbor for neighbor
-                            in neighbors if neighbor > node]
+                            in neighbors
+                            if neighbor.identity > node.identity]
 
         # form all pairs of higher neighbors
         if len(higher_neighbors) > 1:
@@ -1140,10 +1144,10 @@ def get_fillin_graph(old_graph, peo):
         # Add edges between all neighbors
         if fillin_edges is not None:
             graph.add_edges_from(
-                fillin_edges, tensor=f'E{node}',
-                hash_tag=hash((f'E{node}',
-                               tuple(neighbors),
-                               random.random())))
+                fillin_edges, tensor=Tensor(
+                    name='A[{}]'.format(
+                        str(node)+','.join(map(str, higher_neighbors))),
+                    indices=neighbors))
 
     # relabel graph back so peo is a correct elimination order
     # of the resulting chordal graph
@@ -1181,28 +1185,34 @@ def get_fillin_graph2(old_graph, peo):
     f = [0 for ii in range(number_of_nodes)]
 
     for ii in range(1, number_of_nodes+1):
-        w = peo[ii-1]
+        w_node = peo[ii-1]
+        w = int(w_node)
         f[w-1] = w
         index[w-1] = ii
-        neighbors = list(graph[w])
+        neighbors = list(graph[w_node])
         lower_neighbors = [v for v in neighbors
                            if peo.index(v)+1 < ii]
-        hash_seed = random.random()
         for v in lower_neighbors:
-            x = v
+            x_node = v
+            x = int(x_node)
             while index[x-1] < ii:
                 index[x-1] = ii
                 # Check that edge does not exist
-                # This may happen if peo is not ordered?
-                if (x, w) not in graph.edges(w):
+                # Tensors added here may not correspond to cliques!
+                # Their names are made incompatible with Tensorflow
+                # to highlight it
+                if (x_node, w_node) not in graph.edges(w_node):
                     graph.add_edge(
-                        x, w,
-                        tensor=f'E{w}',
-                        hash_tag=hash((f'E{w}',
-                                       hash_seed)))
-                x = f[x-1]
-            if f[x-1] == x:
-                f[x-1] = w
+                        x_node, w_node,
+                        tensor=Tensor(
+                            name='A[{},{}])'.format(int(x_node),
+                                                    int(w_node)),
+                            indices=lower_neighbors
+                        ))
+                x_node = f[x-1]
+                x = int(x_node)
+            if f[x-1] == x_node:
+                f[x-1] = w_node
     return graph
 
 
@@ -1223,16 +1233,16 @@ def is_peo_zero_fillin(old_graph, peo):
             True if elimination order has zero fillin
     """
     # get a copy of graph in the elimination order
-
-    number_of_nodes = len(peo)
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(number_of_nodes))))
+        old_graph, dict(zip(peo, sorted(old_graph.nodes(), key=int)))
+        )
 
     # go over nodes and make adjacent all nodes higher in the order
-    for node in sorted(graph.nodes):
+    for node in sorted(graph.nodes, key=int):
         neighbors = list(graph[node])
         higher_neighbors = [neighbor for neighbor
-                            in neighbors if neighbor > node]
+                            in neighbors
+                            if neighbor.identity > node.identity]
 
         # form all pairs of higher neighbors
         if len(higher_neighbors) > 1:
@@ -1274,17 +1284,20 @@ def is_peo_zero_fillin2(graph, peo):
     f = [0 for ii in range(number_of_nodes)]
 
     for ii in range(1, number_of_nodes+1):
-        w = peo[ii-1]
-        f[w-1] = w
+        w_node = peo[ii-1]
+        w = int(w_node)
+        f[w-1] = w_node
         index[w-1] = ii
-        neighbors = list(graph[w])
-        lower_neighbors = [v for v in neighbors
-                           if peo.index(v)+1 < ii]
-        for v in lower_neighbors:
+        neighbors = list(graph[w_node])
+        lower_neighbors = [v_node for v_node in neighbors
+                           if peo.index(v_node)+1 < ii]
+        for v_node in lower_neighbors:
+            v = int(v_node)
             index[v-1] = ii
-            if f[v-1] == v:
-                f[v-1] = w
-        for v in lower_neighbors:
+            if f[v-1] == v_node:
+                f[v-1] = w_node
+        for v_node in lower_neighbors:
+            v = int(v_node)
             if index[f[v-1] - 1] < ii:
                 return False
     return True
@@ -1312,10 +1325,11 @@ def is_clique(old_graph, vertices):
     have_edges = set(subgraph.edges()) - set(subgraph.selfloop_edges())
 
     # Sort all edges to be in the (low, up) order
-    have_edges = set([tuple(sorted(edge)) for edge in have_edges])
+    have_edges = set([tuple(sorted(edge, key=int))
+                      for edge in have_edges])
 
     want_edges = set([
-        tuple(sorted(edge))
+        tuple(sorted(edge, key=int))
         for edge in itertools.combinations(vertices, 2)
     ])
     return want_edges == have_edges
@@ -1522,7 +1536,7 @@ def test_get_fillin_graph():
     tim1 = time.time()
     g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
     tim2 = time.time()
-    g2 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    g2 = get_fillin_graph2(g, list(range(1, g.number_of_nodes() + 1)))
     tim3 = time.time()
 
     assert nx.is_isomorphic(g1, g2)

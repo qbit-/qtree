@@ -76,6 +76,9 @@ class Var(object):
                 and self.size == other.size
                 and self.name == other.name)
 
+    def __lt__(self, other):  # this is required for sorting
+        return self.identity < other.identity
+
 
 class Tensor(object):
     """
@@ -323,7 +326,7 @@ def bucket_elimination(buckets, process_bucket_fn,
     rest = list(itertools.chain.from_iterable(buckets[n_var_contract:]))
     if len(rest) > 0:
         # only multiply tensors
-        tensor = process_bucket_fn(rest, nosum=True)
+        tensor = process_bucket_fn(rest, no_sum=True)
         if result is not None:
             result *= tensor
         else:
@@ -452,6 +455,9 @@ def reorder_buckets(old_buckets, permutation):
     """
     # import pdb
     # pdb.set_trace()
+    if len(old_buckets) != len(permutation):
+        raise ValueError('Wrong permutation: len(permutation)'
+                         ' != len(buckets)')
     perm_dict = {}
     for n, idx in enumerate(permutation):
         if idx.name.startswith('v'):

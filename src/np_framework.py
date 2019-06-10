@@ -144,7 +144,7 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
     return sliced_buckets
 
 
-def process_bucket_np(bucket):
+def process_bucket_np(bucket, no_sum=False):
     """
     Process bucket in the bucket elimination algorithm.
     We multiply all tensors in the bucket and sum over the
@@ -155,6 +155,9 @@ def process_bucket_np(bucket):
     ----------
     bucket : list
            List containing tuples of tensors (gates) with their indices.
+
+    no_sum : bool
+           If no summation should be done over the buckets's variable
 
     Returns
     -------
@@ -178,13 +181,20 @@ def process_bucket_np(bucket):
         )
 
     if len(result_indices) > 0:
-        first_index, *result_indices = result_indices
+        if not no_sum:  # trim first index
+            first_index, *result_indices = result_indices
+        else:
+            first_index, *_ = result_indices
         tag = first_index.identity
     else:
         tag = 'f'
         result_indices = []
 
     # reduce
-    result = opt.Tensor(f'E{tag}', result_indices,
-                        data=np.sum(result_data, axis=0))
+    if no_sum:
+        result = opt.Tensor(f'E{tag}', result_indices,
+                            data=result_data)
+    else:
+        result = opt.Tensor(f'E{tag}', result_indices,
+                            data=np.sum(result_data, axis=0))
     return result
