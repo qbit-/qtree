@@ -16,128 +16,124 @@ from collections import Counter
 import src.system_defs as defs
 import src.utils as utils
 
-from src.optimizer import Tensor
+from src.optimizer import Var, Tensor
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
 random.seed(0)
 
 
-def read_graph(filename, max_depth=None):
+def circ2graph(qubit_count, circuit, max_depth=None,
+               omit_terminals=True):
     """
-    Reads circuit from filename and builds its contraction graph
+    Constructs a graph from a circuit in the form of a
+    list of lists.
 
     Parameters
     ----------
-    filename : str
-             circuit file in the format of Sergio Boixo
-    max_depth : int
-             maximal depth of gates to read
+    qubit_count : int
+            number of qubits in the circuit
+    circuit : list of lists
+            quantum circuit as returned by
+            :py:meth:`operators.read_circuit_file`
+    max_depth : int, default None
+            Maximal depth of the circuit which should be used
+    omit_terminals : bool, default True
+            If terminal nodes should be excluded from the final
+            graph.
 
     Returns
     -------
-    qubit_count : int
-            number of qubits in the circuit
     graph : networkx.MultiGraph
+            Graph which corresponds to the circuit
     """
+    import src.operators as ops
+    import functools
+    # import pdb
+    # pdb.set_trace()
+
+    if max_depth is None:
+        max_depth = len(circuit)
+
+    # Let's build the graph.
+    # The circuit is built from left to right, as it operates
+    # on the ket ( |0> ) from the left. We thus first place
+    # the bra ( <x| ) and then put gates in the reverse order
+
+    # Fill the variable `frame`
+    layer_variables = [Var(qubit, name=f'o_{qubit}')
+                       for qubit in range(qubit_count)]
+    current_var_idx = qubit_count
+
+    # Save variables of the bra
+    bra_variables = [var for var in layer_variables]
+
+    # Initialize the graph
     graph = nx.MultiGraph()
+    graph.add_nodes_from(bra_variables)
 
-    # perform the cirquit file processing
-    log.info(f'reading file {filename}')
+    # Place safeguard measurement circuits before and after
+    # the circuit
+    measurement_circ = [[ops.M(qubit) for qubit in range(qubit_count)]]
 
-    with open(filename, 'r') as fp:
-        # read the number of qubits
-        qubit_count = int(fp.readline())
-        log.info("There are {:d} qubits in circuit".format(qubit_count))
+    combined_circ = functools.reduce(
+        lambda x, y: itertools.chain(x, y),
+        [measurement_circ, reversed(circuit[:max_depth])])
 
-        n_ignored_layers = 0
-        current_layer = 0
+    # Start building the graph in reverse order
+    for layer in combined_circ:
+        for op in layer:
+            # build the indices of the gate. If gate
+            # changes the basis of a qubit, a new variable
+            # has to be introduced and current_var_idx is increased.
+            # The order of indices
+            # is always (a_new, a, b_new, b, ...), as
+            # this is how gate tensors are chosen to be stored
+            variables = []
+            current_var_idx_copy = current_var_idx
+            for qubit in op.qubits:
+                if qubit in op.changed_qubits:
+                    variables.extend(
+                        [layer_variables[qubit],
+                         Var(current_var_idx_copy)])
+                    current_var_idx_copy += 1
+                else:
+                    variables.extend([layer_variables[qubit]])
+            # Form a tensor and add a clique to the graph
+            tensor = Tensor(op.name, variables,
+                            data_key=(op.name, op.data_hash))
 
-        # initialize the variables and add nodes to graph
-        for i in range(1, qubit_count+1):
-            graph.add_node(i, name=utils.num_to_alnum(i))
-        layer_variables = list(range(1, qubit_count+1))
-        current_var = qubit_count
+            edges = itertools.combinations(variables, 2)
+            graph.add_edges_from(edges, tensor=tensor)
 
-        # Add selfloops to input nodes
-        for ii in range(1, qubit_count+1):
-            graph.add_edge(
-                ii, ii,
-                tensor=f'I{ii}',
-                hash_tag=hash((f'I{ii}', (ii, ii), random.random())))
+            # Create new buckets and update current variable frame
+            for qubit in op.changed_qubits:
+                layer_variables[qubit] = Var(current_var_idx)
+                current_var_idx += 1
 
-        for idx, line in enumerate(fp):
+    # Finally go over the qubits, append measurement gates
+    # and collect ket variables
+    ket_variables = []
 
-            # Read circuit layer by layer. Decipher contents of the line
-            m = re.search(r'(?P<layer>[0-9]+) (?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', line)
-            if m is None:
-                raise Exception("file format error at line {}".format(idx))
-            layer_num = int(m.group('layer'))
+    op = ops.M(0)  # create a single measurement gate object
 
-            # Skip layers if max_depth is set
-            if max_depth is not None and layer_num > max_depth:
-                n_ignored_layers = layer_num - max_depth
-                continue
-            if layer_num > current_layer:
-                current_layer = layer_num
+    for qubit in range(qubit_count):
+        var = layer_variables[qubit]
+        new_var = Var(current_var_idx,
+                      name=f'i_{qubit}', size=2)
+        ket_variables.append(new_var)
+        # update buckets and variable `frame`
+        graph.add_edge(var, new_var,
+                       tensor=Tensor(op.name,
+                                     indices=[var, new_var],
+                                     data_key=(op.name, op.data_hash))
+        )
+        layer_variables[qubit] = new_var
+        current_var_idx += 1
 
-            op_identif = m.group('operation')
-            if m.group('qubit2') is not None:
-                q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
-            else:
-                q_idx = (int(m.group('qubit1')),)
-
-            # Now apply what we got to build the graph
-            if op_identif == 'cz':
-                # cZ connects two variables with an edge
-                var1 = layer_variables[q_idx[0]]
-                var2 = layer_variables[q_idx[1]]
-                graph.add_edge(var1, var2,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var2),
-                                             random.random())))
-
-            # Skip Hadamard tensors - for now
-            elif op_identif == 'h':
-                pass
-
-            # Add selfloops for single variable gates
-            elif op_identif == 't':
-                var1 = layer_variables[q_idx[0]]
-                graph.add_edge(var1, var1,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var1),
-                                             random.random())))
-            # Process non-diagonal gates X and Y
-            else:
-                var1 = layer_variables[q_idx[0]]
-                var2 = current_var+1
-                graph.add_node(var2, name=utils.num_to_alnum(var2))
-                graph.add_edge(var1, var2,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var2),
-                                             random.random())))
-                current_var += 1
-                layer_variables[q_idx[0]] = current_var
-
-        # Add selfloops to output nodes
-        for q_idx, var in zip(range(1, qubit_count+1), layer_variables):
-            graph.add_edge(
-                var, var,
-                tensor=f'O{q_idx}',
-                hash_tag=hash((f'O{q_idx}', (var, var), random.random())))
-
-        # We are done, print stats
-        if n_ignored_layers > 0:
-            log.info("Ignored {} layers".format(n_ignored_layers))
-
-        v = graph.number_of_nodes()
-        e = graph.number_of_edges()
-
-        log.info(f"Generated graph with {v} nodes and {e} edges")
-        log.info(f"last index contains from {layer_variables}")
-
-    return qubit_count, graph
+    if omit_terminals:
+        graph.remove_nodes_from(bra_variables + ket_variables)
+    return graph
 
 
 def relabel_graph_nodes(graph, label_dict):
@@ -1530,8 +1526,11 @@ def test_get_fillin_graph():
     Test graph filling using the elimination order
     """
     import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+    import operators as ops
+    nq, c = ops.read_circuit_file(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+    )
+    g = circ2graph(nq, c)
 
     tim1 = time.time()
     g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
@@ -1548,8 +1547,11 @@ def test_is_zero_fillin():
     Test graph filling using the elimination order
     """
     import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+    import operators as ops
+    nq, c = ops.read_circuit_file(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+    )
+    g = circ2graph(nq, c)
 
     g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
 
@@ -1568,7 +1570,11 @@ def test_maximum_cardinality_search():
     """Test maximum cardinality search algorithm"""
 
     # Read graph
-    nq, old_g = read_graph('inst_2x2_7_0.txt')
+    import operators as ops
+    nq, c = ops.read_circuit_file(
+        'inst_2x2_7_0.txt'
+    )
+    old_g = circ2graph(nq, c)
 
     # Make random clique
     vertices = list(np.random.choice(old_g.nodes, 4, replace=False))
@@ -1596,7 +1602,11 @@ def test_maximum_cardinality_search():
 
 def test_is_clique():
     """Test is_clique"""
-    nq, g = read_graph('inst_2x2_7_0.txt')
+    import operators as ops
+    nq, c = ops.read_circuit_file(
+        'inst_2x2_7_0.txt'
+    )
+    g = circ2graph(nq, c)
 
     # select some random vertices
     vertices = list(np.random.choice(g.nodes, 4, replace=False))

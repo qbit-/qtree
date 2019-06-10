@@ -24,7 +24,6 @@ def get_amplitudes_from_cirq(filename, initial_state=0):
     """
     Calculates amplitudes for a circuit in file filename using Cirq
     """
-    # filename = 'inst_2x2_1_0.txt'
     n_qubits, circuit = ops.read_circuit_file(filename)
     side_length = int(np.sqrt(n_qubits))
 
@@ -347,7 +346,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
         ignore_variables=bra_vars+ket_vars)
 
     # find a reduced graph
-    vars_parallel, graph_reduced = gm.split_graph_by_metric(
+    vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
         graph, n_var_parallel,
         metric_fn=gm.get_node_by_mem_reduction)
 
@@ -496,7 +495,7 @@ def eval_contraction_cost(filename):
     ))
 
 
-def test_graph_reading(filename):
+def test_circ2graph(filename='inst_2x2_7_0.txt'):
     """
     This function tests direct reading of circuits to graphs.
     It should be noted that graphs can not to be used in place
@@ -505,12 +504,13 @@ def test_graph_reading(filename):
     relabelling
     """
     import networkx as nx
-    import pprint as pp
 
-    n_qubits, graph = gm.read_graph(filename)
+    nq, circuit = ops.read_circuit_file(filename)
+    graph = gm.circ2graph(nq, circuit)
 
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets_original, graph_original = opt.circ2buckets(circuit)
+    buckets_original, _, _, _ = opt.circ2buckets(n_qubits, circuit)
+    graph_original = opt.buckets2graph(buckets_original)
 
     from networkx.algorithms import isomorphism
     GM = isomorphism.GraphMatcher(graph, graph_original)
@@ -518,46 +518,11 @@ def test_graph_reading(filename):
     print('Isomorphic? : {}'.format(GM.is_isomorphic()))
     graph = nx.relabel_nodes(graph, GM.mapping, copy=True)
 
-    gm.draw_graph(graph, 'new_graph.png')
-    gm.draw_graph(graph_original, 'orig_graph.png')
+    if not GM.is_isomorphic():
+        gm.draw_graph(graph, 'new_graph.png')
+        gm.draw_graph(graph_original, 'orig_graph.png')
 
-    buckets = opt.graph2buckets(graph)
-    buckets_from_original = opt.graph2buckets(graph_original)
-
-    print('Original buckets')
-    pp.pprint(buckets_original)
-    print('Buckets from graph')
-    pp.pprint(buckets_from_original)
-    print('New buckets')
-    pp.pprint(buckets)
-
-
-def test_bucket_reading(filename):
-    """
-    This function tests direct reading of circuits to buckets.
-    """
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
-    graph = opt.buckets2graph(buckets)
-
-    peo, treewidth = gm.get_peo(graph)
-    perm_buckets = opt.reorder_buckets(buckets, peo)
-
-    amplitudes = []
-    for target_state in range(2**n_qubits):
-        np_buckets = npfr.get_np_buckets(
-            perm_buckets, n_qubits, target_state)
-        amplitude = opt.bucket_elimination(
-            np_buckets, npfr.process_bucket_np)
-        amplitudes.append(amplitude)
-
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
-    print('Result:')
-    print(np.round(np.array(amplitudes), 3))
-    print('Reference:')
-    print(np.round(amplitudes_reference, 3))
-    print('Maximal difference:')
-    print(np.max(np.array(amplitudes)
-                 - np.array(amplitudes_reference)))
+    return GM.is_isomorphic()
 
 
 def eval_circuit_multiamp_np(filename, initial_state=0):
@@ -566,9 +531,10 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     multiple amplitudes at once using np framework
     """
 
-    filename = 'inst_2x2_7_0.txt'
-    initial_state = 0
+    # Values of the fixed bra qubits.
+    # this can be changed to your taste
     target_state = 0
+
     # Prepare graphical model
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
