@@ -103,10 +103,14 @@ def circ2graph(qubit_count, circuit, max_depth=None,
             tensor = Tensor(op.name, variables,
                             data_key=(op.name, op.data_hash))
 
-            edges = itertools.combinations(variables, 2)
+            if len(variables) > 1:
+                edges = itertools.combinations(variables, 2)
+            else:
+                edges = [(variables[0], variables[0])]
+
             graph.add_edges_from(edges, tensor=tensor)
 
-            # Create new buckets and update current variable frame
+            # Update current variable frame
             for qubit in op.changed_qubits:
                 layer_variables[qubit] = Var(current_var_idx)
                 current_var_idx += 1
@@ -932,9 +936,9 @@ def draw_graph(graph, filename=''):
     """
     plt.figure(figsize=(10, 10))
     # pos = nx.spectral_layout(graph)
-    pos = nx.kamada_kawai_layout(graph)
+    pos = nx.spectral_layout(graph)
     nx.draw(graph, pos,
-            node_color=(list(graph.nodes())),
+            node_color=(list(map(int, graph.nodes()))),
             node_size=100,
             cmap=plt.cm.Blues,
             with_labels=True,

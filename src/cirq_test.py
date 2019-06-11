@@ -509,8 +509,10 @@ def test_circ2graph(filename='inst_2x2_7_0.txt'):
     graph = gm.circ2graph(nq, circuit)
 
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets_original, _, _, _ = opt.circ2buckets(n_qubits, circuit)
-    graph_original = opt.buckets2graph(buckets_original)
+    buckets_original, _, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+    graph_original = opt.buckets2graph(
+        buckets_original, ignore_variables=bra_vars+ket_vars)
 
     from networkx.algorithms import isomorphism
     GM = isomorphism.GraphMatcher(graph, graph_original)
