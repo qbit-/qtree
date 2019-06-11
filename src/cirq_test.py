@@ -60,6 +60,177 @@ def get_optimal_graphical_model(
     return graph_optimal
 
 
+def eval_circuit_np(filename, initial_state=0):
+    """
+    Loads circuit from file and evaluates all amplitudes
+    using the bucket elimination algorithm (with Numpy tensors).
+    Same amplitudes are evaluated with Cirq for comparison.
+    """
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    # Run quickbb
+    peo, treewidth = gm.get_peo(graph)
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # Take the subtensor corresponding to the initial state
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    amplitudes = []
+    for target_state in range(2**n_qubits):
+        # Take appropriate subtensors for different target bitstrings
+        slice_dict.update(
+            utils.slice_from_bits(target_state, bra_vars)
+        )
+        sliced_buckets = npfr.get_sliced_np_buckets(
+            perm_buckets, data_dict, slice_dict)
+        result = opt.bucket_elimination(
+            sliced_buckets, npfr.process_bucket_np)
+        amplitudes.append(result.data)
+
+    # Cirq returns the amplitudes in big endian (largest bit first)
+
+    amplitudes_reference = get_amplitudes_from_cirq(
+        filename, initial_state)
+    print('Result:')
+    print(np.round(np.array(amplitudes), 3))
+    print('Reference:')
+    print(np.round(np.array(amplitudes_reference), 3))
+    print('Max difference:')
+    print(np.max(np.abs(
+        np.array(amplitudes) - np.array(amplitudes_reference))))
+
+
+def prepare_parallel_evaluation_np(filename, n_var_parallel):
+    """
+    Prepares for parallel evaluation of the quantum circuit.
+    Some of the variables in the circuit are parallelized over.
+    Unsliced Numpy buckets in the optimal order of elimination
+    are returned
+    """
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph = opt.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    # find a reduced graph
+    vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
+        graph, n_var_parallel,
+        metric_fn=gm.get_node_by_mem_reduction)
+
+    # run quickbb once again to get peo and treewidth
+    peo, treewidth = gm.get_peo(graph_reduced)
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + vars_parallel + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+    vars_parallel = sorted([perm_dict[idx] for idx in vars_parallel],
+                           key=str)
+
+    environment = dict(
+        bra_vars=bra_vars,
+        ket_vars=ket_vars,
+        vars_parallel=vars_parallel,
+        buckets=perm_buckets,
+        data_dict=data_dict,
+    )
+
+    return environment
+
+
+def eval_circuit_np_parallel_mpi(filename, initial_state=0):
+    """
+    Evaluate quantum circuit using MPI to parallelize
+    over some of the variables.
+    """
+    comm = MPI.COMM_WORLD
+    comm_size = comm.size
+    rank = comm.rank
+
+    # number of variables to split by parallelization
+    # this should be adjusted by the algorithm from memory/cpu
+    # requirements
+    n_var_parallel = 2
+    if rank == 0:
+        env = prepare_parallel_evaluation_np(filename, n_var_parallel)
+    else:
+        env = None
+
+    env = comm.bcast(env, root=0)
+
+    # restore other parts of the environment
+    bra_vars = env['bra_vars']
+    ket_vars = env['ket_vars']
+    vars_parallel = env['vars_parallel']
+
+    # restore buckets
+    buckets = env['buckets']
+
+    # restore data dictionary
+    data_dict = env['data_dict']
+
+    # Construct slice dictionary for initial state
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    # Loop over all amplitudes
+    amplitudes = []
+    for target_state in range(2**len(bra_vars)):
+        # Construct slice dictionary for the target state
+        slice_dict.update(
+            utils.slice_from_bits(target_state, bra_vars))
+
+        # main computation loop. Populate respective slices
+        # and do contraction
+
+        amplitude = 0
+        for parallel_slice_dict in utils.slice_values_generator(
+                vars_parallel, rank, comm_size):
+            slice_dict.update(parallel_slice_dict)
+            sliced_buckets = npfr.get_sliced_np_buckets(
+                buckets, data_dict, slice_dict)
+            result = opt.bucket_elimination(
+                sliced_buckets, npfr.process_bucket_np)
+
+            amplitude += result.data
+
+        amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
+        amplitudes.append(amplitude)
+
+    if rank == 0:
+        amplitudes_reference = get_amplitudes_from_cirq(filename)
+        print('Result:')
+        print(np.round(np.array(amplitudes), 3))
+        print('Reference:')
+        print(np.round(amplitudes_reference, 3))
+        print('Max difference:')
+        print(np.max(np.array(amplitudes)
+                     - np.array(amplitudes_reference)))
+
+
 def eval_circuit_tf(filename, initial_state=0):
     """
     Loads circuit from file and evaluates all amplitudes
@@ -259,177 +430,6 @@ def eval_circuit_tf_parallel_mpi(filename, initial_state=0):
                 placeholder_dict, parallel_slice_dict))
 
             amplitude += tffr.run_tf_session(result, feed_dict)
-
-        amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
-        amplitudes.append(amplitude)
-
-    if rank == 0:
-        amplitudes_reference = get_amplitudes_from_cirq(filename)
-        print('Result:')
-        print(np.round(np.array(amplitudes), 3))
-        print('Reference:')
-        print(np.round(amplitudes_reference, 3))
-        print('Max difference:')
-        print(np.max(np.array(amplitudes)
-                     - np.array(amplitudes_reference)))
-
-
-def eval_circuit_np(filename, initial_state=0):
-    """
-    Loads circuit from file and evaluates all amplitudes
-    using the bucket elimination algorithm (with Numpy tensors).
-    Same amplitudes are evaluated with Cirq for comparison.
-    """
-    # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
-        n_qubits, circuit)
-
-    graph = opt.buckets2graph(
-        buckets,
-        ignore_variables=bra_vars+ket_vars)
-
-    # Run quickbb
-    peo, treewidth = gm.get_peo(graph)
-    # place bra and ket variables to beginning, so these variables
-    # will be contracted first
-    peo = ket_vars + bra_vars + peo
-    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
-
-    # extract bra and ket variables from variable list and sort according
-    # to qubit order
-    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
-    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
-
-    # Take the subtensor corresponding to the initial state
-    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
-
-    amplitudes = []
-    for target_state in range(2**n_qubits):
-        # Take appropriate subtensors for different target bitstrings
-        slice_dict.update(
-            utils.slice_from_bits(target_state, bra_vars)
-        )
-        sliced_buckets = npfr.get_sliced_np_buckets(
-            perm_buckets, data_dict, slice_dict)
-        result = opt.bucket_elimination(
-            sliced_buckets, npfr.process_bucket_np)
-        amplitudes.append(result.data)
-
-    # Cirq returns the amplitudes in big endian (largest bit first)
-
-    amplitudes_reference = get_amplitudes_from_cirq(
-        filename, initial_state)
-    print('Result:')
-    print(np.round(np.array(amplitudes), 3))
-    print('Reference:')
-    print(np.round(np.array(amplitudes_reference), 3))
-    print('Max difference:')
-    print(np.max(np.abs(
-        np.array(amplitudes) - np.array(amplitudes_reference))))
-
-
-def prepare_parallel_evaluation_np(filename, n_var_parallel):
-    """
-    Prepares for parallel evaluation of the quantum circuit.
-    Some of the variables in the circuit are parallelized over.
-    Unsliced Numpy buckets in the optimal order of elimination
-    are returned
-    """
-    # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
-        n_qubits, circuit)
-
-    graph = opt.buckets2graph(
-        buckets,
-        ignore_variables=bra_vars+ket_vars)
-
-    # find a reduced graph
-    vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
-        graph, n_var_parallel,
-        metric_fn=gm.get_node_by_mem_reduction)
-
-    # run quickbb once again to get peo and treewidth
-    peo, treewidth = gm.get_peo(graph_reduced)
-
-    # place bra and ket variables to beginning, so these variables
-    # will be contracted first
-    peo = ket_vars + bra_vars + vars_parallel + peo
-    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
-
-    # extract bra and ket variables from variable list and sort according
-    # to qubit order
-    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
-    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
-    vars_parallel = sorted([perm_dict[idx] for idx in vars_parallel],
-                           key=str)
-
-    environment = dict(
-        bra_vars=bra_vars,
-        ket_vars=ket_vars,
-        vars_parallel=vars_parallel,
-        buckets=perm_buckets,
-        data_dict=data_dict,
-    )
-
-    return environment
-
-
-def eval_circuit_np_parallel_mpi(filename, initial_state=0):
-    """
-    Evaluate quantum circuit using MPI to parallelize
-    over some of the variables.
-    """
-    comm = MPI.COMM_WORLD
-    comm_size = comm.size
-    rank = comm.rank
-
-    # number of variables to split by parallelization
-    # this should be adjusted by the algorithm from memory/cpu
-    # requirements
-    n_var_parallel = 2
-    if rank == 0:
-        env = prepare_parallel_evaluation_np(filename, n_var_parallel)
-    else:
-        env = None
-
-    env = comm.bcast(env, root=0)
-
-    # restore other parts of the environment
-    bra_vars = env['bra_vars']
-    ket_vars = env['ket_vars']
-    vars_parallel = env['vars_parallel']
-
-    # restore buckets
-    buckets = env['buckets']
-
-    # restore data dictionary
-    data_dict = env['data_dict']
-
-    # Construct slice dictionary for initial state
-    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
-
-    # Loop over all amplitudes
-    amplitudes = []
-    for target_state in range(2**len(bra_vars)):
-        # Construct slice dictionary for the target state
-        slice_dict.update(
-            utils.slice_from_bits(target_state, bra_vars))
-
-        # main computation loop. Populate respective slices
-        # and do contraction
-
-        amplitude = 0
-        for parallel_slice_dict in utils.slice_values_generator(
-                vars_parallel, rank, comm_size):
-            slice_dict.update(parallel_slice_dict)
-            sliced_buckets = npfr.get_sliced_np_buckets(
-                buckets, data_dict, slice_dict)
-            result = opt.bucket_elimination(
-                sliced_buckets, npfr.process_bucket_np)
-
-            amplitude += result.data
 
         amplitude = comm.reduce(amplitude, op=MPI.SUM, root=0)
         amplitudes.append(amplitude)
