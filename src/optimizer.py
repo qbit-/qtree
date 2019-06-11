@@ -37,6 +37,7 @@ class Var(object):
         if name is None:
             name = f"v_{identity}"
         self._name = name
+        self.__hash = hash((identity, name, size))
 
     @property
     def name(self):
@@ -68,7 +69,7 @@ class Var(object):
         return int(self.identity)
 
     def __hash__(self):
-        return hash((self.identity, self.name, self.size))
+        return self.__hash
 
     def __eq__(self, other):
         return (isinstance(other, type(self))
@@ -106,6 +107,7 @@ class Tensor(object):
         self._indices = tuple(indices)
         self._data_key = data_key
         self._data = data
+        self._order_key = hash((self.data_key, self.name))
 
     @property
     def name(self):
@@ -146,8 +148,7 @@ class Tensor(object):
         return self.__str__()
 
     def __lt__(self, other):
-        return (hash((self.data_key, self.name))
-                < hash((other.data_key, other.name)))
+        return self._order_key < other._order_key
 
     def __mul__(self, other):
         if self._data is None:

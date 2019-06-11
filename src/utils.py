@@ -131,3 +131,55 @@ def get_einsum_expr(idx1, idx2):
     str2 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in idx2)
     str3 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in result_indices)
     return str1 + ',' + str2 + '->' + str3
+
+
+def sequential_profile_decorator(filename=None):
+    """
+    Profiles execution of a function and writes stats to
+    the specified file
+    """
+    import cProfile
+
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename
+                pr.dump_stats(filename_r)
+
+            return result
+        return wrap_f
+    return prof_decorator
+
+
+def mpi_profile_decorator(comm, filename=None):
+    """
+    Profiles execution of MPI processes and writes stats to
+    separate files
+    """
+    import cProfile
+
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename + ".{}".format(comm.rank)
+                pr.dump_stats(filename_r)
+
+            return result
+        return wrap_f
+    return prof_decorator
+
+
