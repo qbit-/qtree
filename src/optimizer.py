@@ -53,9 +53,9 @@ class Var(object):
 
     def copy(self, identity=None, size=None, name=None):
         if identity is None:
-            identity = self.identity
+            identity = self._identity
         if size is None:
-            size = self.size
+            size = self._size
 
         return Var(identity, size, name)
 
@@ -158,6 +158,13 @@ class Tensor(object):
         else:
             raise ValueError(f'Index mismatch in __mul__: {self.indices} times {other.indices}')
 
+    def __eq__(self, other):
+        return (isinstance(other, type(self))
+                and self.name == other.name
+                and self.indices == other.indices
+                and self.data_key == other.data_key
+                and self.data == other.data)
+
 
 def circ2buckets(qubit_count, circuit, max_depth=None):
     """
@@ -231,6 +238,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
             # this is how gate tensors are chosen to be stored
             variables = []
             current_var_idx_copy = current_var_idx
+            min_var_idx = current_var_idx
             for qubit in op.qubits:
                 if qubit in op.changed_qubits:
                     variables.extend(
@@ -239,6 +247,9 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
                     current_var_idx_copy += 1
                 else:
                     variables.extend([layer_variables[qubit]])
+                min_var_idx = min(min_var_idx,
+                                  int(layer_variables[qubit]))
+
             # Build a tensor
             t = Tensor(op.name, variables,
                        data_key=(op.name, op.data_hash))
@@ -247,8 +258,8 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
             data_dict[(op.name, op.data_hash)] = op.tensor
 
             # Append tensor to buckets
-            first_qubit_var = layer_variables[op.qubits[0]]
-            buckets[int(first_qubit_var)].append(t)
+            # first_qubit_var = layer_variables[op.qubits[0]]
+            buckets[min_var_idx].append(t)
 
             # Create new buckets and update current variable frame
             for qubit in op.changed_qubits:
@@ -267,8 +278,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
 
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
-        new_var = Var(current_var_idx,
-                      name=f'i_{qubit}', size=2)
+        new_var = Var(current_var_idx, name=f'i_{qubit}', size=2)
         ket_variables.append(new_var)
         # update buckets and variable `frame`
         buckets[int(var)].append(
@@ -335,52 +345,6 @@ def bucket_elimination(buckets, process_bucket_fn,
     return result
 
 
-def buckets2graph(buckets, ignore_variables=[]):
-    """
-    Takes buckets and produces a corresponding undirected graph. Single
-    variable tensors are coded as self loops and there may be
-    multiple parallel edges.
-
-    Parameters
-    ----------
-    buckets : list of lists
-    ignore_variables : list, optional
-       Variables to be deleted from the resulting graph.
-       Numbering is 0-based.
-
-    Returns
-    -------
-    graph : networkx.MultiGraph
-            contraction graph of the circuit
-    """
-    graph = nx.MultiGraph()
-
-    # Let's build an undirected graph for variables
-    for n, bucket in enumerate(buckets):
-        for tensor in bucket:
-            new_nodes = []
-            for idx in tensor.indices:
-                # This may reintroduce the same node many times,
-                # be careful if using something other than
-                graph.add_node(idx)
-                new_nodes.append(idx)
-            if len(new_nodes) > 1:
-                edges = itertools.combinations(new_nodes, 2)
-            else:
-                # If this is a single variable tensor, add self loop
-                node = new_nodes[0]
-                edges = [[node, node]]
-            graph.add_edges_from(
-                edges, tensor=tensor
-            )
-
-    # Delete any requested variables from the final graph
-    if len(ignore_variables) > 0:
-        graph.remove_nodes_from(ignore_variables)
-
-    return graph
-
-
 def graph2buckets(graph):
     """
     Takes a Networkx MultiGraph and produces a corresponding
@@ -399,32 +363,47 @@ def graph2buckets(graph):
     buckets : list of lists
     """
     buckets = []
-    variables = sorted(graph.nodes)
 
     # import pdb
     # pdb.set_trace()
+    variables = sorted(graph.nodes(data=False))
 
     # Add buckets with sorted variables
-    for n, variable in enumerate(variables):
+    for variable in variables:
         # First collect all unique tensors (they may be elements of
         # the current bucket)
         # go over edges (pairs of variables).
         # The first variable in pair is this variable
-        candidate_tensors = []
+        candidate_tensors = {}
 
-        for edge in graph.edges(variable, data=True):
+        for edge in graph.edges(variables, data=True):
             _, other_variable, edge_data = edge
             tensor = edge_data['tensor']
 
-            if tensor not in candidate_tensors:
-                candidate_tensors.append(tensor)
+            key = (tensor['name'], tensor['indices'], tensor['data_hash'])
+            if key not in candidate_tensors:
+                # turn integers into Var objects
+                indices_vars = tuple(Var(var,
+                                         name=graph.nodes[var]['name'],
+                                         size=graph.nodes[var]['size'])
+                                     for var in tensor['indices'])
+                # Form Tensor objects and
+                # place candidate tensors into hash table
+                candidate_tensors[key] = (
+                    Tensor(
+                        name=tensor['name'],
+                        indices=indices_vars,
+                        data_key=(tensor['name'], tensor['data_hash'])
+                    )
+                )
 
         # Now we have all tensors in bucket format.
         # Drop tensors where current variable is not the lowest in order
         bucket = []
-        for tensor in candidate_tensors:
-            sorted_tensor_indices = list(sorted(tensor.indices))
-            if sorted_tensor_indices[0] == variable:
+        for key, tensor in candidate_tensors.items():
+            sorted_tensor_indices = list(
+                sorted(tensor.indices, key=int))
+            if int(sorted_tensor_indices[0]) == variable:
                 bucket.append(tensor)
         buckets.append(bucket)
 
@@ -489,21 +468,26 @@ def test_bucket_graph_conversion(filename):
     """
     Test the conversion between Buckets and the contraction multigraph
     """
+    import src.graph_model as gm
+
     # load circuit
     n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, free_variables, data_dict = circ2buckets(circuit)
-    graph = buckets2graph(buckets)
-    buckets_new = graph2buckets(graph)
-    graph_new = buckets2graph(buckets_new)
+    buckets, data_dict, bra_vars, ket_vars = circ2buckets(
+        n_qubits, circuit)
+    graph = gm.circ2graph(n_qubits, circuit, omit_terminals=False)
+
+    graph_from_buckets = gm.buckets2graph(buckets)
+    buckets_from_graph = graph2buckets(graph)
 
     buckets_equal = True
-    for b1, b2 in zip(buckets, buckets_new):
+    for b1, b2 in zip(buckets, buckets_from_graph):
         if sorted(b1) != sorted(b2):
             buckets_equal = False
             break
 
-    print('Buckets equal? : {}'.format(buckets_equal))
-    print('Graphs equal? : {}'.format(nx.is_isomorphic(graph, graph_new)))
+    print('C->B, C->G->B: Buckets equal? : {}'.format(buckets_equal))
+    print('C->G, C->B->G: Graphs equal? : {}'.format(
+        nx.is_isomorphic(graph, graph_from_buckets)))
 
 
 if __name__ == '__main__':
