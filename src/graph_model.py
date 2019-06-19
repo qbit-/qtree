@@ -47,9 +47,8 @@ def circ2graph(qubit_count, circuit, max_depth=None,
     graph : networkx.MultiGraph
             Graph which corresponds to the circuit
     """
+    import functools
     import src.operators as ops
-    # import pdb
-    # pdb.set_trace()
 
     if max_depth is None:
         max_depth = len(circuit)
@@ -383,7 +382,8 @@ def get_peo(old_graph,
 
     # transform PEO to a list of Var objects as expected by
     # other parts of code
-    peo_vars = [Var(v, size=old_graph.nodes[v]['size']) for v in peo]
+    peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
+                    name=old_graph.nodes[v]['name']) for v in peo]
     return peo_vars, treewidth
 
 
@@ -1371,6 +1371,7 @@ def get_fillin_graph2(old_graph, peo):
     """
     # Ensure PEO is a list of ints
     peo = list(map(int, peo))
+    peo_to_conseq = dict(zip(peo, range(len(peo))))
 
     number_of_nodes = len(peo)
     graph = copy.deepcopy(old_graph)
@@ -1383,15 +1384,17 @@ def get_fillin_graph2(old_graph, peo):
 
     for ii in range(number_of_nodes):
         w = peo[ii]
-        f[w] = w
-        index[w] = ii
+        idx_w = peo_to_conseq[w]
+        f[idx_w] = w
+        index[idx_w] = ii
         neighbors = list(graph[w])
         lower_neighbors = [v for v in neighbors
                            if peo.index(v) < ii]
         for v in lower_neighbors:
             x = v
-            while index[x] < ii:
-                index[x] = ii
+            idx_x = peo_to_conseq[x]
+            while index[idx_x] < ii:
+                index[idx_x] = ii
                 # Check that edge does not exist
                 # Tensors added here may not correspond to cliques!
                 # Their names are made incompatible with Tensorflow
@@ -1403,9 +1406,10 @@ def get_fillin_graph2(old_graph, peo):
                     graph.add_edge(
                         x, w,
                         tensor=tensor)
-                x = f[x]
-            if f[x] == x:
-                f[x] = w
+                x = f[idx_x]
+                idx_x = peo_to_conseq[x]
+            if f[idx_x] == x:
+                f[idx_x] = w
     return graph
 
 
@@ -1476,6 +1480,7 @@ def is_peo_zero_fillin2(graph, peo):
     """
     # Ensure PEO is a list of ints
     peo = list(map(int, peo))
+    peo_to_conseq = dict(zip(peo, range(len(peo))))
 
     number_of_nodes = len(peo)
 
@@ -1484,17 +1489,20 @@ def is_peo_zero_fillin2(graph, peo):
 
     for ii in range(number_of_nodes):
         w = peo[ii]
-        f[w] = w
-        index[w] = ii
+        idx_w = peo_to_conseq[w]
+        f[idx_w] = w
+        index[idx_w] = ii
         neighbors = list(graph[w])
         lower_neighbors = [v for v in neighbors
                            if peo.index(v) < ii]
         for v in lower_neighbors:
-            index[v] = ii
-            if f[v] == v:
-                f[v] = w
+            idx_v = peo_to_conseq[v]
+            index[idx_v] = ii
+            if f[idx_v] == v:
+                f[idx_v] = w
         for v in lower_neighbors:
-            if index[f[v]] < ii:
+            idx_v = peo_to_conseq[v]
+            if index[f[idx_v]] < ii:
                 return False
     return True
 
@@ -1552,7 +1560,6 @@ def maximum_cardinality_search(
     list
         Perfect elimination order
     """
-
     # convert input to int
     last_clique_vertices = [int(var) for var in last_clique_vertices]
 
@@ -1564,7 +1571,6 @@ def maximum_cardinality_search(
     nodes_number_of_ord_neighbors = {node: 0 for node in graph.nodes}
     nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes)]
     for node in graph.nodes:
-        # graph.node[node]['n_ordered_neighbors'] = 0
         nodes_by_ordered_neighbors[0].append(node)
 
     last_nonempty = 0
@@ -1594,13 +1600,10 @@ def maximum_cardinality_search(
 
         peo = [node] + peo
         nodes_number_of_ord_neighbors[node] = -1
-        # graph.node[node]['n_ordered_neighbors'] = -1
 
         unordered_neighbors = [
-            # (neighbor, graph.node[neighbor]['n_ordered_neighbors'])
             (neighbor, nodes_number_of_ord_neighbors[neighbor])
             for neighbor in graph[node]
-            # if graph.node[neighbor]['n_ordered_neighbors'] >= 0]
             if nodes_number_of_ord_neighbors[neighbor] >= 0]
 
         # Increase number of ordered neighbors for all adjacent
@@ -1610,8 +1613,6 @@ def maximum_cardinality_search(
                 neighbor)
             nodes_number_of_ord_neighbors[neighbor] = (
                 n_ordered_neighbors + 1)
-            # graph.node[neighbor][
-            #     'n_ordered_neighbors'] = n_ordered_neighbors + 1
             nodes_by_ordered_neighbors[n_ordered_neighbors + 1].append(
                 neighbor)
 
@@ -1623,7 +1624,8 @@ def maximum_cardinality_search(
                 break
 
     # Create Var objects
-    peo_vars = [Var(var, size=graph.nodes[var]['size'])
+    peo_vars = [Var(var, size=graph.nodes[var]['size'],
+                    name=graph.nodes[var]['name'])
                 for var in peo]
     return peo_vars
 
@@ -1731,7 +1733,8 @@ def get_upper_bound_peo(old_graph,
         eliminate_node(graph, node, self_loops=False)
 
     # Create Var objects
-    peo_var = [Var(var, size=graph.nodes[var]['size']) for var in peo]
+    peo_var = [Var(var, size=graph.nodes[var]['size'],
+                   name=graph.nodes[var]['name']) for var in peo]
 
     return peo_var, max_degree  # this is clique size - 1
 
@@ -1835,3 +1838,10 @@ def test_is_clique():
     g_new = make_clique_on(g, vertices)
 
     assert is_clique(g_new, vertices)
+
+
+if __name__ == '__main__':
+    test_get_fillin_graph()
+    test_is_zero_fillin()
+    test_maximum_cardinality_search()
+    test_is_clique()

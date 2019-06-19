@@ -534,7 +534,6 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
     """
-    filename = 'inst_2x2_7_0.txt'
     # Values of the fixed bra qubits.
     # this can be changed to your taste
     target_state = 0
