@@ -52,7 +52,7 @@ def get_optimal_graphical_model(
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
-    graph = opt.buckets2graph(buckets, ignore_variables=bra_vars+ket_vars)
+    graph = gm.buckets2graph(buckets, ignore_variables=bra_vars+ket_vars)
     peo, tw = gm.get_peo(graph)
     graph_optimal, label_dict = gm.relabel_graph_nodes(
         graph, dict(zip(peo, range(len(peo))))
@@ -71,7 +71,7 @@ def eval_circuit_np(filename, initial_state=0):
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
-    graph = opt.buckets2graph(
+    graph = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -122,12 +122,14 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     Unsliced Numpy buckets in the optimal order of elimination
     are returned
     """
+    # import pdb
+    # pdb.set_trace()
     # Prepare graphical model
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
-    graph = opt.buckets2graph(
+    graph = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -242,7 +244,7 @@ def eval_circuit_tf(filename, initial_state=0):
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
-    graph = opt.buckets2graph(
+    graph = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -311,7 +313,7 @@ def prepare_parallel_evaluation_tf(filename, n_var_parallel):
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
-    graph = opt.buckets2graph(
+    graph = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -455,7 +457,7 @@ def eval_contraction_cost(filename):
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
-    graph_raw = opt.buckets2graph(
+    graph_raw = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -511,7 +513,7 @@ def test_circ2graph(filename='inst_2x2_7_0.txt'):
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets_original, _, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
-    graph_original = opt.buckets2graph(
+    graph_original = gm.buckets2graph(
         buckets_original, ignore_variables=bra_vars+ket_vars)
 
     from networkx.algorithms import isomorphism
@@ -532,7 +534,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
     """
-
+    filename = 'inst_2x2_7_0.txt'
     # Values of the fixed bra qubits.
     # this can be changed to your taste
     target_state = 0
@@ -558,7 +560,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
         print('Free variables in the resulting expression:')
         print(free_bra_vars)
 
-    graph_initial = opt.buckets2graph(
+    graph_initial = gm.buckets2graph(
         buckets,
         ignore_variables=bra_vars+ket_vars)
 
@@ -617,6 +619,56 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     print(np.round(slice_of_amplitudes, 3))
     print('Max difference:')
     print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
+
+
+#@utils.sequential_profile_decorator(filename='buckets_transform_profile')
+def test_bucket_operation_speed():
+    """
+    This tests the speed of forming, permuting and transforming
+    buckets.
+    """
+    import time
+    tim1 = time.time()
+
+    filename = 'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph = gm.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    # Get peo
+    peo = list(np.random.permutation(graph.nodes))
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # Take the subtensor corresponding to the initial state
+    initial_state = 0
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    # Take appropriate subtensors for target bitstring
+    target_state = 0
+    slice_dict.update(
+        utils.slice_from_bits(target_state, bra_vars)
+    )
+    # Form final buckets
+    sliced_buckets = npfr.get_sliced_np_buckets(
+        perm_buckets, data_dict, slice_dict)
+
+    tim2 = time.time()
+    print(tim2 - tim1)
 
 
 if __name__ == "__main__":
