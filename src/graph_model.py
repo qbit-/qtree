@@ -194,7 +194,7 @@ def buckets2graph(buckets, ignore_variables=[]):
                 tensor={
                     'name': tensor.name,
                     'indices': tuple(map(int, tensor.indices)),
-                    'data_key': tensor.data_key[1]
+                    'data_key': tensor.data_key
                     }
             )
 
@@ -1562,7 +1562,9 @@ def maximum_cardinality_search(
     n_nodes = graph.number_of_nodes()
 
     nodes_number_of_ord_neighbors = {node: 0 for node in graph.nodes}
-    nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes)]
+    # range(0, n_nodes + 1) is important here as we need n+1 lists
+    # to ensure proper indexing in the case of a clique
+    nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes + 1)]
     for node in graph.nodes:
         nodes_by_ordered_neighbors[0].append(node)
 

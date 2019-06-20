@@ -98,7 +98,7 @@ class Tensor(object):
         shape: tuple,
               shape of a tensor
         data_key: int
-              Hash key to find tensor's data in the global storage
+              Key to find tensor's data in the global storage
         data: np.array
               Actual data of the tensor. Default None.
               Usually is not supplied at initialization.
@@ -252,10 +252,10 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
 
             # Build a tensor
             t = Tensor(op.name, variables,
-                       data_key=(op.name, op.data_key))
+                       data_key=op.data_key)
 
             # Insert tensor data into data dict
-            data_dict[(op.name, op.data_key)] = op.tensor
+            data_dict[op.data_key] = op.tensor
 
             # Append tensor to buckets
             # first_qubit_var = layer_variables[op.qubits[0]]
@@ -274,7 +274,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     ket_variables = []
 
     op = ops.M(0)  # create a single measurement gate object
-    data_dict.update({(op.name, op.data_key): op.tensor})
+    data_dict.update({op.data_key: op.tensor})
 
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
@@ -284,7 +284,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
         buckets[int(var)].append(
             Tensor(op.name,
                    indices=[var, new_var],
-                   data_key=(op.name, op.data_key))
+                   data_key=op.data_key)
         )
         buckets.append([])
         layer_variables[qubit] = new_var
@@ -393,7 +393,7 @@ def graph2buckets(graph):
                     Tensor(
                         name=tensor['name'],
                         indices=indices_vars,
-                        data_key=(tensor['name'], tensor['data_key'])
+                        data_key=tensor['data_key']
                     )
                 )
 

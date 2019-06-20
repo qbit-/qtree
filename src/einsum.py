@@ -1,14 +1,22 @@
+"""
+This module implements the interface similar to numpy
+einsum using graphical models to analyze the sequence of contractions.
+Numpy and Tensorflow can be used as backends for calculations.
+"""
+
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import itertools as it
 
 
-from src.optimizer import Var, Tensor
+import src.optimizer as opt
+import src.graph_model as gm
+import src.np_framework as npfr
 
 
 from numpy.compat import basestring
-from numpy.core.numeric import asarray, asanyarray
+from numpy.core.numeric import asanyarray
 
 
 einsum_symbols = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -211,21 +219,12 @@ def einsum2graph(subscripts, *operands):
     data_dict : dict
             Dictionary containing Numpy tensors
     """
-    a = np.random.rand(4, 4)
-    b = np.random.rand(4, 4, 4)
-    subscripts = '...a,...a->...'
-    operands = (a, b)
-
     # Python side parsing
     input_subscripts, output_subscript, operands = _parse_einsum_input(
         [subscripts, *operands])
-    subscripts = input_subscripts + '->' + output_subscript
 
     # Build a few useful list and sets
     input_list = input_subscripts.split(',')
-    # input_sets = [set(x) for x in input_list]
-    # output_set = set(output_subscript)
-    # indices = set(input_subscripts.replace(',', ''))
 
     # Get length of each unique dimension and
     # ensure all dimensions are correct
@@ -275,16 +274,69 @@ def einsum2graph(subscripts, *operands):
         tensor_indices = tuple(name_to_idx[idx_name]
                                for idx_name in str_indices)
         tensor_name = f'T_{tensor_num}'
-        data_hash = tensor_num
+        data_key = tensor_num
         edges = it.combinations(tensor_indices, 2)
         graph.add_edges_from(
             edges, tensor={'name': tensor_name, 'indices': tensor_indices,
-                           'data_hash': data_hash}
+                           'data_key': tensor_num}
             )
-        data_dict[data_hash] = operands[tensor_num]
+        data_dict[data_key] = operands[tensor_num]
 
-    free_variables = [Var(name_to_idx[idx_name],
-                          name=idx_name,
-                          size=dimension_dict[idx_name]) for idx_name
+    free_variables = [opt.Var(name_to_idx[idx_name],
+                              name=idx_name,
+                              size=dimension_dict[idx_name]) for idx_name
                       in output_subscript]
     return graph, free_variables, data_dict
+
+
+def einsum_sequential_np(subscripts, *operands):
+    """
+    This function implements a sequential einsum using graphical models.
+    Parameters:
+    -----------
+    subsrcipts : str
+        set of indices in Einstein notation
+        i.e. 'ij,jk,klm,lm->i'
+
+    operands: list of array_like
+        tensor
+
+    Returns:
+    --------
+    result: array_like
+        Result of the contraction
+    """
+    graph_initial, free_variables, data_dict = einsum2graph(
+        subscripts, *operands)
+
+    # Calculate elimination order
+    graph = gm.make_clique_on(graph_initial, free_variables)
+    peo_initial, treewidth = gm.get_peo(graph)
+
+    # transform peo so free_variables are at the end
+    peo = gm.get_equivalent_peo(graph, peo_initial, free_variables)
+
+    # reorder graph and get buckets
+    graph_optimal, _ = gm.relabel_graph_nodes(
+        graph_initial, dict(zip(peo, range(len(peo)))))
+    buckets = opt.graph2buckets(graph_optimal)
+
+    # populate buckets with actual arrays and perform elimination
+    np_buckets = npfr.get_np_buckets(buckets, data_dict)
+
+    result = opt.bucket_elimination(
+        np_buckets, npfr.process_bucket_np,
+        n_var_nosum=len(free_variables))
+
+    return result.data
+
+
+def test_einsum_np():
+    a = np.array(range(1, 7)).reshape([2, 3])
+    b = np.array(range(8, 20)).reshape([3, 4])
+    c = np.array(range(1, 7)).reshape([3, 2])
+
+    res = einsum_sequential_np('ij,jk,jl->ikl', a, b, c)
+    control = np.einsum('ij,jk,jl->ikl', a, b, c)
+
+    print('Result concides: {}'.format(np.allclose(res, control)))
