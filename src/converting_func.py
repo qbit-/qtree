@@ -2,14 +2,17 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import itertools as it
-%matplotlib inline
+
+
+from src.optimizer import Var, Tensor
+
 
 from numpy.compat import basestring
 from numpy.core.numeric import asarray, asanyarray
 
+
 einsum_symbols = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 einsum_symbols_set = set(einsum_symbols)
-
 
 
 def _parse_einsum_input(operands):
@@ -50,8 +53,8 @@ def _parse_einsum_input(operands):
             if s in '.,->':
                 continue
             if s not in einsum_symbols:
-                raise ValueError("Character %s is not a valid symbol." % s)
-
+                raise ValueError("Character %s is not a valid symbol."
+                                 % s)
     else:
         tmp_operands = list(operands)
         operand_list = []
@@ -71,7 +74,8 @@ def _parse_einsum_input(operands):
                 elif isinstance(s, int):
                     subscripts += einsum_symbols[s]
                 else:
-                    raise TypeError("For this input type lists must contain "
+                    raise TypeError("For this input type lists"
+                                    " must contain "
                                     "either int or Ellipsis")
             if num != last:
                 subscripts += ","
@@ -84,17 +88,20 @@ def _parse_einsum_input(operands):
                 elif isinstance(s, int):
                     subscripts += einsum_symbols[s]
                 else:
-                    raise TypeError("For this input type lists must contain "
+                    raise TypeError("For this input type lists"
+                                    " must contain "
                                     "either int or Ellipsis")
     # Check for proper "->"
     if ("-" in subscripts) or (">" in subscripts):
-        invalid = (subscripts.count("-") > 1) or (subscripts.count(">") > 1)
+        invalid = (subscripts.count("-") > 1) or (
+            subscripts.count(">") > 1)
         if invalid or (subscripts.count("->") != 1):
             raise ValueError("Subscripts can only contain one '->'.")
 
     # Parse ellipses
     if "." in subscripts:
-        used = subscripts.replace(".", "").replace(",", "").replace("->", "")
+        used = subscripts.replace(
+            ".", "").replace(",", "").replace("->", "")
         unused = list(einsum_symbols_set - set(used))
         ellipse_inds = "".join(unused)
         longest = 0
@@ -162,62 +169,73 @@ def _parse_einsum_input(operands):
         output_subscript = ""
         for s in sorted(set(tmp_subscripts)):
             if s not in einsum_symbols:
-                raise ValueError("Character %s is not a valid symbol." % s)
+                raise ValueError("Character %s is not a valid symbol."
+                                 % s)
             if tmp_subscripts.count(s) == 1:
                 output_subscript += s
 
     # Make sure output subscripts are in the input
     for char in output_subscript:
         if char not in input_subscripts:
-            raise ValueError("Output character %s did not appear in the input"
-                             % char)
+            raise ValueError("Output character %s did not appear"
+                             " in the input" % char)
 
     # Make sure number operands is equivalent to the number of terms
     if len(input_subscripts.split(',')) != len(operands):
-        raise ValueError("Number of einsum subscripts must be equal to the "
-                         "number of operands.")
+        raise ValueError("Number of einsum subscripts must"
+                         " be equal to the number of operands.")
 
     return (input_subscripts, output_subscript, operands)
 
 
-
-def graph_from_einsum(subsripts, *operands):
+def einsum2graph(subscripts, *operands):
     """
-    Construct a graph from tensor contraction (in einsum notation)
-    
+    Construct a graph of a tensor contraction from the
+    input to Numpy's einsum.
+
     Parameters:
     -----------
     subsrcipts : str
-        set of indeces in Einstein notation
-        i.e. 'ij,jk,klm,lm'
-        
+        set of indices in Einstein notation
+        i.e. 'ij,jk,klm,lm->i'
+
     operands: list of array_like
         tensor
-            
-            
+
     Returns:
-    -------
+    --------
     graph : networkx.MultiGraph
-            Graph which corresponds to the tensors contraction 
+            Graph which corresponds to the tensors contraction
+    free_variables: list of Var
+            Indices of the result. These variables will not be contracted
+    data_dict : dict
+            Dictionary containing Numpy tensors
     """
-    
+    a = np.random.rand(4, 4)
+    b = np.random.rand(4, 4, 4)
+    subscripts = '...a,...a->...'
+    operands = (a, b)
+
     # Python side parsing
-    input_subscripts, output_subscript, operands = _parse_einsum_input([subsripts, *operands])
+    input_subscripts, output_subscript, operands = _parse_einsum_input(
+        [subscripts, *operands])
     subscripts = input_subscripts + '->' + output_subscript
 
     # Build a few useful list and sets
     input_list = input_subscripts.split(',')
-    input_sets = [set(x) for x in input_list]
-    output_set = set(output_subscript)
-    indices = set(input_subscripts.replace(',', ''))
+    # input_sets = [set(x) for x in input_list]
+    # output_set = set(output_subscript)
+    # indices = set(input_subscripts.replace(',', ''))
 
-    # Get length of each unique dimension and ensure all dimensions are correct
+    # Get length of each unique dimension and
+    # ensure all dimensions are correct
     dimension_dict = {}
     broadcast_indices = [[] for x in range(len(input_list))]
     for tnum, term in enumerate(input_list):
         sh = operands[tnum].shape
         if len(sh) != len(term):
-            raise ValueError("Einstein sum subscript %s does not contain the "
+            raise ValueError("Einstein sum subscript %s "
+                             "does not contain the "
                              "correct number of indices for operand %d."
                              % (input_subscripts[tnum], tnum))
         for cnum, char in enumerate(term):
@@ -228,81 +246,95 @@ def graph_from_einsum(subsripts, *operands):
                 broadcast_indices[tnum].append(char)
 
             if char in dimension_dict.keys():
-                # For broadcasting cases we always want the largest dim size
+                # For broadcasting cases we always
+                # want the largest dim size
                 if dimension_dict[char] == 1:
                     dimension_dict[char] = dim
                 elif dim not in (1, dimension_dict[char]):
-                    raise ValueError("Size of label '%s' for operand %d (%d) "
+                    raise ValueError("Size of label '%s' for"
+                                     " operand %d (%d) "
                                      "does not match previous terms (%d)."
-                                     % (char, tnum, dimension_dict[char], dim))
+                                     % (char, tnum,
+                                        dimension_dict[char], dim))
             else:
                 dimension_dict[char] = dim
-    
+
     # create MultiGraph
     graph = nx.MultiGraph()
-#     graph.add_nodes_from((zip(dimension_dict, dimension_dict)))
-    
+
+    # Indices are represented by integers in the graph
     # Add nodes to the graph
-    for ind, s in dimension_dict.items():
-        graph.add_node(ind, size = s)
-        
-    # Add edges between nodes
-    for ii, inds in enumerate(input_list):
-        edges = it.combinations(inds, 2)
-        graph.add_edges_from(edges, tensor_name = f'T_{ii+1}' , tensor_value = operands[ii])
+    name_to_idx = {}
+    for ii, (idx_name, size) in enumerate(dimension_dict.items()):
+        graph.add_node(ii, name=idx_name, size=size)
+        name_to_idx[idx_name] = ii
 
-    return graph
+    # Add edges between nodes and build data dictionary
+    data_dict = {}
+    for tensor_num, str_indices in enumerate(input_list):
+        tensor_indices = tuple(name_to_idx[idx_name]
+                               for idx_name in str_indices)
+        tensor_name = f'T_{tensor_num}'
+        data_hash = tensor_num
+        edges = it.combinations(tensor_indices, 2)
+        graph.add_edges_from(
+            edges, tensor={'name': tensor_name, 'indices': tensor_indices,
+                           'data_hash': data_hash}
+            )
+        data_dict[data_hash] = operands[tensor_num]
 
+    free_variables = [Var(name_to_idx[idx_name],
+                          name=idx_name,
+                          size=dimension_dict[idx_name]) for idx_name
+                      in output_subscript]
+    return graph, free_variables, data_dict
 
 
 def graph_to_tnet(graph):
     """
     Construct a classical graph from graph-model
-    
+
     Parameters:
     -----------
-    graph : nx.Multigraph
-        A graph corresponding to graph-model. 
+    graph : nx.MultiGraph
+        A graph corresponding to graph-model.
         Edges of the graph have parameters
-        'tensor_name' : str 
+        'tensor_name' : str
             and
         'tensor_value': array
-        
-        
-    Output:
-    -------
+
+    Returns:
+    --------
     new_graph : nx.MultiGraph
     """
-    
+
     # Create new graph for mapping
     new_graph = nx.MultiGraph()
-    
+
     # create list for storing all tensors in the graph
     list_of_tensors = []
-    
+
     # dict for storing nodes of new graph and its data
     nodes_dict = {}
 
     for node in graph.nodes():
-        
         tensor_neighbors = []
         nodes_neighbors = graph.neighbors(node)
-        
+
         for neighbor in nodes_neighbors:
-            
-            tensor_name = graph.get_edge_data(node, neighbor)[0]['tensor_name']
-            tensor_value = graph.get_edge_data(node, neighbor)[0]['tensor_value']
+            tensor_name = graph.get_edge_data(
+                node, neighbor)[0]['tensor_name']
+            tensor_value = graph.get_edge_data(
+                node, neighbor)[0]['tensor_value']
             tensor_neighbors.append(tensor_name)
-            
-#             if any((tensor == t).all() for t in list_of_tensors):
+
             if tensor_name in list_of_tensors:
-                next
+                continue
             else:
                 list_of_tensors.append(tensor_name)
                 num = len(list_of_tensors)
-                new_graph.add_node(tensor_name, tensor = tensor_value)
-        
+                new_graph.add_node(tensor_name, tensor=tensor_value)
         new_edges = it.combinations(set(tensor_neighbors), 2)
         new_graph.add_edges_from(new_edges)
-        
+
     return new_graph

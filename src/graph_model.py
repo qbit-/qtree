@@ -104,7 +104,7 @@ def circ2graph(qubit_count, circuit, max_depth=None,
                     variables.extend([layer_variables[qubit]])
             # Form a tensor and add a clique to the graph
             tensor = {'name': op.name, 'indices': tuple(variables),
-                      'data_hash': op.data_hash}
+                      'data_key': op.data_key}
 
             if len(variables) > 1:
                 edges = itertools.combinations(variables, 2)
@@ -132,7 +132,7 @@ def circ2graph(qubit_count, circuit, max_depth=None,
         # update graph and variable `frame`
         graph.add_node(new_var, name=f'i_{qubit}', size=2)
         tensor = {'name': op.name, 'indices': (var, new_var),
-                  'data_hash': op.data_hash}
+                  'data_key': op.data_key}
 
         graph.add_edge(var, new_var, tensor=tensor)
         layer_variables[qubit] = new_var
@@ -194,7 +194,7 @@ def buckets2graph(buckets, ignore_variables=[]):
                 tensor={
                     'name': tensor.name,
                     'indices': tuple(map(int, tensor.indices)),
-                    'data_hash': tensor.data_key[1]
+                    'data_key': tensor.data_key[1]
                     }
             )
 
@@ -258,7 +258,7 @@ def relabel_graph_nodes(graph, label_dict=None, with_data=True):
             *edge, tensor = edgedata
             if tensor is not None:
                 # create new tensor only if it was not encountered
-                key = hash((tensor['data_hash'],
+                key = hash((tensor['data_key'],
                             tensor['indices']))
                 if key not in tensors_hash_table:
                     indices = tuple(label_dict[idx]
@@ -455,30 +455,23 @@ def get_cost_by_node(graph, node):
     # We have to count the number of unique tensors.
     tensors = []
     selfloop_tensors = []
-    if graph.is_multigraph():
-        for neighbor in neighbors_with_size:
-            for edge_key in graph[node][neighbor].keys():
-                tensor = graph[node][neighbor][edge_key]['tensor']
-                # the tuple (edge_key, indices, data_hash) uniquely
-                # identifies a tensor
-                tensors.append((
-                    edge_key, tensor['indices'], tensor['data_hash']))
 
-                # Addituinally store selfloop tensors
-                if neighbor == node:
-                    selfloop_tensors.append((
-                        edge_key, tensor['indices'], tensor['data_hash']))
-    else:
-        for neighbor in neighbors_with_size:
-            tensor = graph[node][neighbor]['tensor']
-            # the tuple (indices, data_hash) uniquely
-            # identifies a tensor. No tensor powers are supported by Graph
-            tensors.append((
-                0, tensor['indices'], tensor['data_hash']))
-            # Additionally store selfloop tensors
-            if neighbor == node:
-                selfloop_tensors.append((
-                    0, tensor['indices'], tensor['data_hash']))
+    args_to_nx = {'data': 'tensor'}
+
+    if graph.is_multigraph():
+        args_to_nx['keys'] = True
+
+    for edgedata in graph.edges.data(**args_to_nx):
+        *edge, tensor = edgedata
+        u, v, *edge_key = edge
+        edge_key = edge_key[0] if edge_key != [] else 0
+        # the tuple (edge_key, indices, data_key) uniquely
+        # identifies a tensor
+        tensors.append((
+            edge_key, tensor['indices'], tensor['data_key']))
+        if u == v:
+            selfloop_tensors.append((
+                edge_key, tensor['indices'], tensor['data_key']))
 
     # get unique tensors
     tensors = set(tensors)
@@ -570,7 +563,7 @@ def eliminate_node(graph, node, self_loops=True):
             tensor={
                 'name': 'E{}'.format(int(node)),
                 'indices': tuple(neighbors_wo_node),
-                'data_hash':  None
+                'data_key':  None
             }
         )
 
@@ -612,7 +605,7 @@ def remove_node(graph, node, self_loops=True):
             new_indices = tuple(idx for idx in indices if idx != node)
             tensor['indices'] = new_indices
             # Invalidate data pointer as this tensor is a slice
-            tensor['data_hash'] = None
+            tensor['data_key'] = None
             if self_loops and len(new_indices) == 1:  # create a self loop
                 neighbor = new_indices[0]
                 new_selfloops.append((neighbor, tensor))
@@ -655,11 +648,11 @@ def get_mem_requirement(graph):
     for edgedata in graph.edges.data(**args_to_nx):
         *edge, tensor = edgedata
         u, v, *edge_key = edge
-        edge_key = edge_key if edge_key != [] else 0
-        # the tuple (edge_key, indices, data_hash) uniquely
+        edge_key = edge_key[0] if edge_key != [] else 0
+        # the tuple (edge_key, indices, data_key) uniquely
         # identifies a tensor
         tensors.append((
-            edge_key, tensor['indices'], tensor['data_hash']))
+            edge_key, tensor['indices'], tensor['data_key']))
 
     # get unique tensors
     tensors = set(tensors)
@@ -1156,7 +1149,7 @@ def wrap_general_graph_for_qtree(graph):
     for edge in new_graph.edges():
         new_graph.edges[edge].update(
             {'tensor':
-             {'name': 'W', 'indices': tuple(edge), 'data_hash': None}})
+             {'name': 'W', 'indices': tuple(edge), 'data_key': None}})
 
     return new_graph
 
@@ -1278,7 +1271,7 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
     graph.add_edges_from(edges,
                          tensor={'name': name_prefix + f'{node_idx}',
                                  'indices': clique_nodes,
-                                 'data_hash': None}
+                                 'data_key': None}
     )
     clique_size = len(clique_nodes)
     log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
@@ -1336,7 +1329,7 @@ def get_fillin_graph(old_graph, peo):
         if fillin_edges is not None:
             tensor = {'name': 'C{}'.format(node),
                       'indices': (node,) + tuple(neighbors),
-                      'data_hash': None}
+                      'data_key': None}
             graph.add_edges_from(
                 fillin_edges, tensor=tensor
             )
@@ -1402,7 +1395,7 @@ def get_fillin_graph2(old_graph, peo):
                 if (x, w) not in graph.edges(w):
                     tensor = {'name': 'C{}'.format(w),
                               'indices': (w, ) + tuple(neighbors),
-                              'data_hash': None}
+                              'data_key': None}
                     graph.add_edge(
                         x, w,
                         tensor=tensor)

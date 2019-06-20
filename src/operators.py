@@ -3,6 +3,7 @@ This module implements quantum gates from the CMON set of Google
 """
 import numpy as np
 import re
+import itertools
 import cirq
 
 from src.logger_setup import log
@@ -10,6 +11,9 @@ from math import sqrt, pi
 from cmath import exp
 
 import src.system_defs as defs
+
+
+GLOBAL_ENUMERATE = itertools.count()
 
 
 class Gate:
@@ -41,10 +45,13 @@ class Gate:
              hash of the gate's tensor. Used to store all gate
              tensors separately from their identifiers in the code
     """
+    enum = GLOBAL_ENUMERATE
+
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
         self._qubits = tuple(qubits)
-        self._data_hash = hash(self.tensor.tobytes())
+        # supposedly unique id for a class
+        self._data_key = hash((self.name, id(self.__class__)))
 
     def _check_qubit_count(self, qubits):
         n_qubits = len(self.tensor.shape) - len(self._changes_qubits)
@@ -62,8 +69,8 @@ class Gate:
         return self._qubits
 
     @property
-    def data_hash(self):
-        return self._data_hash
+    def data_key(self):
+        return self._data_key
 
     @property
     def changed_qubits(self):
@@ -210,9 +217,7 @@ class ZPhase(Gate):
         self.tensor = np.array([1, exp(1.j*alpha*pi)],
                                dtype=defs.NP_ARRAY_TYPE)
         self._qubits = tuple(qubits)
-
         self._check_qubit_count(qubits)
-        self._data_hash = hash(self.tensor.tobytes())
 
     def __str__(self):
         return "{}[a={:.2f}]({})".format(type(self).__name__,
@@ -252,6 +257,8 @@ def read_circuit_file(filename, max_depth=None):
         'y_1_2': Y_1_2,
     }
 
+    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r') (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?'
+
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
@@ -279,7 +286,7 @@ def read_circuit_file(filename, max_depth=None):
                 current_layer = layer_num
 
             op_str = line[m.end():]
-            m = re.search(r'(?P<operation>h|t|z|cz|x|y|x_1_2|i|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', op_str)
+            m = re.search(operation_search_patt, op_str)
             if m is None:
                 raise Exception("file format error in {}".format(op_str))
 

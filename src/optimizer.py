@@ -252,10 +252,10 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
 
             # Build a tensor
             t = Tensor(op.name, variables,
-                       data_key=(op.name, op.data_hash))
+                       data_key=(op.name, op.data_key))
 
             # Insert tensor data into data dict
-            data_dict[(op.name, op.data_hash)] = op.tensor
+            data_dict[(op.name, op.data_key)] = op.tensor
 
             # Append tensor to buckets
             # first_qubit_var = layer_variables[op.qubits[0]]
@@ -274,7 +274,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     ket_variables = []
 
     op = ops.M(0)  # create a single measurement gate object
-    data_dict.update({(op.name, op.data_hash): op.tensor})
+    data_dict.update({(op.name, op.data_key): op.tensor})
 
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
@@ -284,7 +284,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
         buckets[int(var)].append(
             Tensor(op.name,
                    indices=[var, new_var],
-                   data_key=(op.name, op.data_hash))
+                   data_key=(op.name, op.data_key))
         )
         buckets.append([])
         layer_variables[qubit] = new_var
@@ -380,7 +380,7 @@ def graph2buckets(graph):
             _, other_variable, edge_data = edge
             tensor = edge_data['tensor']
 
-            key = (tensor['name'], tensor['indices'], tensor['data_hash'])
+            key = (tensor['name'], tensor['indices'], tensor['data_key'])
             if key not in candidate_tensors:
                 # turn integers into Var objects
                 indices_vars = tuple(Var(var,
@@ -393,7 +393,7 @@ def graph2buckets(graph):
                     Tensor(
                         name=tensor['name'],
                         indices=indices_vars,
-                        data_key=(tensor['name'], tensor['data_hash'])
+                        data_key=(tensor['name'], tensor['data_key'])
                     )
                 )
 
