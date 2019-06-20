@@ -1,15 +1,12 @@
 * Improvements
  + [X] Performance plotting
  + [X] Separate tf interface
- + [ ] Read directly into buckets
- + [ ] Read directly to extended graph
- + [ ] Graph to buckets (with peo). 
+ + [X] Graph to buckets (with peo). 
  + [X] Buckets to graph function
  + [X] Cost function evaluation
  + [X] Numpy interface
  + [X] Graph to buckets function
- + [ ] Efficient evaluation of einsum (without forming full intermediate)
- + [ ] PEO using memory cost function (same as Chinese article)
- + [ ] Actually delete parallelized variables in slicing
- + [ ] Experiment with different metrics for variable parallelization
- + [ ] Plot predicted time, treewidth, memory vs number of parallelized variables/number of parallel processors 
+ + [X] PEO using memory cost function (same as Chinese article)
+ + [X] Experiment with different metrics for variable parallelization
+ + [X] Plot predicted time, treewidth, memory vs number of parallelized variables/number of parallel processors 
+ + [ ] Test graph splitting

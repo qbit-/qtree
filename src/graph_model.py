@@ -15,144 +15,219 @@ from collections import Counter
 
 import src.system_defs as defs
 import src.utils as utils
+
+from src.optimizer import Var, Tensor
 from src.quickbb_api import gen_cnf, run_quickbb
 from src.logger_setup import log
 
 random.seed(0)
 
 
-def read_graph(filename, max_depth=None):
+def circ2graph(qubit_count, circuit, max_depth=None,
+               omit_terminals=True):
     """
-    Reads circuit from filename and builds its contraction graph
+    Constructs a graph from a circuit in the form of a
+    list of lists.
 
     Parameters
     ----------
-    filename : str
-             circuit file in the format of Sergio Boixo
-    max_depth : int
-             maximal depth of gates to read
+    qubit_count : int
+            number of qubits in the circuit
+    circuit : list of lists
+            quantum circuit as returned by
+            :py:meth:`operators.read_circuit_file`
+    max_depth : int, default None
+            Maximal depth of the circuit which should be used
+    omit_terminals : bool, default True
+            If terminal nodes should be excluded from the final
+            graph.
 
     Returns
     -------
-    qubit_count : int
-            number of qubits in the circuit
     graph : networkx.MultiGraph
+            Graph which corresponds to the circuit
     """
+    import functools
+    import src.operators as ops
+
+    if max_depth is None:
+        max_depth = len(circuit)
+
+    # Let's build the graph.
+    # The circuit is built from left to right, as it operates
+    # on the ket ( |0> ) from the left. We thus first place
+    # the bra ( <x| ) and then put gates in the reverse order
+
+    # Fill the variable `frame`
+    layer_variables = list(range(qubit_count))
+    current_var_idx = qubit_count
+
+    # Initialize the graph
     graph = nx.MultiGraph()
 
-    # perform the cirquit file processing
-    log.info(f'reading file {filename}')
+    # Populate nodes and save variables of the bra
+    bra_variables = []
+    for var in layer_variables:
+        graph.add_node(var, name=f'o_{var}', size=2)
+        bra_variables.append(Var(var, name=f"o_{var}"))
 
-    with open(filename, 'r') as fp:
-        # read the number of qubits
-        qubit_count = int(fp.readline())
-        log.info("There are {:d} qubits in circuit".format(qubit_count))
+    # Place safeguard measurement circuits before and after
+    # the circuit
+    measurement_circ = [[ops.M(qubit) for qubit in range(qubit_count)]]
 
-        n_ignored_layers = 0
-        current_layer = 0
+    combined_circ = functools.reduce(
+        lambda x, y: itertools.chain(x, y),
+        [measurement_circ, reversed(circuit[:max_depth])])
 
-        # initialize the variables and add nodes to graph
-        for i in range(1, qubit_count+1):
-            graph.add_node(i, name=utils.num_to_alnum(i))
-        layer_variables = list(range(1, qubit_count+1))
-        current_var = qubit_count
+    # Start building the graph in reverse order
+    for layer in combined_circ:
+        for op in layer:
+            # build the indices of the gate. If gate
+            # changes the basis of a qubit, a new variable
+            # has to be introduced and current_var_idx is increased.
+            # The order of indices
+            # is always (a_new, a, b_new, b, ...), as
+            # this is how gate tensors are chosen to be stored
+            variables = []
+            current_var_idx_copy = current_var_idx
+            for qubit in op.qubits:
+                if qubit in op.changed_qubits:
+                    variables.extend(
+                        [layer_variables[qubit],
+                         current_var_idx_copy])
+                    graph.add_node(
+                        current_var_idx_copy,
+                        name='v_{}'.format(current_var_idx_copy),
+                        size=2)
+                    current_var_idx_copy += 1
+                else:
+                    variables.extend([layer_variables[qubit]])
+            # Form a tensor and add a clique to the graph
+            tensor = {'name': op.name, 'indices': tuple(variables),
+                      'data_key': op.data_key}
 
-        # Add selfloops to input nodes
-        for ii in range(1, qubit_count+1):
-            graph.add_edge(
-                ii, ii,
-                tensor=f'I{ii}',
-                hash_tag=hash((f'I{ii}', (ii, ii), random.random())))
-
-        for idx, line in enumerate(fp):
-
-            # Read circuit layer by layer. Decipher contents of the line
-            m = re.search(r'(?P<layer>[0-9]+) (?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', line)
-            if m is None:
-                raise Exception("file format error at line {}".format(idx))
-            layer_num = int(m.group('layer'))
-
-            # Skip layers if max_depth is set
-            if max_depth is not None and layer_num > max_depth:
-                n_ignored_layers = layer_num - max_depth
-                continue
-            if layer_num > current_layer:
-                current_layer = layer_num
-
-            op_identif = m.group('operation')
-            if m.group('qubit2') is not None:
-                q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
+            if len(variables) > 1:
+                edges = itertools.combinations(variables, 2)
             else:
-                q_idx = (int(m.group('qubit1')),)
+                edges = [(variables[0], variables[0])]
 
-            # Now apply what we got to build the graph
-            if op_identif == 'cz':
-                # cZ connects two variables with an edge
-                var1 = layer_variables[q_idx[0]]
-                var2 = layer_variables[q_idx[1]]
-                graph.add_edge(var1, var2,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var2),
-                                             random.random())))
+            graph.add_edges_from(edges, tensor=tensor)
 
-            # Skip Hadamard tensors - for now
-            elif op_identif == 'h':
-                pass
+            # Update current variable frame
+            for qubit in op.changed_qubits:
+                layer_variables[qubit] = current_var_idx
+                current_var_idx += 1
 
-            # Add selfloops for single variable gates
-            elif op_identif == 't':
-                var1 = layer_variables[q_idx[0]]
-                graph.add_edge(var1, var1,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var1),
-                                             random.random())))
-            # Process non-diagonal gates X and Y
-            else:
-                var1 = layer_variables[q_idx[0]]
-                var2 = current_var+1
-                graph.add_node(var2, name=utils.num_to_alnum(var2))
-                graph.add_edge(var1, var2,
-                               tensor=op_identif,
-                               hash_tag=hash((op_identif, (var1, var2),
-                                             random.random())))
-                current_var += 1
-                layer_variables[q_idx[0]] = current_var
+    # Finally go over the qubits, append measurement gates
+    # and collect ket variables
+    ket_variables = []
 
-        # Add selfloops to output nodes
-        for q_idx, var in zip(range(1, qubit_count+1), layer_variables):
-            graph.add_edge(
-                var, var,
-                tensor=f'O{q_idx}',
-                hash_tag=hash((f'O{q_idx}', (var, var), random.random())))
+    op = ops.M(0)  # create a single measurement gate object
 
-        # We are done, print stats
-        if n_ignored_layers > 0:
-            log.info("Ignored {} layers".format(n_ignored_layers))
+    for qubit in range(qubit_count):
+        var = layer_variables[qubit]
+        new_var = current_var_idx
 
-        v = graph.number_of_nodes()
-        e = graph.number_of_edges()
+        ket_variables.append(Var(new_var, name=f'i_{qubit}', size=2))
+        # update graph and variable `frame`
+        graph.add_node(new_var, name=f'i_{qubit}', size=2)
+        tensor = {'name': op.name, 'indices': (var, new_var),
+                  'data_key': op.data_key}
 
-        log.info(f"Generated graph with {v} nodes and {e} edges")
-        log.info(f"last index contains from {layer_variables}")
+        graph.add_edge(var, new_var, tensor=tensor)
+        layer_variables[qubit] = new_var
+        current_var_idx += 1
 
-    return qubit_count, graph
+    if omit_terminals:
+        graph.remove_nodes_from(
+            tuple(map(int, bra_variables + ket_variables)))
+
+    v = graph.number_of_nodes()
+    e = graph.number_of_edges()
+
+    log.info(f"Generated graph with {v} nodes and {e} edges")
+    # log.info(f"last index contains from {layer_variables}")
+
+    return graph
 
 
-def relabel_graph_nodes(graph, label_dict=None):
+def buckets2graph(buckets, ignore_variables=[]):
     """
-    Relabel graph nodes to consequtive numbers. If label
-    dictionary is not provided, a relabelled graph and a
-    dict {new : old} will be returned. Otherwise, the graph
+    Takes buckets and produces a corresponding undirected graph. Single
+    variable tensors are coded as self loops and there may be
+    multiple parallel edges.
+
+    Parameters
+    ----------
+    buckets : list of lists
+    ignore_variables : list, optional
+       Variables to be deleted from the resulting graph.
+       Numbering is 0-based.
+
+    Returns
+    -------
+    graph : networkx.MultiGraph
+            contraction graph of the circuit
+    """
+    # convert everything to int
+    ignore_variables = [int(var) for var in ignore_variables]
+
+    graph = nx.MultiGraph()
+
+    # Let's build an undirected graph for variables
+    for n, bucket in enumerate(buckets):
+        for tensor in bucket:
+            new_nodes = []
+            for idx in tensor.indices:
+                # This may reintroduce the same node many times,
+                # be careful if using something other than
+                graph.add_node(int(idx), name=idx.name, size=idx.size)
+                new_nodes.append(int(idx))
+            if len(new_nodes) > 1:
+                edges = itertools.combinations(new_nodes, 2)
+            else:
+                # If this is a single variable tensor, add self loop
+                node = new_nodes[0]
+                edges = [[node, node]]
+            graph.add_edges_from(
+                edges,
+                tensor={
+                    'name': tensor.name,
+                    'indices': tuple(map(int, tensor.indices)),
+                    'data_key': tensor.data_key
+                    }
+            )
+
+    # Delete any requested variables from the final graph
+    if len(ignore_variables) > 0:
+        for var in ignore_variables:
+            remove_node(graph, var)
+
+    return graph
+
+
+def relabel_graph_nodes(graph, label_dict=None, with_data=True):
+    """
+    Relabel graph nodes.The graph
     is relabelled (and returned) according to the label
     dictionary and an inverted dictionary is returned.
+    Only integers are allowed as labels. If some other
+    objects will be passed inn the label_dict, they will
+    be attempted to convert to integers. If no dictionary
+    will be passed then nodes will be relabeled according to
+    consequtive integers starting from 0.
+
+    In contrast to the Networkx version this one also relabels
+    indices in the 'tensor' parameter of edges
 
     Parameters
     ----------
     graph : networkx.Graph
             graph to relabel
-    label_dict : optional, dict-like
+    label_dict : dict-like, default None
             dictionary for relabelling {old : new}
-
+    with_data : bool, default True
+            if we will check and relabel data on the edges as well
     Returns
     -------
     new_graph : networkx.Graph
@@ -160,26 +235,61 @@ def relabel_graph_nodes(graph, label_dict=None):
     label_dict : dict
             {new : old} dictionary for inverse relabeling
     """
+    # Ensure label dictionary contains integers or create one
     if label_dict is None:
-        label_dict = {old: num for num, old in
-                      enumerate(graph.nodes(data=False), 1)}
-        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+        label_dict = {int(old): num for num, old in
+                      enumerate(graph.nodes(data=False))}
     else:
-        new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+        label_dict = {int(key): int(val)
+                      for key, val in label_dict.items()}
+
+    tensors_hash_table = {}
+
+    # make a deep copy. We want to change all attributes without
+    # interference
+    new_graph = copy.deepcopy(graph)
+
+    if with_data:
+        args_to_nx = {'data': 'tensor'}
+        if graph.is_multigraph():
+            args_to_nx['keys'] = True
+
+        for edgedata in graph.edges.data(**args_to_nx):
+            *edge, tensor = edgedata
+            if tensor is not None:
+                # create new tensor only if it was not encountered
+                key = hash((tensor['data_key'],
+                            tensor['indices']))
+                if key not in tensors_hash_table:
+                    indices = tuple(label_dict[idx]
+                                    for idx in tensor['indices'])
+                    new_tensor = copy.deepcopy(tensor)
+                    new_tensor['indices'] = indices
+                    tensors_hash_table[key] = new_tensor
+                else:
+                    new_tensor = tensors_hash_table[key]
+                new_graph.edges[
+                    edge]['tensor'] = copy.deepcopy(new_tensor)
+
+    # Then relabel nodes.
+    new_graph = nx.relabel_nodes(new_graph, label_dict, copy=True)
 
     # invert the dictionary
-    label_dict = {val: key for key, val in label_dict.items()}
+    inv_label_dict = {val: key for key, val in label_dict.items()}
 
-    return new_graph, label_dict
+    return new_graph, inv_label_dict
 
 
-def get_simple_graph(old_graph):
+def get_simple_graph(graph, parallel_edges=False, self_loops=False):
     """
     Simplifies graph: MultiGraphs are converted to Graphs,
     selfloops are removed
     """
-    graph = nx.Graph(old_graph, copy=True)
-    graph.remove_edges_from(graph.selfloop_edges())
+    if not parallel_edges:
+        # deepcopy is critical here to copy edge dictionaries
+        graph = nx.Graph(copy.deepcopy(graph), copy=False)
+    if not self_loops:
+        graph.remove_edges_from(graph.selfloop_edges())
 
     return graph
 
@@ -189,11 +299,7 @@ def get_peo(old_graph,
             input_suffix=None, keep_input=False):
     """
     Calculates the elimination order for an undirected
-    graphical model of the circuit. Optionally finds `n_qubit_parralel`
-    qubits and splits the contraction over their values, such
-    that the resulting contraction is lowest possible cost.
-    Optionally fixes the values border nodes to calculate
-    full state vector.
+    graphical model of the circuit.
 
     Parameters
     ----------
@@ -202,26 +308,35 @@ def get_peo(old_graph,
     quickbb_extra_args : str, default '--min-fill-ordering --time 60'
              Optional commands to QuickBB.
     input_suffix : str, default None
-             Optional suffix for the folders. If None is provided a random
-             suffix is generated
+             Optional suffix to allow parallel execution.
+             If None is provided a random suffix is generated
     keep_input : bool, default False
              Whether to keep input files for debugging
     Returns
     -------
-    peo : list
-          list containing indices in loptimal order of elimination
+    peo_dict : dict
+          containing indices in optimal order of elimination. Order
+          is in keys, and index objects are in values
     treewidth : int
           treewidth of the decomposition
     """
 
+    # save initial indices to ensure nothing is missed
+    initial_indices = old_graph.nodes()
+
+    # Remove selfloops and parallel edges. Critical
+    graph = get_simple_graph(old_graph)
+
+    # Relabel graph nodes to consequtive ints
+    graph, initial_to_conseq = relabel_graph_nodes(graph)
+
+    # prepare environment
     if input_suffix is None:
         input_suffix = ''.join(str(random.randint(0, 9))
                                for n in range(8))
     cnffile = 'output/quickbb.' + input_suffix + '.cnf'
-    initial_indices = old_graph.nodes()
-    graph, label_dict = relabel_graph_nodes(old_graph)
 
-    if graph.number_of_edges() - graph.number_of_selfloops() > 0:
+    if graph.number_of_edges() > 0:
         gen_cnf(cnffile, graph)
         out_bytes = run_quickbb(cnffile, defs.QUICKBB_COMMAND)
 
@@ -231,13 +346,14 @@ def get_peo(old_graph,
 
         peo = [int(ii) for ii in m['peo'].split()]
 
-        # Map peo back to original indices
-        peo = [label_dict[pp] for pp in peo]
+        # Map peo back to original indices. PEO in QuickBB is 1-based
+        # but we need it 0-based
+        peo = [initial_to_conseq[pp - 1] for pp in peo]
 
         treewidth = int(m['treewidth'])
     else:
         peo = []
-        treewidth = 1
+        treewidth = 0
 
     # find the rest of indices which quickBB did not spit out.
     # Those include isolated nodes (don't affect
@@ -245,15 +361,16 @@ def get_peo(old_graph,
     # and something else
 
     isolated_nodes = nx.isolates(old_graph)
-    peo = peo + sorted(isolated_nodes)
+    peo = peo + sorted(isolated_nodes, key=int)
 
     # assert(set(initial_indices) - set(peo) == set())
     missing_indices = set(initial_indices)-set(peo)
     # The next line needs review. Why quickBB misses some indices?
     # It is here to make program work, but is it an optimal order?
-    peo = peo + sorted(list(missing_indices))
+    peo = peo + sorted(list(missing_indices), key=int)
 
-    assert(sorted(peo) == sorted(initial_indices))
+    # Ensure no indices were missed
+    assert(sorted(peo, key=int) == sorted(initial_indices, key=int))
     # log.info('Final peo from quickBB:\n{}'.format(peo))
 
     # remove input file to honor EPA
@@ -263,7 +380,11 @@ def get_peo(old_graph,
         except FileNotFoundError:
             pass
 
-    return peo, treewidth
+    # transform PEO to a list of Var objects as expected by
+    # other parts of code
+    peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
+                    name=old_graph.nodes[v]['name']) for v in peo]
+    return peo_vars, treewidth
 
 
 def split_graph_random(old_graph, n_var_parallel=0):
@@ -281,25 +402,28 @@ def split_graph_random(old_graph, n_var_parallel=0):
 
     Returns
     -------
-    idx_parallel : list
+    idx_parallel : list of Idx
           variables removed by parallelization
     graph : networkx.Graph
           new graph without parallelized variables
     """
     graph = copy.deepcopy(old_graph)
 
-    indices = list(graph.nodes())
+    indices = [var for var in graph.nodes(data=False)]
     idx_parallel = np.random.choice(
         indices, size=n_var_parallel, replace=False)
 
+    idx_parallel_var = [Var(var, size=graph.nodes[var])
+                        for var in idx_parallel]
+
     for idx in idx_parallel:
-        graph.remove_node(idx)
+        remove_node(graph, idx)
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
     log.info("Removed {} variables".format(len(idx_parallel)))
     peo, treewidth = get_peo(graph)
 
-    return sorted(idx_parallel), graph
+    return sorted(idx_parallel_var, key=int), graph
 
 
 def get_cost_by_node(graph, node):
@@ -309,8 +433,9 @@ def get_cost_by_node(graph, node):
 
     Parameters
     ----------
-    graph : networkx.Graph or networkx.MultiGraph
+    graph : networkx.MultiGraph
                Graph containing the information about the contraction
+
     node : node of the graph (such that graph can be indexed by it)
 
     Returns
@@ -320,74 +445,63 @@ def get_cost_by_node(graph, node):
     flops : int
               Flop cost for contraction of node
     """
-    neighbors = list(graph[node])
-    neighbors_wo_selfloops = copy.copy(neighbors)
-
-    # Delete node itself from the list of its neighbors.
-    # This eliminates possible self loop
-    while node in neighbors_wo_selfloops:
-        neighbors_wo_selfloops.remove(node)
+    neighbors_with_size = {neighbor: graph.nodes[neighbor]['size']
+                           for neighbor in graph[node]}
 
     # We have to find all unique tensors which will be contracted
     # in this bucket. They label the edges coming from
-    # the current node (may be multiple edges between
-    # the node and its neighbor).
-    # Then we have to count only the number of unique tensors.
-    if graph.is_multigraph():
-        edges_from_node = [list(graph[node][neighbor].values())
-                           for neighbor in neighbors]
-        tensor_hash_tags = [edge['hash_tag'] for edges_of_neighbor
-                            in edges_from_node
-                            for edge in edges_of_neighbor]
-    else:
-        tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                            for neighbor in neighbors]
+    # the current node. Application of identical tensors many times
+    # can be encoded in multiple edges between the node and its neighbor.
+    # We have to count the number of unique tensors.
+    tensors = []
+    selfloop_tensors = []
 
-    # Now find all self loops (single variable tensors)
-    if graph.is_multigraph():
-        selfloops_from_node = [list(graph[node][neighbor].values())
-                               for neighbor in neighbors
-                               if neighbor == node]
-        selfloop_tensor_hash_tags = [edge['hash_tag']
-                                     for selfloop_of_node
-                                     in selfloops_from_node
-                                     for edge in selfloop_of_node]
-    else:
-        selfloop_tensor_hash_tags = [graph[node][neighbor]['hash_tag']
-                                     for neighbor in neighbors
-                                     if neighbor == node]
+    args_to_nx = {'data': 'tensor'}
 
-    # The order of tensor in each term is the number of neighbors
-    # having edges with the same hash tag + 1 (the node itself),
-    # except for self-loops, where the order is 1
-    neighbor_tensor_orders = {}
-    for hash_tag, count in Counter(tensor_hash_tags).items():
-        if hash_tag in selfloop_tensor_hash_tags:
-            tensor_order = {hash_tag: count}
-        else:
-            tensor_order = {hash_tag: count+1}
-        neighbor_tensor_orders.update(tensor_order)
+    if graph.is_multigraph():
+        args_to_nx['keys'] = True
+
+    for edgedata in graph.edges.data(**args_to_nx):
+        *edge, tensor = edgedata
+        u, v, *edge_key = edge
+        edge_key = edge_key[0] if edge_key != [] else 0
+        # the tuple (edge_key, indices, data_key) uniquely
+        # identifies a tensor
+        tensors.append((
+            edge_key, tensor['indices'], tensor['data_key']))
+        if u == v:
+            selfloop_tensors.append((
+                edge_key, tensor['indices'], tensor['data_key']))
+
+    # get unique tensors
+    tensors = set(tensors)
+
+    # Now find the size of the result.
+    # Ensure the node itself from the list of its neighbors.
+    # This eliminates possible self loop
+    neighbors_wo_node = copy.copy(neighbors_with_size)
+    while node in neighbors_wo_node:
+        neighbors_wo_node.pop(node)
 
     # memory estimation: the size of the result + all sizes of terms
-    memory = 2**(len(neighbors_wo_selfloops))
-    for order in neighbor_tensor_orders.values():
-        memory += 2**order
+    size_of_the_result = np.prod([
+        val for val in neighbors_wo_node.values()])
+    memory = size_of_the_result
+    for tensor_key in tensors:
+        _, indices, _ = tensor_key
+        mem = np.prod([graph.nodes[idx]['size'] for idx in indices])
+        memory += mem
 
-    n_unique_tensors = len(set(tensor_hash_tags))
-
-    # there are number_of_terms - 1 multiplications
-    if n_unique_tensors == 0:
-        n_multiplications = 0
-    else:
-        n_multiplications = n_unique_tensors - 1
-
-    size_of_the_result = len(neighbors_wo_selfloops)
+    # Now calculate number of FLOPS
+    n_unique_tensors = len(tensors)
+    assert n_unique_tensors > 0
+    n_multiplications = n_unique_tensors - 1
 
     # There are n_multiplications and 1 addition
-    # repeated size_of_the_result*size_of_contracted_variables
+    # repeated size_of_the_result*size_of_contracted_variable
     # times for each contraction
-    flops = (2**(size_of_the_result + 1)       # this is addition
-             + 2**(size_of_the_result + 1)*n_multiplications)
+    flops = (size_of_the_result *
+             graph.nodes[node]['size']*(1 + n_multiplications))
 
     return memory, flops
 
@@ -410,29 +524,100 @@ def eliminate_node(graph, node, self_loops=True):
     -------
     None
     """
-
-    neighbors = list(graph[node])
-
     # Delete node itself from the list of its neighbors.
     # This eliminates possible self loop
-    while node in neighbors:
-        neighbors.remove(node)
+    neighbors_wo_node = list(graph[node])
+    while node in neighbors_wo_node:
+        neighbors_wo_node.remove(node)
 
-    if len(neighbors) > 1:
-        edges = itertools.combinations(neighbors, 2)
-    elif len(neighbors) == 1 and self_loops:
+    graph.remove_node(node)
+
+    # prune all edges containing the removed node
+    edges_to_remove = []
+    args_to_nx = {'data': 'tensor', 'nbunch': neighbors_wo_node,
+                  'default': {'indices': []}}
+
+    if graph.is_multigraph():
+        args_to_nx['keys'] = True
+
+    for edgedata in graph.edges.data(**args_to_nx):
+        *edge, tensor = edgedata
+        if node in tensor['indices']:
+            edges_to_remove.append(edge)
+
+    graph.remove_edges_from(edges_to_remove)
+
+    # prepare new tensor
+    if len(neighbors_wo_node) > 1:
+        edges = itertools.combinations(neighbors_wo_node, 2)
+    elif len(neighbors_wo_node) == 1 and self_loops:
         # This node had a single neighbor, add self loop to it
-        edges = [[neighbors[0], neighbors[0]]]
+        edges = [[neighbors_wo_node[0], neighbors_wo_node[0]]]
     else:
         # This node had no neighbors
         edges = None
 
-    graph.remove_node(node)
-
     if edges is not None:
         graph.add_edges_from(
-            edges, tensor=f'E{node}',
-            hash_tag=hash((f'E{node}', tuple(neighbors), random.random())))
+            edges,
+            tensor={
+                'name': 'E{}'.format(int(node)),
+                'indices': tuple(neighbors_wo_node),
+                'data_key':  None
+            }
+        )
+
+
+def remove_node(graph, node, self_loops=True):
+    """
+    Eliminates node if its value was fixed
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+            Graph containing the information about the contraction
+            GETS MODIFIED IN THIS FUNCTION
+    node : node to contract (such that graph can be indexed by it)
+    self_loops : bool
+           Whether to create selfloops on the neighbors. Default True.
+
+    Returns
+    -------
+    None
+    """
+    # Delete node itself from the list of its neighbors.
+    # This eliminates possible self loop
+    neighbors_wo_node = list(graph[node])
+    while node in neighbors_wo_node:
+        neighbors_wo_node.remove(node)
+
+    # prune all tensors containing the removed node
+    args_to_nx = {'data': 'tensor', 'nbunch': neighbors_wo_node,
+                  'default': {'indices': []}}
+    if graph.is_multigraph():
+        args_to_nx['keys'] = True
+
+    new_selfloops = []
+    for edgedata in graph.edges.data(**args_to_nx):
+        *edge, tensor = edgedata
+        indices = tensor['indices']
+        if node in indices:
+            new_indices = tuple(idx for idx in indices if idx != node)
+            tensor['indices'] = new_indices
+            # Invalidate data pointer as this tensor is a slice
+            tensor['data_key'] = None
+            if self_loops and len(new_indices) == 1:  # create a self loop
+                neighbor = new_indices[0]
+                new_selfloops.append((neighbor, tensor))
+            else:
+                graph.edges[edge]['tensor'] = tensor
+
+    graph.remove_node(node)
+
+    # introduce selfloops
+    if self_loops:
+        for v, tensor in new_selfloops:
+            graph.add_edge(v, v, tensor=tensor)
 
 
 def get_mem_requirement(graph):
@@ -449,37 +634,35 @@ def get_mem_requirement(graph):
     memory : int
             Amount of memory
     """
-    nodes = list(graph.nodes)
-    nodes_wo_selfloops = copy.copy(nodes)
+    # We have to find all unique tensors which will be contracted
+    # in this bucket. They label the edges coming from
+    # the current node. Application of identical tensors many times
+    # can be encoded in multiple edges between the node and its neighbor.
+    # We have to count the number of unique tensors.
+    tensors = []
+    args_to_nx = {'data': 'tensor'}
 
-    # Delete node itself from the list of its neighbors.
-    # This eliminates possible self loop
-    while nodes in nodes_wo_selfloops:
-        nodes_wo_selfloops.remove(nodes)
+    if graph.is_multigraph():
+        args_to_nx['keys'] = True
 
-    # We have to find all unique tensors in the network
-    # They label the edges of the graph
-    # (may be multiple edges between
-    # the node and its neighbor).
-    # Then we have to count only the number of unique tensors.
-    tensor_hash_tags = []
-    selfloop_tensor_hash_tags = []
-    for edge in graph.edges:
-        tensor_hash_tags.append(graph.edges[edge]['hash_tag'])
-        if edge[0] == edge[1]:
-            selfloop_tensor_hash_tags.append(
-                graph.edges[edge]['hash_tag'])
+    for edgedata in graph.edges.data(**args_to_nx):
+        *edge, tensor = edgedata
+        u, v, *edge_key = edge
+        edge_key = edge_key[0] if edge_key != [] else 0
+        # the tuple (edge_key, indices, data_key) uniquely
+        # identifies a tensor
+        tensors.append((
+            edge_key, tensor['indices'], tensor['data_key']))
 
-    # The order of tensor is the number of same hash tags
-    tensor_orders = {}
-    for hash_tag, count in Counter(tensor_hash_tags).items():
-        tensor_order = {hash_tag: count}
-        tensor_orders.update(tensor_order)
+    # get unique tensors
+    tensors = set(tensors)
 
     # memory estimation
     memory = 0
-    for order in tensor_orders.values():
-        memory += 2**order
+    for tensor_key in tensors:
+        _, indices, _ = tensor_key
+        mem = np.prod([graph.nodes[idx]['size'] for idx in indices])
+        memory += mem
 
     return memory
 
@@ -504,7 +687,8 @@ def cost_estimator(old_graph, free_vars=[]):
               Flop cost for steps of the bucket elimination algorithm
     """
     graph = copy.deepcopy(old_graph)
-    nodes = sorted(graph.nodes)
+    nodes = sorted(graph.nodes, key=int)
+    free_vars = [int(var) for var in free_vars]
 
     # Early return if graph is empty
     if len(nodes) == 0:
@@ -596,7 +780,6 @@ def get_node_by_mem_reduction(old_graph):
     nodes_by_mem_reduction : dict
     """
 
-    number_of_nodes = old_graph.number_of_nodes()
     graph = copy.deepcopy(old_graph)
 
     # Get flop cost of the bucket elimination
@@ -606,13 +789,7 @@ def get_node_by_mem_reduction(old_graph):
     for node in graph.nodes(data=False):
         reduced_graph = copy.deepcopy(graph)
         # Take out one node
-        reduced_graph.remove_node(node)
-        # Renumerate graph nodes to be consequtive ints (may be redundant)
-        order = (list(range(1, node))
-                 + list(range(node + 1, number_of_nodes + 1)))
-        reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
-        )
+        remove_node(reduced_graph, node)
         mem, flop = cost_estimator(reduced_graph)
         delta = sum(initial_mem) - sum(mem)
 
@@ -641,21 +818,21 @@ def get_node_by_treewidth_reduction(old_graph):
 
     # Get flop cost of the bucket elimination
     initial_treewidth = get_treewidth_from_peo(
-        graph, list(range(1, number_of_nodes + 1)))
+        graph, list(range(number_of_nodes)))
 
     nodes_by_treewidth_reduction = []
     for node in graph.nodes(data=False):
         reduced_graph = copy.deepcopy(graph)
         # Take out one node
-        reduced_graph.remove_node(node)
+        remove_node(reduced_graph, node)
         # Renumerate graph nodes to be consequtive ints (may be redundant)
-        order = (list(range(1, node))
-                 + list(range(node + 1, number_of_nodes + 1)))
+        order = (list(range(node))
+                 + list(range(node + 1, number_of_nodes)))
         reduced_graph, _ = relabel_graph_nodes(
-            reduced_graph, dict(zip(order, range(1, number_of_nodes)))
+            reduced_graph, dict(zip(order, range(number_of_nodes-1)))
         )
         treewidth = get_treewidth_from_peo(
-            reduced_graph, list(range(1, number_of_nodes)))
+            reduced_graph, list(range(number_of_nodes-1)))
         delta = initial_treewidth - treewidth
 
         nodes_by_treewidth_reduction.append((node, delta))
@@ -697,11 +874,17 @@ def split_graph_by_metric(
     graph : networkx.Graph
           new graph without parallelized variables
     """
-    graph = get_simple_graph(old_graph)
+    # graph = get_simple_graph(old_graph)
+    # import pdb
+    # pdb.set_trace()
+    graph = copy.deepcopy(old_graph)
+
+    # convert everything to int
+    forbidden_nodes = [int(var) for var in forbidden_nodes]
 
     # get nodes by metric in descending order
     nodes_by_metric = metric_fn(graph)
-    nodes_by_metric.sort(key=lambda pair: pair[1], reverse=True)
+    nodes_by_metric.sort(key=lambda pair: int(pair[1]), reverse=True)
 
     nodes_by_metric_allowed = []
     for node, metric in nodes_by_metric:
@@ -713,13 +896,17 @@ def split_graph_by_metric(
         node, metric = nodes_by_metric_allowed[ii]
         idx_parallel.append(node)
 
+    # create var objects from nodes
+    idx_parallel_var = [Var(var, size=graph.nodes[var]['size'])
+                        for var in idx_parallel]
+
     for idx in idx_parallel:
-        graph.remove_node(idx)
+        remove_node(graph, idx)
 
     log.info("Removed indices by parallelization:\n{}".format(idx_parallel))
     log.info("Removed {} variables".format(len(idx_parallel)))
 
-    return sorted(idx_parallel), graph
+    return idx_parallel_var, graph
 
 
 def split_graph_with_mem_constraint_greedy(
@@ -759,6 +946,8 @@ def split_graph_with_mem_constraint_greedy(
     graph : networkx.Graph
              reduced contraction graph
     """
+    # convert everything to int
+    forbidden_nodes = [int(var) for var in forbidden_nodes]
 
     graph = copy.deepcopy(old_graph)
     n_var_total = old_graph.number_of_nodes()
@@ -769,11 +958,12 @@ def split_graph_with_mem_constraint_greedy(
     max_mem = sum(mem_cost)
 
     idx_parallel = []
+    idx_parallel_var = []
     for n_var_parallel in range(0, n_var_parallel_max, step_by):
         # Get optimal order
         peo, tw = get_peo(graph)
         graph_optimal, inverse_order = relabel_graph_nodes(
-            graph, dict(zip(peo, range(1, len(peo)+1))))
+            graph, dict(zip(peo, range(len(peo)))))
 
         # get nodes by metric in descending order
         nodes_by_metric_optimal = metric_fn(graph_optimal)
@@ -793,11 +983,17 @@ def split_graph_with_mem_constraint_greedy(
 
         # Update list and update graph
         idx_parallel += nodes
-        graph.remove_nodes_from(nodes)
+
+        # create var objects from nodes
+        idx_parallel_var += [Var(var, size=graph.nodes[var]['size'])
+                             for var in nodes]
+
+        for node in nodes:
+            remove_node(graph, node)
 
         # Renumerate graph nodes to be consequtive ints (may be redundant)
         label_dict = dict(zip(sorted(graph.nodes),
-                              range(1, len(graph.nodes())+1)))
+                              range(len(graph.nodes()))))
 
         graph_relabelled, _ = relabel_graph_nodes(graph, label_dict)
         mem_cost, flop_cost = cost_estimator(graph_relabelled)
@@ -811,7 +1007,7 @@ def split_graph_with_mem_constraint_greedy(
     if max_mem > mem_constraint:
         raise ValueError('Maximal memory constraint is not met')
 
-    return idx_parallel, graph
+    return idx_parallel_var, graph
 
 
 def split_graph_by_metric_greedy(
@@ -851,15 +1047,22 @@ def split_graph_by_metric_greedy(
     graph : networkx.Graph
           new graph without parallelized variables
     """
+    # import pdb
+    # pdb.set_trace()
+
+    # convert everything to int
+    forbidden_nodes = [int(var) for var in forbidden_nodes]
+
     # Simplify graph
     graph = get_simple_graph(old_graph)
 
     idx_parallel = []
+    idx_parallel_var = []
     for ii in range(0, n_var_parallel, greedy_step_by):
         # Get optimal order
         peo, tw = get_peo(graph)
         graph_optimal, inverse_order = relabel_graph_nodes(
-            graph, dict(zip(peo, range(1, len(peo)+1))))
+            graph, dict(zip(peo, sorted(graph.nodes))))
 
         # get nodes by metric in descending order
         nodes_by_metric_optimal = metric_fn(graph_optimal)
@@ -879,9 +1082,13 @@ def split_graph_by_metric_greedy(
 
         # Update list and update graph
         idx_parallel += nodes
-        graph.remove_nodes_from(nodes)
+        # create var objects from nodes
+        idx_parallel_var += [Var(var, size=graph.nodes[var]['size'])
+                             for var in nodes]
+        for node in nodes:
+            remove_node(graph, node)
 
-    return idx_parallel, graph
+    return idx_parallel_var, graph
 
 
 def draw_graph(graph, filename=''):
@@ -897,9 +1104,9 @@ def draw_graph(graph, filename=''):
     """
     plt.figure(figsize=(10, 10))
     # pos = nx.spectral_layout(graph)
-    pos = nx.kamada_kawai_layout(graph)
+    pos = nx.spectral_layout(graph)
     nx.draw(graph, pos,
-            node_color=(list(graph.nodes())),
+            node_color=(list(map(int, graph.nodes()))),
             node_size=100,
             cmap=plt.cm.Blues,
             with_labels=True,
@@ -925,16 +1132,25 @@ def wrap_general_graph_for_qtree(graph):
     new_graph : type(graph)
             Modified graph
     """
-    # relabel nodes starting from 1
+    # relabel nodes starting to integers
     label_dict = dict(zip(
         list(sorted(graph.nodes)),
-        range(1, graph.number_of_nodes()+1)
+        range(graph.number_of_nodes())
     ))
 
-    # Add unique hash tags to edges
-    new_graph = nx.relabel_nodes(graph, label_dict, copy=True)
+    # Add size to nodes
+    for node in graph.nodes:
+        graph.nodes[node]['size'] = 2
+
+    # Add tensors to edges and ensure the graph is a Multigraph
+    new_graph = nx.MultiGraph(
+        nx.relabel_nodes(graph, label_dict, copy=True)
+        )
     for edge in new_graph.edges():
-        new_graph.edges[edge].update({'hash_tag': hash(random.random())})
+        new_graph.edges[edge].update(
+            {'tensor':
+             {'name': 'W', 'indices': tuple(edge), 'data_key': None}})
+
     return new_graph
 
 
@@ -995,6 +1211,9 @@ def get_treewidth_from_peo(old_graph, peo):
     treewidth : int
             treewidth corresponding to peo
     """
+    # Ensure PEO is a list of ints
+    peo = list(map(int, peo))
+
     # Copy graph and make it simple
     graph = get_simple_graph(old_graph)
 
@@ -1015,11 +1234,8 @@ def get_treewidth_from_peo(old_graph, peo):
 
         # Make the next clique
         if edges is not None:
-            graph.add_edges_from(
-                edges, tensor=f'E{node}',
-                hash_tag=hash((f'E{node}',
-                               tuple(neighbors),
-                               random.random())))
+            graph.add_edges_from(edges)
+
     return treewidth
 
 
@@ -1043,6 +1259,7 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
     new_graph : type(graph)
             New graph with clique
     """
+    clique_nodes = tuple(int(var) for var in clique_nodes)
     graph = copy.deepcopy(old_graph)
 
     if len(clique_nodes) == 0:
@@ -1050,11 +1267,12 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
 
     edges = [tuple(sorted(edge)) for edge in
              itertools.combinations(clique_nodes, 2)]
-    node = min(clique_nodes)
-    graph.add_edges_from(edges, tensor=name_prefix + f'{node}',
-                         hash_tag=hash((name_prefix + f'{node}',
-                                        tuple(clique_nodes),
-                                        random.random())))
+    node_idx = min(clique_nodes)
+    graph.add_edges_from(edges,
+                         tensor={'name': name_prefix + f'{node_idx}',
+                                 'indices': clique_nodes,
+                                 'data_key': None}
+    )
     clique_size = len(clique_nodes)
     log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
 
@@ -1077,26 +1295,31 @@ def get_fillin_graph(old_graph, peo):
     nx.Graph or nx.MultiGraph
                 triangulated graph
     """
-    # get a copy of graph in the elimination order
+    # Ensure PEO is a list of ints
+    peo = list(map(int, peo))
+
+    # get a copy of graph in the elimination order. We do not relabel
+    # tensor parameters of edges as it takes too much time
     number_of_nodes = len(peo)
     assert number_of_nodes == old_graph.number_of_nodes()
-
-    graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+    graph, inv_label_dict = relabel_graph_nodes(
+        old_graph,
+        dict(zip(peo, sorted(old_graph.nodes))),
+        with_data=False)
 
     # go over nodes and make adjacent all nodes higher in the order
     for node in sorted(graph.nodes):
         neighbors = list(graph[node])
-        higher_neighbors = [neighbor for neighbor
-                            in neighbors if neighbor > node]
+        higher_neighbors = [neighbor for neighbor in neighbors
+                            if neighbor > node]
 
         # form all pairs of higher neighbors
         if len(higher_neighbors) > 1:
             edges = itertools.combinations(higher_neighbors, 2)
 
+            existing_edges = graph.edges(higher_neighbors, data=False)
             # Do not add edges over existing edges. This is
             # done to work properly with MultiGraphs
-            existing_edges = graph.edges(higher_neighbors)
             fillin_edges = [edge for edge
                             in edges if edge not in existing_edges]
         else:
@@ -1104,15 +1327,18 @@ def get_fillin_graph(old_graph, peo):
 
         # Add edges between all neighbors
         if fillin_edges is not None:
+            tensor = {'name': 'C{}'.format(node),
+                      'indices': (node,) + tuple(neighbors),
+                      'data_key': None}
             graph.add_edges_from(
-                fillin_edges, tensor=f'E{node}',
-                hash_tag=hash((f'E{node}',
-                               tuple(neighbors),
-                               random.random())))
+                fillin_edges, tensor=tensor
+            )
 
     # relabel graph back so peo is a correct elimination order
     # of the resulting chordal graph
-    graph, _ = relabel_graph_nodes(graph, label_dict)
+    graph, _ = relabel_graph_nodes(
+        graph, inv_label_dict, with_data=False)
+
     return graph
 
 
@@ -1136,6 +1362,10 @@ def get_fillin_graph2(old_graph, peo):
     nx.Graph or nx.MultiGraph
                 triangulated graph
     """
+    # Ensure PEO is a list of ints
+    peo = list(map(int, peo))
+    peo_to_conseq = dict(zip(peo, range(len(peo))))
+
     number_of_nodes = len(peo)
     graph = copy.deepcopy(old_graph)
 
@@ -1145,29 +1375,34 @@ def get_fillin_graph2(old_graph, peo):
     index = [0 for ii in range(number_of_nodes)]
     f = [0 for ii in range(number_of_nodes)]
 
-    for ii in range(1, number_of_nodes+1):
-        w = peo[ii-1]
-        f[w-1] = w
-        index[w-1] = ii
+    for ii in range(number_of_nodes):
+        w = peo[ii]
+        idx_w = peo_to_conseq[w]
+        f[idx_w] = w
+        index[idx_w] = ii
         neighbors = list(graph[w])
         lower_neighbors = [v for v in neighbors
-                           if peo.index(v)+1 < ii]
-        hash_seed = random.random()
+                           if peo.index(v) < ii]
         for v in lower_neighbors:
             x = v
-            while index[x-1] < ii:
-                index[x-1] = ii
+            idx_x = peo_to_conseq[x]
+            while index[idx_x] < ii:
+                index[idx_x] = ii
                 # Check that edge does not exist
-                # This may happen if peo is not ordered?
+                # Tensors added here may not correspond to cliques!
+                # Their names are made incompatible with Tensorflow
+                # to highlight it
                 if (x, w) not in graph.edges(w):
+                    tensor = {'name': 'C{}'.format(w),
+                              'indices': (w, ) + tuple(neighbors),
+                              'data_key': None}
                     graph.add_edge(
                         x, w,
-                        tensor=f'E{w}',
-                        hash_tag=hash((f'E{w}',
-                                       hash_seed)))
-                x = f[x-1]
-            if f[x-1] == x:
-                f[x-1] = w
+                        tensor=tensor)
+                x = f[idx_x]
+                idx_x = peo_to_conseq[x]
+            if f[idx_x] == x:
+                f[idx_x] = w
     return graph
 
 
@@ -1187,17 +1422,20 @@ def is_peo_zero_fillin(old_graph, peo):
     bool
             True if elimination order has zero fillin
     """
-    # get a copy of graph in the elimination order
+    # Ensure PEO is a list of ints
+    peo = list(map(int, peo))
 
-    number_of_nodes = len(peo)
+    # get a copy of graph in the elimination order
     graph, label_dict = relabel_graph_nodes(
-        old_graph, dict(zip(peo, range(1, number_of_nodes+1))))
+        old_graph, dict(zip(peo, sorted(old_graph.nodes())))
+        )
 
     # go over nodes and make adjacent all nodes higher in the order
     for node in sorted(graph.nodes):
         neighbors = list(graph[node])
         higher_neighbors = [neighbor for neighbor
-                            in neighbors if neighbor > node]
+                            in neighbors
+                            if neighbor > node]
 
         # form all pairs of higher neighbors
         if len(higher_neighbors) > 1:
@@ -1233,24 +1471,31 @@ def is_peo_zero_fillin2(graph, peo):
     bool
             True if elimination order has zero fillin
     """
+    # Ensure PEO is a list of ints
+    peo = list(map(int, peo))
+    peo_to_conseq = dict(zip(peo, range(len(peo))))
+
     number_of_nodes = len(peo)
 
     index = [0 for ii in range(number_of_nodes)]
     f = [0 for ii in range(number_of_nodes)]
 
-    for ii in range(1, number_of_nodes+1):
-        w = peo[ii-1]
-        f[w-1] = w
-        index[w-1] = ii
+    for ii in range(number_of_nodes):
+        w = peo[ii]
+        idx_w = peo_to_conseq[w]
+        f[idx_w] = w
+        index[idx_w] = ii
         neighbors = list(graph[w])
         lower_neighbors = [v for v in neighbors
-                           if peo.index(v)+1 < ii]
+                           if peo.index(v) < ii]
         for v in lower_neighbors:
-            index[v-1] = ii
-            if f[v-1] == v:
-                f[v-1] = w
+            idx_v = peo_to_conseq[v]
+            index[idx_v] = ii
+            if f[idx_v] == v:
+                f[idx_v] = w
         for v in lower_neighbors:
-            if index[f[v-1] - 1] < ii:
+            idx_v = peo_to_conseq[v]
+            if index[f[idx_v]] < ii:
                 return False
     return True
 
@@ -1277,10 +1522,11 @@ def is_clique(old_graph, vertices):
     have_edges = set(subgraph.edges()) - set(subgraph.selfloop_edges())
 
     # Sort all edges to be in the (low, up) order
-    have_edges = set([tuple(sorted(edge)) for edge in have_edges])
+    have_edges = set([tuple(sorted(edge, key=int))
+                      for edge in have_edges])
 
     want_edges = set([
-        tuple(sorted(edge))
+        tuple(sorted(edge, key=int))
         for edge in itertools.combinations(vertices, 2)
     ])
     return want_edges == have_edges
@@ -1307,15 +1553,19 @@ def maximum_cardinality_search(
     list
         Perfect elimination order
     """
+    # convert input to int
+    last_clique_vertices = [int(var) for var in last_clique_vertices]
 
     # Check is last_clique_vertices is a clique
 
     graph = copy.deepcopy(old_graph)
     n_nodes = graph.number_of_nodes()
 
-    nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes)]
+    nodes_number_of_ord_neighbors = {node: 0 for node in graph.nodes}
+    # range(0, n_nodes + 1) is important here as we need n+1 lists
+    # to ensure proper indexing in the case of a clique
+    nodes_by_ordered_neighbors = [[] for ii in range(0, n_nodes + 1)]
     for node in graph.nodes:
-        graph.node[node]['n_ordered_neighbors'] = 0
         nodes_by_ordered_neighbors[0].append(node)
 
     last_nonempty = 0
@@ -1344,20 +1594,20 @@ def maximum_cardinality_search(
             node = nodes_by_ordered_neighbors[last_nonempty].pop()
 
         peo = [node] + peo
-        graph.node[node]['n_ordered_neighbors'] = -1
+        nodes_number_of_ord_neighbors[node] = -1
 
         unordered_neighbors = [
-            (neighbor, graph.node[neighbor]['n_ordered_neighbors'])
+            (neighbor, nodes_number_of_ord_neighbors[neighbor])
             for neighbor in graph[node]
-            if graph.node[neighbor]['n_ordered_neighbors'] >= 0]
+            if nodes_number_of_ord_neighbors[neighbor] >= 0]
 
         # Increase number of ordered neighbors for all adjacent
         # unordered nodes
         for neighbor, n_ordered_neighbors in unordered_neighbors:
             nodes_by_ordered_neighbors[n_ordered_neighbors].remove(
                 neighbor)
-            graph.node[neighbor][
-                'n_ordered_neighbors'] = n_ordered_neighbors + 1
+            nodes_number_of_ord_neighbors[neighbor] = (
+                n_ordered_neighbors + 1)
             nodes_by_ordered_neighbors[n_ordered_neighbors + 1].append(
                 neighbor)
 
@@ -1368,7 +1618,11 @@ def maximum_cardinality_search(
             else:
                 break
 
-    return peo
+    # Create Var objects
+    peo_vars = [Var(var, size=graph.nodes[var]['size'],
+                    name=graph.nodes[var]['name'])
+                for var in peo]
+    return peo_vars
 
 
 def get_equivalent_peo(old_graph, peo, clique_vertices):
@@ -1380,7 +1634,7 @@ def get_equivalent_peo(old_graph, peo, clique_vertices):
     graph = get_simple_graph(old_graph)
 
     # Complete the graph
-    graph_chordal = get_fillin_graph(graph, peo)
+    graph_chordal = get_fillin_graph2(graph, peo)
 
     # MCS will produce alternative PEO with this clique at the end
     new_peo = maximum_cardinality_search(graph_chordal,
@@ -1473,21 +1727,32 @@ def get_upper_bound_peo(old_graph,
         max_degree = max(max_degree, degree)
         eliminate_node(graph, node, self_loops=False)
 
-    return peo, max_degree  # this is clique size - 1
+    # Create Var objects
+    peo_var = [Var(var, size=graph.nodes[var]['size'],
+                   name=graph.nodes[var]['name']) for var in peo]
+
+    return peo_var, max_degree  # this is clique size - 1
 
 
+@utils.sequential_profile_decorator(filename='fillin_graph_cprof')
 def test_get_fillin_graph():
     """
     Test graph filling using the elimination order
     """
     import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+    import src.operators as ops
+    nq, c = ops.read_circuit_file(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+        # 'inst_2x2_7_1.txt'
+    )
+    g = circ2graph(nq, c, omit_terminals=False)
+
+    peo = np.random.permutation(g.nodes)
 
     tim1 = time.time()
-    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    g1 = get_fillin_graph(g, list(peo))
     tim2 = time.time()
-    g2 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    g2 = get_fillin_graph2(g, list(peo))
     tim3 = time.time()
 
     assert nx.is_isomorphic(g1, g2)
@@ -1499,17 +1764,20 @@ def test_is_zero_fillin():
     Test graph filling using the elimination order
     """
     import time
-    nq, g = read_graph(
-        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt')
+    import src.operators as ops
+    nq, c = ops.read_circuit_file(
+        'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+    )
+    g = circ2graph(nq, c, omit_terminals=False)
 
-    g1 = get_fillin_graph(g, list(range(1, g.number_of_nodes() + 1)))
+    g1 = get_fillin_graph(g, list(range(g.number_of_nodes())))
 
     tim1 = time.time()
     print(
-        is_peo_zero_fillin(g1, list(range(1, g.number_of_nodes() + 1))))
+        is_peo_zero_fillin(g1, list(range(g.number_of_nodes()))))
     tim2 = time.time()
     print(
-        is_peo_zero_fillin2(g1, list(range(1, g.number_of_nodes() + 1))))
+        is_peo_zero_fillin2(g1, list(range(g.number_of_nodes()))))
     tim3 = time.time()
 
     print(tim2 - tim1, tim3 - tim2)
@@ -1519,7 +1787,11 @@ def test_maximum_cardinality_search():
     """Test maximum cardinality search algorithm"""
 
     # Read graph
-    nq, old_g = read_graph('inst_2x2_7_0.txt')
+    import src.operators as ops
+    nq, c = ops.read_circuit_file(
+        'inst_2x2_7_0.txt'
+    )
+    old_g = circ2graph(nq, c)
 
     # Make random clique
     vertices = list(np.random.choice(old_g.nodes, 4, replace=False))
@@ -1530,7 +1802,7 @@ def test_maximum_cardinality_search():
 
     # Make graph completion
     peo, tw = get_peo(g)
-    g_chordal = get_fillin_graph(g, peo)
+    g_chordal = get_fillin_graph2(g, peo)
 
     # MCS will produce alternative PEO with this clique at the end
     new_peo = maximum_cardinality_search(g_chordal, list(vertices))
@@ -1547,7 +1819,11 @@ def test_maximum_cardinality_search():
 
 def test_is_clique():
     """Test is_clique"""
-    nq, g = read_graph('inst_2x2_7_0.txt')
+    import src.operators as ops
+    nq, c = ops.read_circuit_file(
+        'inst_2x2_7_0.txt'
+    )
+    g = circ2graph(nq, c)
 
     # select some random vertices
     vertices = list(np.random.choice(g.nodes, 4, replace=False))
@@ -1557,3 +1833,10 @@ def test_is_clique():
     g_new = make_clique_on(g, vertices)
 
     assert is_clique(g_new, vertices)
+
+
+if __name__ == '__main__':
+    test_get_fillin_graph()
+    test_is_zero_fillin()
+    test_maximum_cardinality_search()
+    test_is_clique()

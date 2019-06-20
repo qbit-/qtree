@@ -7,23 +7,21 @@ module, and example programs are listed in :py:mod:`cirq_test` module.
 import numpy as np
 import copy
 import src.operators as ops
+import src.optimizer as opt
 import src.utils as utils
 
 
-def get_np_buckets(buckets, qubit_count, target_state):
+def get_np_buckets(buckets, data_dict):
     """
     Takes buckets and returns their Numpy counterparts.
 
     Parameters
     ----------
     buckets : list of list
-              buckets as returned by :py:meth:`read_buckets`
+              buckets as returned by :py:meth:`circ2buckets`
               and :py:meth:`reorder_buckets`.
-    qubit_count : int
-              total number of qubits
-    target_state : int
-              We estimate the amplitude of target state.
-              Thus we know the values of circuit outputs
+    data_dict : dict
+              dictionary containing values for the placeholder Tensors
     Returns
     -------
     np_buckets : list of lists
@@ -32,58 +30,26 @@ def get_np_buckets(buckets, qubit_count, target_state):
     # import pdb
     # pdb.set_trace()
 
-    # Define ingredients
-    matrices_dict = copy.deepcopy(
-        ops.operator_matrices_dict)
-
-    # Add input vectors
-
-    input_layer_dict = {
-        'I{}'.format(qubit_idx): qubit_value @ matrices_dict['h']
-        for qubit_idx, qubit_value
-        in zip(
-            range(1, qubit_count+1),
-            utils.qubit_vector_generator(0, qubit_count)
-        )
-    }
-    matrices_dict.update(input_layer_dict)
-
-    # Add output vectors
-
-    output_layer_dict = {
-        'O{}'.format(qubit_idx): matrices_dict['h'] @ qubit_value
-        for qubit_idx, qubit_value
-        in zip(
-            range(1, qubit_count+1),
-            utils.qubit_vector_generator(target_state, qubit_count)
-        )
-    }
-    matrices_dict.update(output_layer_dict)
-
-    # Create tf buckets from unordered buckets
+    # Create numpy buckets
     np_buckets = []
     for bucket in buckets:
         np_bucket = []
-        for label, variables in bucket:
+        for tensor in bucket:
+            # sort tensor dimensions
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
+            data = data_dict[tensor.data_key]
 
-            # sort tensor dimensions (reversed order)
-            transpose_order = np.argsort(variables)
-            variables = sorted(variables)
-            tensor = np.array(
-                matrices_dict[label],
-                copy=True)
-            np_bucket.append(
-                (
-                    np.transpose(tensor, transpose_order),
-                    variables
-                )
-            )
+            new_tensor = tensor.copy(
+                indices=(tensor.indices[pp] for pp in transpose_order),
+                data=np.transpose(data.copy(), transpose_order))
+
+            np_bucket.append(new_tensor)
         np_buckets.append(np_bucket)
 
     return np_buckets
 
 
-def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
+def slice_np_buckets(np_buckets, slice_dict):
     """
     Takes slices of the tensors in Numpy buckets
     over the variables in idx_parallel.
@@ -92,15 +58,13 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     ----------
     np_buckets : list of lists
               Buckets containing Numpy tensors
-    slice_var_dict : dict
-              Current values of the sliced variables
-    idx_parallel : list
-              Indices to parallelize over
-
+    slice_dict : dict
+              Current subtensor along the sliced variables
+              in the form {variable: slice}
     Returns
     -------
     sliced_buckets : list of lists
-              buckets with sliced gates
+              buckets with sliced tensors
     """
     # import pdb
     # pdb.set_trace()
@@ -109,28 +73,78 @@ def slice_np_buckets(np_buckets, slice_var_dict, idx_parallel):
     sliced_buckets = []
     for bucket in np_buckets:
         sliced_bucket = []
-        for tensor, variables in bucket:
+        for tensor in bucket:
             slice_bounds = []
-            new_shape = []
-            for var in variables:
-                if var in idx_parallel:
-                    slice_bounds.append(slice_var_dict[f'q_{var}'])
-                    new_shape.append(1)
-                else:
+            for idx in tensor.indices:
+                try:
+                    slice_bounds.append(slice_dict[idx])
+                except KeyError:
                     slice_bounds.append(slice(None))
-                    new_shape.append(2)
             sliced_bucket.append(
-                (np.reshape(
-                    tensor[tuple(slice_bounds)],
-                    new_shape),
-                 variables)
+                tensor.copy(data=tensor.data[tuple(slice_bounds)])
             )
         sliced_buckets.append(sliced_bucket)
 
     return sliced_buckets
 
 
-def process_bucket_np(bucket, nosum=False):
+def get_sliced_np_buckets(buckets, data_dict, slice_dict):
+    """
+    Takes placeholder buckets and populates them with
+    actual sliced values. This function is a sum of
+    :func:`get_np_buckets` and :func:`slice_np_buckets`
+
+    Parameters
+    ----------
+    buckets : list of list
+              buckets as returned by :py:meth:`circ2buckets`
+              and :py:meth:`reorder_buckets`.
+    data_dict : dict
+              dictionary containing values for the placeholder Tensors
+    slice_dict : dict
+              Current subtensor along the sliced variables
+              in the form {variable: slice}
+    Returns
+    -------
+    sliced_buckets : list of lists
+              buckets with sliced Numpy tensors
+    """
+    # Create np buckets from buckets
+    sliced_buckets = []
+    for bucket in buckets:
+        sliced_bucket = []
+        for tensor in bucket:
+            # get data
+            # sort tensor dimensions
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
+            data = np.transpose(data_dict[tensor.data_key],
+                                transpose_order)
+            # transpose indices
+            indices_sorted = [tensor.indices[pp]
+                              for pp in transpose_order]
+
+            # slice data
+            slice_bounds = []
+            for idx in indices_sorted:
+                try:
+                    slice_bounds.append(slice_dict[idx])
+                except KeyError:
+                    slice_bounds.append(slice(None))
+
+            data = data[tuple(slice_bounds)]
+
+            # update indices
+            indices_sliced = [idx.copy(size=size) for idx, size in
+                              zip(indices_sorted, data.shape)]
+
+            sliced_bucket.append(
+                tensor.copy(indices=indices_sliced, data=data))
+        sliced_buckets.append(sliced_bucket)
+
+    return sliced_buckets
+
+
+def process_bucket_np(bucket, no_sum=False):
     """
     Process bucket in the bucket elimination algorithm.
     We multiply all tensors in the bucket and sum over the
@@ -141,26 +155,46 @@ def process_bucket_np(bucket, nosum=False):
     ----------
     bucket : list
            List containing tuples of tensors (gates) with their indices.
-    nosum : bool, optional
-           If we do not sum over the variable of the bucket
+
+    no_sum : bool
+           If no summation should be done over the buckets's variable
 
     Returns
     -------
-    tensor : tuple
-           array and a list of its indices
+    tensor : optimizer.Tensor
+           wrapper tensor object holding the result
     """
-    result, variables = bucket[0]
+    result_indices = bucket[0].indices
+    result_data = bucket[0].data
 
-    for tensor, variables_current in bucket[1:]:
-        expr = utils.get_einsum_expr(variables, variables_current)
-        result = np.einsum(expr, result, tensor)
-        variables = sorted(list(set(variables + variables_current)))
+    for tensor in bucket[1:]:
+        expr = utils.get_einsum_expr(
+            list(map(int, result_indices)), list(map(int, tensor.indices))
+        )
 
-    if len(variables) > 0:
-        new_variables = variables[1:]
+        result_data = np.einsum(expr, result_data, tensor.data)
+
+        # Merge and sort indices and shapes
+        result_indices = tuple(sorted(
+            set(result_indices + tensor.indices),
+            key=int)
+        )
+
+    if len(result_indices) > 0:
+        if not no_sum:  # trim first index
+            first_index, *result_indices = result_indices
+        else:
+            first_index, *_ = result_indices
+        tag = first_index.identity
+    else:
+        tag = 'f'
+        result_indices = []
 
     # reduce
-    if nosum:
-        return result, variables
+    if no_sum:
+        result = opt.Tensor(f'E{tag}', result_indices,
+                            data=result_data)
     else:
-        return np.sum(result, axis=0), new_variables
+        result = opt.Tensor(f'E{tag}', result_indices,
+                            data=np.sum(result_data, axis=0))
+    return result

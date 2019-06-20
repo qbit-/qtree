@@ -3,6 +3,7 @@ This module implements quantum gates from the CMON set of Google
 """
 import numpy as np
 import re
+import itertools
 import cirq
 
 from src.logger_setup import log
@@ -12,55 +13,68 @@ from cmath import exp
 import src.system_defs as defs
 
 
-class qOperation:
+GLOBAL_ENUMERATE = itertools.count()
+
+
+class Gate:
     """
-    Factory class for quantum gates.
+    Base class for quantum gates.
+    Properties:
+    ----------
+    name: str
+            The name of the gate
+    tensor: numpy.array
+            The gate tensor. For each qubit a gate
+            either introduces a new variable (non-diagonal gate, like X)
+            or does not (diagonal gate, like T). Multiqubit gates
+            can be diagonal on some of the variables, and not diagonal on
+            others (like ccX). The order of dimensions IS ALWAYS
+            (new_a, a, b_new, b, c, d_new, d, ...)
+
+    qubits: tuple
+            Qubits the gate acts on
+
+    changed_qubits : tuple
+            Tuple of ints which states what qubit's bases are changed
+            (along which qubits the gate is not diagonal).
+
+    cirq_op: Cirq.GridQubit
+            Cirq 2D gate. Used for unit tests. Optional
+
+    data_hash: int
+             hash of the gate's tensor. Used to store all gate
+             tensors separately from their identifiers in the code
     """
+    enum = GLOBAL_ENUMERATE
 
-    def factory(self, arg):
-        """
-        Creates appropriate gates from strings of the form:
-
-        | x_1_2 1
-        | cz 3 4
-
-        Parameters
-        ----------
-        arg : str
-              string to use
-        """
-        if isinstance(arg, str):
-            return self._create_from_string(arg)
-
-    def _create_from_string(sefl, s):
-        # log.debug("creating op from '{}'".format(s))
-        m = re.search(
-            r'(?P<operation>h|t|cz|x_1_2|y_1_2) (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?', s)
-        if m is None:
-            raise Exception("file format error in {}".format(s))
-        op_identif = m.group('operation')
-
-        if m.group('qubit2') is not None:
-            q_idx = int(m.group('qubit1')), int(m.group('qubit2'))
-        else:
-            q_idx = int(m.group('qubit1'))
-
-        if op_identif == 'h':
-            return H(q_idx)
-        if op_identif == 't':
-            return T(q_idx)
-        if op_identif == 'cz':
-            return cZ(*q_idx)
-        if op_identif == 'x_1_2':
-            return X_1_2(q_idx)
-        if op_identif == 'y_1_2':
-            return Y_1_2(q_idx)
+    def __init__(self, *qubits):
+        self._check_qubit_count(qubits)
+        self._qubits = tuple(qubits)
+        # supposedly unique id for a class
+        self._data_key = hash((self.name, id(self.__class__)))
 
     def _check_qubit_count(self, qubits):
-        if len(qubits) != self.n_qubit:
+        n_qubits = len(self.tensor.shape) - len(self._changes_qubits)
+        if len(qubits) != n_qubits:
             raise ValueError(
                 "Wrong number of qubits: {}, required: {}".format(
-                    len(qubits), self.n_qubit))
+                    len(qubits), n_qubits))
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    @property
+    def qubits(self):
+        return self._qubits
+
+    @property
+    def data_key(self):
+        return self._data_key
+
+    @property
+    def changed_qubits(self):
+        return tuple(self._qubits[idx] for idx in self._changes_qubits)
 
     def to_cirq_2d_circ_op(self, side_length):
         return self.cirq_op(
@@ -70,131 +84,146 @@ class qOperation:
         )
 
     def __str__(self):
-        return "<{} operator on {}>".format(self.name, self._qubits)
+        return "{}({})".format(self.name,
+                               ','.join(map(str, self._qubits)))
 
     def __repr__(self):
         return self.__str__()
 
-    def apply(self, vec):
-        return np.dot(self.matr, vec)
+
+class M(Gate):
+    """
+    Measurement gate. This is essentially the identity operator, but
+    it forces the inntroduction of a variable in the graphical model
+    """
+    tensor = np.array([[1, 0], [0, 1]], dtype=defs.NP_ARRAY_TYPE)
+    cirq_op = cirq.I
+    _changes_qubits = (0, )
 
 
-class H(qOperation):
+class I(Gate):
+    tensor = np.array([1, 1], dtype=defs.NP_ARRAY_TYPE)
+    cirq_op = cirq.I
+    _changes_qubits = tuple()
+
+
+class H(Gate):
     """
     Hadamard gate
     """
-    matrix = 1/sqrt(2) * np.array([[1j,  1j],
-                                   [1j, -1j]],
+    tensor = 1/sqrt(2) * np.array([[1,  1],
+                                   [1, -1]],
                                   dtype=defs.NP_ARRAY_TYPE)
-    name = 'h'
     cirq_op = cirq.H
-    diagonal = False
-    n_qubit = 1
-
-    cirq_op = cirq.H
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = (0, )
 
 
-class cZ(qOperation):
+class cZ(Gate):
     """
     Controlled :math:`Z` gate
     """
-    matrix = np.array([[1.+0.j,  0.+0.j,  0.+0.j,  0.+0.j],
-                       [0.+0.j,  1.+0.j,  0.+0.j,  0.+0.j],
-                       [0.+0.j,  0.+0.j,  1,  0.+0.j],
-                       [0.+0.j,  0.+0.j,  0.+0.j, -1]],
-                      dtype=defs.NP_ARRAY_TYPE)
-    name = 'cz'
-    diagonal = True
-    n_qubit = 2
-
+    tensor = np.array([[1, 1],
+                       [1, -1]], dtype=defs.NP_ARRAY_TYPE)
     cirq_op = cirq.CZ
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = tuple()
 
 
-class T(qOperation):
+class Z(Gate):
+    """
+    :math:`Z`-gate
+    """
+    tensor = np.array([1, -1],
+                      dtype=defs.NP_ARRAY_TYPE)
+    cirq_op = cirq.Z
+    _changes_qubits = tuple()
+
+
+class T(Gate):
     """
     :math:`T`-gate
     """
-    matrix = np.array([[exp(-1.j*pi/8),  0],
-                       [0,  exp(1.j*pi/8)]],
+    tensor = np.array([1, exp(1.j*pi/4)],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 't'
-    n_qubit = 1
-
     cirq_op = cirq.T
-    diagonal = True
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = tuple()
 
 
-class X_1_2(qOperation):
-    r"""
+class S(Gate):
+    """
+    :math:`S`-gate
+    """
+    tensor = np.array([1, exp(1.j*pi/2)],
+                      dtype=defs.NP_ARRAY_TYPE)
+    cirq_op = cirq.S
+    _changes_qubits = tuple()
+
+
+class X_1_2(Gate):
+    """
     :math:`X^{1/2}`
     gate
     """
-    matrix = 1/sqrt(2) * np.array([[1, 1j],
-                                   [1j, 1]],
-                                  dtype=defs.NP_ARRAY_TYPE)
-    name = 'x_1_2'
-    diagonal = False
-    n_qubit = 1
+    tensor = 1/2 * np.array([[1 + 1j, 1 - 1j],
+                             [1 - 1j, 1 + 1j]],
+                            dtype=defs.NP_ARRAY_TYPE)
 
     def cirq_op(self, x): return cirq.X(x)**0.5
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = (0, )
 
 
-class Y_1_2(qOperation):
+class Y_1_2(Gate):
     r"""
     :math:`Y^{1/2}` gate
     """
-    matrix = 1/sqrt(2) * np.array([[1, -1],
-                                   [1,  1]],
-                                  dtype=defs.NP_ARRAY_TYPE)
-    name = 'y_1_2'
-    diagonal = False
-    n_qubit = 1
+    tensor = 1/2 * np.array([[1 + 1j, -1 - 1j],
+                             [1 + 1j, 1 + 1j]],
+                            dtype=defs.NP_ARRAY_TYPE)
 
     def cirq_op(self, x): return cirq.Y(x)**0.5
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = (0, )
 
 
-class X(qOperation):
-    matrix = np.array([[0.+0.j, 1.+0j],
-                       [1.+0j, 0.+0j]],
+class X(Gate):
+    tensor = np.array([[0, 1],
+                       [1, 0]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'x'
-    diagonal = False
-    n_qubit = 1
 
     def cirq_op(self, x): return cirq.X(x)
-
-    def __init__(self, *qubits):
-        self._check_qubit_count(qubits)
-        self._qubits = qubits
+    _changes_qubits = (0, )
 
 
-class Y(qOperation):
-    matrix = np.array([[0.-1j, 0.+0j],
-                       [0.+0j, 0.+1j]],
+# class cX(Gate):
+#     raise NotImplemented
+#     diagonal = False
+#     n_qubit = 1
+
+#     def cirq_op(self, x): raise NotImplemented('No cX operation in Cirq')
+
+
+class Y(Gate):
+    tensor = np.array([[0, -1j],
+                       [1j, 0]],
                       dtype=defs.NP_ARRAY_TYPE)
-    name = 'y'
-    diagonal = False
-    n_qubit = 1
+
+    def cirq_op(self, x): return cirq.Y(x)
+    _changes_qubits = (0, )
+
+
+class ZPhase(Gate):
+    """Arbitrary :math:`Z` rotation"""
+
+    def __init__(self, *qubits, alpha):
+        self._alpha = alpha
+        self.tensor = np.array([1, exp(1.j*alpha*pi)],
+                               dtype=defs.NP_ARRAY_TYPE)
+        self._qubits = tuple(qubits)
+        self._check_qubit_count(qubits)
+
+    def __str__(self):
+        return "{}[a={:.2f}]({})".format(type(self).__name__,
+                                         self._alpha,
+                                         ','.join(map(str, self._qubits)))
+    _changes_qubits = tuple()
 
 
 def read_circuit_file(filename, max_depth=None):
@@ -216,6 +245,20 @@ def read_circuit_file(filename, max_depth=None):
     circuit : list of lists
             quantum circuit as a list of layers of gates
     """
+    label_to_gate_dict = {
+        'i': I,
+        'h': H,
+        't': T,
+        'z': Z,
+        'cz': cZ,
+        'x': X,
+        'y': Y,
+        'x_1_2': X_1_2,
+        'y_1_2': Y_1_2,
+    }
+
+    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r') (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?'
+
     log.info("reading file {}".format(filename))
     circuit = []
     circuit_layer = []
@@ -243,7 +286,18 @@ def read_circuit_file(filename, max_depth=None):
                 current_layer = layer_num
 
             op_str = line[m.end():]
-            op = qOperation().factory(op_str)
+            m = re.search(operation_search_patt, op_str)
+            if m is None:
+                raise Exception("file format error in {}".format(op_str))
+
+            op_identif = m.group('operation')
+
+            if m.group('qubit2') is not None:
+                q_idx = (int(m.group('qubit1')), int(m.group('qubit2')))
+            else:
+                q_idx = (int(m.group('qubit1')),)
+
+            op = label_to_gate_dict[op_identif](*q_idx)
             circuit_layer.append(op)
 
         circuit.append(circuit_layer)  # last layer
@@ -252,15 +306,3 @@ def read_circuit_file(filename, max_depth=None):
             log.info("Ignored {} layers".format(n_ignored_layers))
 
     return qubit_count, circuit
-
-
-# Dictionary containing (compressed) entries of all operators
-# in this module. Only nonzero entries are listed, which means diagonal
-# for diagonal matrices or double diagonal for diagonal fourth order tensors
-operator_matrices_dict = {
-    'h': H(1).matrix,
-    'x_1_2': X_1_2(1).matrix,
-    'y_1_2': Y_1_2(1).matrix,
-    't': np.diag(T(1).matrix),
-    'cz': np.diag(cZ(1, 1).matrix).reshape([2, 2])
-}

@@ -7,137 +7,147 @@ module, and example programs are listed in :py:mod:`cirq_test` module.
 import numpy as np
 import tensorflow as tf
 import src.operators as ops
+import src.optimizer as opt
 import src.utils as utils
+import src.system_defs as defs
 
 
-def get_tf_buckets(buckets, qubit_count):
+def get_sliced_tf_buckets(buckets, slice_dict):
     """
-    Takes buckets and returns their Tensorflow counterparts, along
-    with a placeholder dictionary to fill with actual gate values
-    later.
+    Takes buckets and returns their Tensorflow counterparts, where
+    all data attributes of tensors are filled with Tensorflow
+    placeholders. 
 
     Parameters
     ----------
     buckets : list of list
-              buckets as returned by :py:meth:`read_buckets`
+              buckets as returned by :py:meth:`read_buckets`y
               and :py:meth:`reorder_buckets`.
-    qubit_count : int
-              total number of qubits
+    slice_dict : dict
+              dictionary of {variable : slice} pairs
 
     Returns
     -------
     tf_buckets : list of lists
-               Buckets having Tensorflow tensors in place of gate labels
-    placeholder_dict : dict
-               Dictionary containing {gate_label : tensorflow_placeholder}
-               pairs
+               Buckets having Tensorflow tensors in place of Tensor.data
+               attribute
+    placeholder_dict: dict
+               dictionary of the form {placeholder: data_key}.
     """
     # import pdb
     # pdb.set_trace()
 
-    # Define ingredients
-    X_1_2 = tf.placeholder(tf.complex64, [2, 2], 'x_1_2')
-    Y_1_2 = tf.placeholder(tf.complex64, [2, 2], 'y_1_2')
-    H = tf.placeholder(tf.complex64, [2, 2], 'h')
-    cZ = tf.placeholder(tf.complex64, [2, 2], 'cz')
-    T = tf.placeholder(tf.complex64, [2], 't')
-
-    placeholder_dict = {'x_1_2': X_1_2, 'y_1_2': Y_1_2,
-                        'h': H, 'cz': cZ, 't': T}
-
-    # Add input vectors
-    input_names = ['I{}'.format(ii)
-                   for ii in range(1, qubit_count+1)]
-    inputs = [tf.placeholder(tf.complex64, [2], name)
-              for name in input_names]
-
-    placeholder_dict.update(
-        dict(zip(
-            input_names, inputs))
-    )
-
-    # Add output vectors
-    output_names = ['O{}'.format(ii)
-                    for ii in range(1, qubit_count+1)]
-    outputs = [tf.placeholder(tf.complex64, [2], name)
-               for name in output_names]
-
-    placeholder_dict.update(
-        dict(zip(
-            output_names, outputs))
-    )
-
-    # Create tf buckets from unordered buckets
+    placeholder_dict = {}
+    # Create tf buckets from  buckets
     tf_buckets = []
     for bucket in buckets:
         tf_bucket = []
-        for label, variables in bucket:
+        for tensor in bucket:
+            # Save the reference to placeholder in the dictionary
+            placeholder = tf.placeholder(defs.TF_ARRAY_TYPE,
+                                         tensor.shape, name=tensor.name)
+            placeholder_dict[placeholder] = tensor.data_key
 
-            # sort tensor dimensions (reversed order)
-            transpose_order = np.argsort(variables)
-            variables = sorted(variables)
+            # sort tensor dimensions
+            transpose_order = np.argsort(list(map(int, tensor.indices)))
+            data = tf.transpose(placeholder, transpose_order)
 
-            tf_bucket.append(
-                (
-                    tf.transpose(placeholder_dict[label],
-                                 perm=transpose_order),
-                    variables
-                )
-            )
+            # transpose indices
+            indices_sorted = [tensor.indices[pp] for pp
+                              in transpose_order]
+
+            # slice tensor
+            slice_bounds = []
+            indices_sliced = []
+            for idx in indices_sorted:
+                if idx in slice_dict:
+                    # insert slice variables into the placeholder dict
+                    slice_start = tf.placeholder(
+                        tf.int32,
+                        name=idx.name + '_start')
+                    slice_stop = tf.placeholder(
+                        tf.int32,
+                        name=idx.name + '_stop')
+                    placeholder_dict[slice_start] = (idx, 'start')
+                    placeholder_dict[slice_stop] = (idx, 'stop')
+                    slice_bounds.append(slice(slice_start, slice_stop))
+
+                    # update the size of tensor variables
+                    indices_sliced.append(idx.copy(
+                        size=slice_dict[idx].stop-slice_dict[idx].start))
+                else:
+                    slice_bounds.append(slice(None))
+                    indices_sliced.append(idx)
+
+            data = data[tuple(slice_bounds)]
+            # Create new tensor with a placeholder for data
+            new_tensor = tensor.copy(
+                indices=indices_sliced,
+                data=data)
+
+            tf_bucket.append(new_tensor)
+
         tf_buckets.append(tf_bucket)
 
     return tf_buckets, placeholder_dict
 
 
-def assign_placeholder_values(placeholder_dict, target_state, n_qubits):
+def assign_tensor_placeholders(placeholder_dict, data_dict):
     """
-    Builds feed dictionary for Tensorflow from the placeholder dictionary,    which holds placeholders of all gates in the circuit,
-    and target state.
+    Builds feed dictionary for Tensorflow from the placeholder
+    dictionary, which holds placeholders of all gates in the circuit,
+    and a global data dictionary.
 
     Parameters
     ----------
     placeholder_dict : dict
-           Dictionary of {label : tensorflow_placeholder} pairs
-    target_state : int
-           Integer which encodes the state of qubits
-    n_qubits : int
-           Number of qubits in the circuit
+           Dictionary of {tensorflow.placeholder : data_key} pairs
+    data_dict : dict
+           Dictionary of {data_key : np.array} pairs
 
     Returns
     -------
     feed_dict : dict
           Dictionary to feed in Tensorflow session
     """
-    # Actual values of gates
-    values_dict = ops.operator_matrices_dict
+    feed_dict = {}
 
-    # Fill all common gate's placeholders
-    feed_dict = {placeholder_dict[key]: values_dict[key]
-                 for key in values_dict.keys()}
+    # Try to fill all fixed gates placeholders
+    for placeholder, data_key in placeholder_dict.items():
+        try:
+            feed_dict[placeholder] = data_dict[data_key]
+        except KeyError:
+            pass
 
-    # Fill placeholders for the input layer
-    input_dict = {}
-    for ii, bc_state in enumerate(
-            utils.qubit_vector_generator(0, n_qubits)):
-        input_dict.update({
-            # numeration starts at 1!
-            'I{}'.format(ii+1): bc_state @ values_dict['h']
-        })
-    input_feed_dict = {placeholder_dict[key]                       : val for key, val in input_dict.items()}
+    return feed_dict
 
-    feed_dict.update(input_feed_dict)
 
-    # fill placeholders for the output layer
-    output_dict = {}
-    for ii, bc_state in enumerate(
-            utils.qubit_vector_generator(target_state, n_qubits)):
-        output_dict.update({
-            # numeration starts at 1!
-            'O{}'.format(ii+1): values_dict['h'] @ bc_state
-        })
-    output_feed_dict = {placeholder_dict[key]                        : val for key, val in output_dict.items()}
+def assign_variable_placeholders(placeholder_dict, slice_dict):
+    """
+    Builds feed dictionary for Tensorflow from the placeholder
+    dictionary which holds information about variables
+    and variable slice information
 
-    feed_dict.update(output_feed_dict)
+    Parameters
+    ----------
+    placeholder_dict : dict
+           Dictionary of {tensorflow.placeholder : data_key} pairs
+    slice_dict : dict
+           Dictionary of {variable : slice} pairs
+
+    Returns
+    -------
+    feed_dict : dict
+          Dictionary to feed in Tensorflow session
+    """
+    feed_dict = {}
+    # Try to fill all variables with placeholders
+    for placeholder, data_key in placeholder_dict.items():
+        var, slice_end = data_key
+        try:
+            feed_dict[placeholder] = getattr(slice_dict[var], slice_end)
+        except KeyError:
+            pass
 
     return feed_dict
 
@@ -239,35 +249,58 @@ def process_bucket_tf(bucket):
 
     Returns
     -------
-    tensor : tuple
-           array and a list of its indices
+    tensor : optimizer.Tensor
+           wrapper tensor object holding the resulting computational graph
     """
-    result, variables = bucket[0]
+    result_data = bucket[0].data
+    result_indices = bucket[0].indices
 
-    for tensor, variables_current in bucket[1:]:
-        expr = utils.get_einsum_expr(variables, variables_current)
-        result = tf.einsum(expr, result, tensor)
-        variables = sorted(list(set(variables + variables_current)))
+    for tensor in bucket[1:]:
+        expr = utils.get_einsum_expr(list(map(int, result_indices)),
+                                     list(map(int, tensor.indices)))
 
-    if len(variables) > 1:
-        variables = variables[1:]
+        result_data = tf.einsum(expr, result_data, tensor.data)
+        # Merge and sort indices and shapes
+        result_indices = tuple(sorted(
+            set(result_indices + tensor.indices),
+            key=int))
+
+    if len(result_indices) > 0:
+        first_index, *result_indices = result_indices
+        tag = first_index.identity
     else:
-        variables = []
+        tag = 'f'
+        result_indices = []
 
     # reduce
-    return tf.reduce_sum(result, axis=0), variables
+    result = opt.Tensor(f'E{tag}', result_indices,
+                        data=tf.reduce_sum(result_data, axis=0))
+    return result
 
 
-def extract_placeholder_dict(tf_graph, variable_names):
+def eval_tf_buckets(buckets, feed_dict):
     """
-    Extract placeholders from the tensorflow computation Graph.
+    This is a test function which substitutes actual numpy tensors
+    in place of buckets
 
+    Parameters
+    ----------
+    buckets : list of lists
+              holds Tensors with tensorflow placeholders in place of data
+    feed_dict : dict
+              dictionary of {placeholder : numpy.array} pairs
     Returns
     -------
-    pdict : dict
-        List containing {label : tensorflow placeholder} pairs
+    np_buckets : list of lists
+              buckets with Tensors where data are numpy arrays
     """
-    return {
-        name: tf_graph.get_tensor_by_name(name + ':0') for
-        name in variable_names
-    }
+
+    np_buckets = []
+    for bucket in buckets:
+        np_bucket = []
+        for tensor in bucket:
+            data = run_tf_session(tensor.data, feed_dict)
+            np_bucket.append(tensor.copy(data=data))
+        np_buckets.append(np_bucket)
+
+    return np_buckets

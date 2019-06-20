@@ -5,80 +5,60 @@ for dependency disentanglement purposes.
 """
 import numpy as np
 
-UP = np.array([1, 0])
-DOWN = np.array([0, 1])
 
-
-def int_to_bitstring(integer, width):
+def slice_from_bits(value, vars_to_slice):
     """
-    Transforms an integer to its bitsting of a specified width
+    Generates a 1x1x1x1x..x1 slice (a single entry) of a set of
+    variables. The order of variables is given by
+    the input list order and their ranges are retrieved from variable
+    objects. The integer is decomposed into a multiindex
+    The width of the value is the length of the variable list
+
+    value: int
+           Linear index in the size(v1) .. size(vN) array
+    vars_to_slice: list of Var
+           Variables defining the multidimensional array
+    """
+
+    dimensions = [var.size for var in vars_to_slice]
+    multiindex = np.unravel_index(value, dimensions)
+
+    return {var: slice(at, at+1) for var, at
+            in zip(vars_to_slice, multiindex)}
+
+
+def slice_values_generator(vars_to_slice, offset, comm_size):
+    """
+    Generates dictionaries containing consequtive slices for
+    each variable. Slices are generated according to the order
+    of variables in var_parallel, in the big endian order (last
+    element in var_parallel changes fastest).
 
     Parameters
     ----------
-    integer : int
-           integer number
-    width : int
-           width of the binary representation (padded with zeros)
-
-    Returns
-    -------
-    bitsting : str
-           string of binary representation of integer
-    """
-    bitstring = bin(integer)[2:]
-    if len(bitstring) < width:
-        bitstring = '0' * (width - len(bitstring)) + bitstring
-    return bitstring
-
-
-def qubit_vector_generator(target_state, n_qubits):
-    """
-    Generates a sequence of qubits corresponding to the
-    binary representation of the target_state.
-
-    Parameters
-    ----------
-    target_state : int
-            integer whose binary representation encodes the target_state
-    n_qubits : int
-            number of qubits the target state describes
-
-    Yields
-    ------
-    qubit : numpy.array of size [2]
-          UP or DOWN state of a single qubit
-    """
-    bitstring = int_to_bitstring(target_state, n_qubits)
-    for bit in bitstring:
-        yield DOWN if bit == '0' else UP
-
-
-def slice_values_generator(comm_size, rank, idx_parallel):
-    """
-    Generates dictionaries containing consequtive values for
-    each variable we parallelized over.
-
-    Parameters
-    ----------
-    comm_size : int
-            number of parallel workers
-    rank : int
-            parallel worker identificator
-    idx_parallel : list
+    vars_to_slice : list
             variables to parallelize over
+    offset : int
+            offset to start from. Usually equals to rank
+    comm_size : int
+            Step size in the task array. Usually the number
+            of parallel workers
 
     Yields
     ------
     slice_dict : dict
-            dictionary of {idx_parallel : value} pairs
+            dictionary of {var_parallel : value} pairs
     """
-    var_names = ["q_{}".format(var) for var in idx_parallel]
+    dimensions = [var.size for var in vars_to_slice]
+    total_tasks = np.prod(dimensions)
 
     # iterate over all possible values of variables idx_parallel
-    for ii in range(rank, 2**len(idx_parallel), comm_size):
-        bitstring = int_to_bitstring(integer=ii, width=len(idx_parallel))
-        int_sequence = map(int, bitstring)
-        yield dict(zip(var_names, int_sequence))
+    for pos in range(offset, total_tasks, comm_size):
+        multiindex = list(np.unravel_index(pos, dimensions))
+
+        yield {var_parallel: slice(at, at+1)
+               for var_parallel, at
+               in zip(vars_to_slice, multiindex)}
 
 
 def num_to_alpha(integer):
@@ -151,3 +131,55 @@ def get_einsum_expr(idx1, idx2):
     str2 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in idx2)
     str3 = ''.join(num_to_alpha(idx_to_least_idx[ii]) for ii in result_indices)
     return str1 + ',' + str2 + '->' + str3
+
+
+def sequential_profile_decorator(filename=None):
+    """
+    Profiles execution of a function and writes stats to
+    the specified file
+    """
+    import cProfile
+
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename
+                pr.dump_stats(filename_r)
+
+            return result
+        return wrap_f
+    return prof_decorator
+
+
+def mpi_profile_decorator(comm, filename=None):
+    """
+    Profiles execution of MPI processes and writes stats to
+    separate files
+    """
+    import cProfile
+
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename + ".{}".format(comm.rank)
+                pr.dump_stats(filename_r)
+
+            return result
+        return wrap_f
+    return prof_decorator
+
+

@@ -329,16 +329,15 @@ def plot_compare_step_greedy(
     fig.savefig(fig_filename)
 
 
-def test_split_with_mem_constraint(filename, constraints, step_by=1):
+def test_split_with_mem_constraint(
+        filename='inst_2x2_7_0.txt', constraints=[1e2, 1e3], step_by=1):
     """
     Test the mem constraint contraction splitting. Input is read
     from filename, for each constraint the treewidth and attained
     cost is printed
     """
-    n_qubits, buckets, free_vars = opt.read_buckets(filename)
-    graph_raw = opt.buckets2graph(buckets)
-
-    n_var_total = graph_raw.number_of_nodes()
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    graph_raw = gm.circ2graph(n_qubits, circuit)
 
     results = []
     for mem_constraint in constraints:
