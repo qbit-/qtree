@@ -6,8 +6,8 @@ import networkx as nx
 import subprocess
 import os
 
-import src.system_defs as defs
-from src.logger_setup import log
+import qtree.system_defs as defs
+from qtree.logger_setup import log
 
 
 def gen_cnf(filename, graph):

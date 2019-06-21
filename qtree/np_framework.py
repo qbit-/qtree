@@ -1,14 +1,14 @@
 """
 This file implements Numpy framework of the
 simulator. It's main use is in conjunction with the :py:mod:`optimizer`
-module, and example programs are listed in :py:mod:`cirq_test` module.
+module, and example programs are listed in :py:mod:`simulator` module.
 """
 
 import numpy as np
 import copy
-import src.operators as ops
-import src.optimizer as opt
-import src.utils as utils
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.utils as utils
 
 
 def get_np_buckets(buckets, data_dict):

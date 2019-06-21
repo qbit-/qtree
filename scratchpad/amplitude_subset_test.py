@@ -9,12 +9,12 @@ import pandas as pd
 import random
 import copy
 
-import src.optimizer as opt
-import src.graph_model as gm
+import qtree.optimizer as opt
+import qtree.graph_model as gm
 
 import matplotlib.pyplot as plt
 
-from src.logger_setup import log
+from qtree.logger_setup import log
 from functools import partial
 
 SMALL_SIZE = 10

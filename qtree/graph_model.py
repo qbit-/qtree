@@ -13,12 +13,12 @@ import os
 
 from collections import Counter
 
-import src.system_defs as defs
-import src.utils as utils
+import qtree.system_defs as defs
+import qtree.utils as utils
 
-from src.optimizer import Var, Tensor
-from src.quickbb_api import gen_cnf, run_quickbb
-from src.logger_setup import log
+from qtree.optimizer import Var, Tensor
+from qtree.quickbb_api import gen_cnf, run_quickbb
+from qtree.logger_setup import log
 
 random.seed(0)
 
@@ -48,7 +48,7 @@ def circ2graph(qubit_count, circuit, max_depth=None,
             Graph which corresponds to the circuit
     """
     import functools
-    import src.operators as ops
+    import qtree.operators as ops
 
     if max_depth is None:
         max_depth = len(circuit)
@@ -1740,7 +1740,7 @@ def test_get_fillin_graph():
     Test graph filling using the elimination order
     """
     import time
-    import src.operators as ops
+    import qtree.operators as ops
     nq, c = ops.read_circuit_file(
         'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
         # 'inst_2x2_7_1.txt'
@@ -1764,7 +1764,7 @@ def test_is_zero_fillin():
     Test graph filling using the elimination order
     """
     import time
-    import src.operators as ops
+    import qtree.operators as ops
     nq, c = ops.read_circuit_file(
         'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
     )
@@ -1787,7 +1787,7 @@ def test_maximum_cardinality_search():
     """Test maximum cardinality search algorithm"""
 
     # Read graph
-    import src.operators as ops
+    import qtree.operators as ops
     nq, c = ops.read_circuit_file(
         'inst_2x2_7_0.txt'
     )
@@ -1819,7 +1819,7 @@ def test_maximum_cardinality_search():
 
 def test_is_clique():
     """Test is_clique"""
-    import src.operators as ops
+    import qtree.operators as ops
     nq, c = ops.read_circuit_file(
         'inst_2x2_7_0.txt'
     )

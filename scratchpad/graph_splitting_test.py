@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 import itertools
 
-import src.operators as ops
-import src.optimizer as opt
-import src.graph_model as gm
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.graph_model as gm
 
-from src.logger_setup import log
+from qtree.logger_setup import log
 from matplotlib import pyplot as plt
 
 from functools import partial

@@ -2,9 +2,9 @@
 Here we will collect functions to interact with the web visualization
 code
 """
-import src.operators as ops
-import src.optimizer as opt
-import src.graph_model as gm
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.graph_model as gm
 import json
 from networkx.readwrite import json_graph
 import networkx as nx

@@ -9,15 +9,15 @@ import cirq
 import random
 
 
-import src.operators as ops
-import src.optimizer as opt
-import src.graph_model as gm
-import src.np_framework as npfr
-import src.tf_framework as tffr
-import src.utils as utils
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.graph_model as gm
+import qtree.np_framework as npfr
+import qtree.tf_framework as tffr
+import qtree.utils as utils
 
 from mpi4py import MPI
-from src.quickbb_api import gen_cnf, run_quickbb
+from qtree.quickbb_api import gen_cnf, run_quickbb
 
 
 def get_amplitudes_from_cirq(filename, initial_state=0):

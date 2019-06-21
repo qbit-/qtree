@@ -9,10 +9,10 @@ import itertools
 import random
 import re
 import networkx as nx
-import src.utils as utils
-import src.operators as ops
+import qtree.utils as utils
+import qtree.operators as ops
 
-from src.logger_setup import log
+from qtree.logger_setup import log
 
 random.seed(0)
 
@@ -468,7 +468,7 @@ def test_bucket_graph_conversion(filename):
     """
     Test the conversion between Buckets and the contraction multigraph
     """
-    import src.graph_model as gm
+    import qtree.graph_model as gm
 
     # load circuit
     n_qubits, circuit = ops.read_circuit_file(filename)

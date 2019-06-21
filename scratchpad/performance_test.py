@@ -8,15 +8,15 @@ import pandas as pd
 import subprocess
 import cProfile
 
-import src.operators as ops
-import src.optimizer as opt
-import src.graph_model as gm
-import src.tf_framework as tffr
-import src.np_framework as npfr
-import src.utils as utils
-import src.system_defs as defs
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.graph_model as gm
+import qtree.tf_framework as tffr
+import qtree.np_framework as npfr
+import qtree.utils as utils
+import qtree.system_defs as defs
 
-from src.logger_setup import log
+from qtree.logger_setup import log
 from mpi4py import MPI
 from matplotlib import pyplot as plt
 
@@ -667,7 +667,7 @@ def collect_timings_for_multiple_processes(
     for n_proc in n_processes:
         filename = filename_base + '_' + str(n_proc) + '.p'
         sh = "mpiexec -n {} -binding -bind-to:core ".format(n_proc)
-        sh += "python -c 'from src.performance_test import collect_timings_mpi,time_single_amplitude_tf_mpi,time_single_amplitude_np_mpi;collect_timings_mpi(\"{}\",{})'".format(
+        sh += "python -c 'from scratchpad.performance_test import collect_timings_mpi,time_single_amplitude_tf_mpi,time_single_amplitude_np_mpi;collect_timings_mpi(\"{}\",{})'".format(
             filename, ','.join(map(str, extra_args)))
         print(sh)
 

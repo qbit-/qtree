@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 import itertools as it
 
 
-import src.optimizer as opt
-import src.graph_model as gm
-import src.np_framework as npfr
+import qtree.optimizer as opt
+import qtree.graph_model as gm
+import qtree.np_framework as npfr
 
 
 from numpy.compat import basestring

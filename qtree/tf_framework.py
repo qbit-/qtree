@@ -1,15 +1,15 @@
 """
 This file implements Tensorflow framework of the
 simulator. It's main use is in conjunction with the :py:mod:`optimizer`
-module, and example programs are listed in :py:mod:`cirq_test` module.
+module, and example programs are listed in :py:mod:`simulator` module.
 """
 
 import numpy as np
 import tensorflow as tf
-import src.operators as ops
-import src.optimizer as opt
-import src.utils as utils
-import src.system_defs as defs
+import qtree.operators as ops
+import qtree.optimizer as opt
+import qtree.utils as utils
+import qtree.system_defs as defs
 
 
 def get_sliced_tf_buckets(buckets, slice_dict):

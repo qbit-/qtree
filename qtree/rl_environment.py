@@ -4,7 +4,7 @@ for computing the tree decomposition of the expression graphs
 """
 import numpy as np
 import networkx as nx
-import src.graph_model as gm
+import qtree.graph_model as gm
 import copy
 import random
 

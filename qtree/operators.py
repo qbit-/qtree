@@ -6,11 +6,11 @@ import re
 import itertools
 import cirq
 
-from src.logger_setup import log
+from qtree.logger_setup import log
 from math import sqrt, pi
 from cmath import exp
 
-import src.system_defs as defs
+import qtree.system_defs as defs
 
 
 GLOBAL_ENUMERATE = itertools.count()
