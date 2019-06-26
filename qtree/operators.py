@@ -91,6 +91,59 @@ class Gate:
         return self.__str__()
 
 
+class ParametricGate(Gate):
+    """
+    Gate that may have parameters
+
+    Properties:
+    ----------
+    name: str
+            The name of the gate
+    tensor: numpy.array
+            The gate tensor. For each qubit a gate
+            either introduces a new variable (non-diagonal gate, like X)
+            or does not (diagonal gate, like T). Multiqubit gates
+            can be diagonal on some of the variables, and not diagonal on
+            others (like ccX). The order of dimensions IS ALWAYS
+            (new_a, a, b_new, b, c, d_new, d, ...)
+
+    qubits: tuple
+            Qubits the gate acts on
+
+    changed_qubits : tuple
+            Tuple of ints which states what qubit's bases are changed
+            (along which qubits the gate is not diagonal).
+
+    cirq_op: Cirq.GridQubit
+            Cirq 2D gate. Used for unit tests. Optional
+
+    data_key: int
+             Unique identifier of the gate's data. Data of
+             tensors is stored separately from their identifiers
+    parameters: dict
+             Parameters used by the gate
+    """
+    def __init__(self, *qubits, **parameters):
+        self._qubits = tuple(qubits)
+        # supposedly unique id for an instance
+        self._data_key = hash((self.name, id(self)))
+        self._create_tensor(**parameters)
+        self._check_qubit_count(qubits)
+
+    @property
+    def parameters(self):
+        return self._parameters
+
+    def __str__(self):
+        return ("{}".format(type(self).__name__) +
+                "[" + ",".join("{}={:.2f}".format(
+                    param_name, param_value) for
+                               param_name, param_value in
+                               sorted(self._parameters.items(),
+                                      key=lambda pair: pair[0]))
+                + "]({})".format(','.join(map(str, self._qubits))))
+
+
 class M(Gate):
     """
     Measurement gate. This is essentially the identity operator, but
@@ -209,21 +262,15 @@ class Y(Gate):
     _changes_qubits = (0, )
 
 
-class ZPhase(Gate):
+class ZPhase(ParametricGate):
     """Arbitrary :math:`Z` rotation"""
 
-    def __init__(self, *qubits, alpha):
-        self._alpha = alpha
-        self.tensor = np.array([1, exp(1.j*alpha*pi)],
-                               dtype=defs.NP_ARRAY_TYPE)
-        self._qubits = tuple(qubits)
-        self._check_qubit_count(qubits)
-
-    def __str__(self):
-        return "{}[a={:.2f}]({})".format(type(self).__name__,
-                                         self._alpha,
-                                         ','.join(map(str, self._qubits)))
     _changes_qubits = tuple()
+
+    def _create_tensor(self, alpha=1):
+        """Phase along Z axis"""
+        self.tensor = np.array([1., np.exp(1j * np.pi * alpha)])
+        self._parameters = {'alpha': alpha}
 
 
 def read_circuit_file(filename, max_depth=None):

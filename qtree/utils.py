@@ -6,6 +6,25 @@ for dependency disentanglement purposes.
 import numpy as np
 
 
+def unravel_index(value, dimensions):
+    """
+    Python analog of the numpy.unravel_index
+    Supports more than 32 dimensions
+    """
+    unravel_size = np.prod(dimensions)
+    val = value
+    coords = [None, ] * len(dimensions)
+
+    for ii in range(len(dimensions) - 1, -1, -1):
+        if val < 0:
+            raise ValueError('Index is out of bounds for array with size'
+                             ' {}'.format(unravel_size))
+        tmp = val // dimensions[ii]
+        coords[ii] = val % dimensions[ii]
+        val = tmp
+    return tuple(coords)
+
+
 def slice_from_bits(value, vars_to_slice):
     """
     Generates a 1x1x1x1x..x1 slice (a single entry) of a set of
@@ -21,7 +40,7 @@ def slice_from_bits(value, vars_to_slice):
     """
 
     dimensions = [var.size for var in vars_to_slice]
-    multiindex = np.unravel_index(value, dimensions)
+    multiindex = unravel_index(value, dimensions)
 
     return {var: slice(at, at+1) for var, at
             in zip(vars_to_slice, multiindex)}
@@ -54,7 +73,7 @@ def slice_values_generator(vars_to_slice, offset, comm_size):
 
     # iterate over all possible values of variables idx_parallel
     for pos in range(offset, total_tasks, comm_size):
-        multiindex = list(np.unravel_index(pos, dimensions))
+        multiindex = list(unravel_index(pos, dimensions))
 
         yield {var_parallel: slice(at, at+1)
                for var_parallel, at

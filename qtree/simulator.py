@@ -641,7 +641,9 @@ def test_bucket_operation_speed():
         ignore_variables=bra_vars+ket_vars)
 
     # Get peo
-    peo = list(np.random.permutation(graph.nodes))
+    peo = [opt.Var(node, name=data['name'], size=data['size']) for
+           node, data in graph.nodes(data=True)]
+    peo = list(np.random.permutation(peo))
 
     # place bra and ket variables to beginning, so these variables
     # will be contracted first
