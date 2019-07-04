@@ -6,14 +6,10 @@ import re
 import itertools
 import cirq
 
+from fractions import Fraction
 from qtree.logger_setup import log
-from math import sqrt, pi
-from cmath import exp
 
 import qtree.system_defs as defs
-
-
-GLOBAL_ENUMERATE = itertools.count()
 
 
 class Gate:
@@ -45,7 +41,6 @@ class Gate:
              hash of the gate's tensor. Used to store all gate
              tensors separately from their identifiers in the code
     """
-    enum = GLOBAL_ENUMERATE
 
     def __init__(self, *qubits):
         self._check_qubit_count(qubits)
@@ -81,6 +76,11 @@ class Gate:
             *[cirq.GridQubit(*np.unravel_index(
                 qubit, [side_length, side_length]))
               for qubit in self._qubits]
+        )
+
+    def to_cirq_1d_circ_op(self):
+        return self.cirq_op(
+            *[cirq.LineQubit(qubit) for qubit in self._qubits]
         )
 
     def __str__(self):
@@ -137,7 +137,7 @@ class ParametricGate(Gate):
     def __str__(self):
         return ("{}".format(type(self).__name__) +
                 "[" + ",".join("{}={:.2f}".format(
-                    param_name, param_value) for
+                    param_name, float(param_value)) for
                                param_name, param_value in
                                sorted(self._parameters.items(),
                                       key=lambda pair: pair[0]))
@@ -164,9 +164,9 @@ class H(Gate):
     """
     Hadamard gate
     """
-    tensor = 1/sqrt(2) * np.array([[1,  1],
-                                   [1, -1]],
-                                  dtype=defs.NP_ARRAY_TYPE)
+    tensor = 1/np.sqrt(2) * np.array([[1,  1],
+                                      [1, -1]],
+                                     dtype=defs.NP_ARRAY_TYPE)
     cirq_op = cirq.H
     _changes_qubits = (0, )
 
@@ -195,19 +195,9 @@ class T(Gate):
     """
     :math:`T`-gate
     """
-    tensor = np.array([1, exp(1.j*pi/4)],
+    tensor = np.array([1, np.exp(1.j*np.pi/4)],
                       dtype=defs.NP_ARRAY_TYPE)
     cirq_op = cirq.T
-    _changes_qubits = tuple()
-
-
-class S(Gate):
-    """
-    :math:`S`-gate
-    """
-    tensor = np.array([1, exp(1.j*pi/2)],
-                      dtype=defs.NP_ARRAY_TYPE)
-    cirq_op = cirq.S
     _changes_qubits = tuple()
 
 
@@ -216,9 +206,9 @@ class X_1_2(Gate):
     :math:`X^{1/2}`
     gate
     """
-    tensor = 1/2 * np.array([[1 + 1j, 1 - 1j],
-                             [1 - 1j, 1 + 1j]],
-                            dtype=defs.NP_ARRAY_TYPE)
+    tensor = Fraction(1, 2) * np.array([[1 + 1j, 1 - 1j],
+                                        [1 - 1j, 1 + 1j]],
+                                       dtype=defs.NP_ARRAY_TYPE)
 
     def cirq_op(self, x): return cirq.X(x)**0.5
     _changes_qubits = (0, )
@@ -228,9 +218,9 @@ class Y_1_2(Gate):
     r"""
     :math:`Y^{1/2}` gate
     """
-    tensor = 1/2 * np.array([[1 + 1j, -1 - 1j],
-                             [1 + 1j, 1 + 1j]],
-                            dtype=defs.NP_ARRAY_TYPE)
+    tensor = Fraction(1, 2) * np.array([[1 + 1j, -1 - 1j],
+                                        [1 + 1j, 1 + 1j]],
+                                       dtype=defs.NP_ARRAY_TYPE)
 
     def cirq_op(self, x): return cirq.Y(x)**0.5
     _changes_qubits = (0, )
@@ -245,12 +235,13 @@ class X(Gate):
     _changes_qubits = (0, )
 
 
-# class cX(Gate):
-#     raise NotImplemented
-#     diagonal = False
-#     n_qubit = 1
-
-#     def cirq_op(self, x): raise NotImplemented('No cX operation in Cirq')
+class cX(Gate):
+    tensor = np.array([[[1., 0.],
+                        [0., 1.]],
+                       [[0., 1.],
+                        [1., 0.]]])
+    _changes_qubits = (1, )
+    cirq_op = cirq.CNOT
 
 
 class Y(Gate):
@@ -263,14 +254,47 @@ class Y(Gate):
 
 
 class ZPhase(ParametricGate):
-    """Arbitrary :math:`Z` rotation"""
+    """Arbitrary :math:`Z` rotation
+    [[1, 0],
+    [0, g]],  where
+
+    g = exp(i·π·t)
+    """
 
     _changes_qubits = tuple()
 
     def _create_tensor(self, alpha=1):
-        """Phase along Z axis"""
+        """Rotation along Z axis"""
         self.tensor = np.array([1., np.exp(1j * np.pi * alpha)])
         self._parameters = {'alpha': alpha}
+
+    def cirq_op(self, x): return cirq.ZPowGate(
+            exponent=float(self._parameters['alpha']))(x)
+
+
+class XPhase(ParametricGate):
+    """Arbitrary :math:`X` rotation
+    [[g·c, -i·g·s],
+    [-i·g·s, g·c]], where
+
+    c = cos(π·alpha/2), s = sin(π·alpha/2), g = exp(i·π·alpha/2).
+    """
+
+    _changes_qubits = (0, )
+
+    def _create_tensor(self, alpha=1):
+        """Rotation along X axis"""
+        c = np.cos(np.pi*alpha/2)
+        s = np.sin(np.pi*alpha/2)
+        g = np.exp(1j*np.pi*alpha/2)
+
+        self.tensor = np.array([[g*c, -1j*g*s],
+                                [-1j*g*s, g*c]])
+
+        self._parameters = {'alpha': alpha}
+
+    def cirq_op(self, x): return cirq.XPowGate(
+            exponent=float(self._parameters['alpha']))(x)
 
 
 def read_circuit_file(filename, max_depth=None):

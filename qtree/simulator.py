@@ -529,6 +529,58 @@ def test_circ2graph(filename='inst_2x2_7_0.txt'):
     return GM.is_isomorphic()
 
 
+#@utils.sequential_profile_decorator(filename='buckets_transform_profile')
+def test_bucket_operation_speed():
+    """
+    This tests the speed of forming, permuting and transforming
+    buckets.
+    """
+    import time
+    tim1 = time.time()
+
+    filename = 'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
+
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph = gm.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    # Get peo
+    peo = [opt.Var(node, name=data['name'], size=data['size']) for
+           node, data in graph.nodes(data=True)]
+    peo = list(np.random.permutation(peo))
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # Take the subtensor corresponding to the initial state
+    initial_state = 0
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    # Take appropriate subtensors for target bitstring
+    target_state = 0
+    slice_dict.update(
+        utils.slice_from_bits(target_state, bra_vars)
+    )
+    # Form final buckets
+    sliced_buckets = npfr.get_sliced_np_buckets(
+        perm_buckets, data_dict, slice_dict)
+
+    tim2 = time.time()
+    print(tim2 - tim1)
+
+
 def eval_circuit_multiamp_np(filename, initial_state=0):
     """
     Loads circuit from file and evaluates
@@ -618,58 +670,6 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     print(np.round(slice_of_amplitudes, 3))
     print('Max difference:')
     print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
-
-
-#@utils.sequential_profile_decorator(filename='buckets_transform_profile')
-def test_bucket_operation_speed():
-    """
-    This tests the speed of forming, permuting and transforming
-    buckets.
-    """
-    import time
-    tim1 = time.time()
-
-    filename = 'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
-
-    # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
-        n_qubits, circuit)
-
-    graph = gm.buckets2graph(
-        buckets,
-        ignore_variables=bra_vars+ket_vars)
-
-    # Get peo
-    peo = [opt.Var(node, name=data['name'], size=data['size']) for
-           node, data in graph.nodes(data=True)]
-    peo = list(np.random.permutation(peo))
-
-    # place bra and ket variables to beginning, so these variables
-    # will be contracted first
-    peo = ket_vars + bra_vars + peo
-    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
-
-    # extract bra and ket variables from variable list and sort according
-    # to qubit order
-    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
-    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
-
-    # Take the subtensor corresponding to the initial state
-    initial_state = 0
-    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
-
-    # Take appropriate subtensors for target bitstring
-    target_state = 0
-    slice_dict.update(
-        utils.slice_from_bits(target_state, bra_vars)
-    )
-    # Form final buckets
-    sliced_buckets = npfr.get_sliced_np_buckets(
-        perm_buckets, data_dict, slice_dict)
-
-    tim2 = time.time()
-    print(tim2 - tim1)
 
 
 if __name__ == "__main__":

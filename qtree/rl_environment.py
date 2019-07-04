@@ -123,7 +123,7 @@ class Environment:
     Creates an environment to train the agents
     """
     def __init__(self, filename,
-                 cost_function=contraction_cost_flops,
+                 cost_function=degree_cost,
                  simple_graph=False):
         """
         Creates an environment for the model from file
@@ -135,7 +135,7 @@ class Environment:
         cost_function : function, optional
                function (networkx.Graph, int)->int which
                evaluates the cost of selecting a node.
-               Default `contraction_cost_flops`
+               Default `degree_cost`
         simple_graph : bool
                If the graph should be generated as simple graph
                (no selfloops and no parallel edges).
@@ -213,7 +213,7 @@ class Environment:
               By default a lower triangular index is expected here
         square_index : bool
               if True the index is taken as a row/column index in
-              the square adjacency matrix 
+              the square adjacency matrix
         """
         if not square_index:
             node = self.idx_to_node[index]
