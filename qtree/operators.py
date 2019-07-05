@@ -328,7 +328,7 @@ def read_circuit_file(filename, max_depth=None):
         'y_1_2': Y_1_2,
     }
 
-    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r') (?P<qubit1>[0-9]+) ?(?P<qubit2>[0-9]+)?'
+    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+)'
 
     log.info("reading file {}".format(filename))
     circuit = []
@@ -363,10 +363,7 @@ def read_circuit_file(filename, max_depth=None):
 
             op_identif = m.group('operation')
 
-            if m.group('qubit2') is not None:
-                q_idx = (int(m.group('qubit1')), int(m.group('qubit2')))
-            else:
-                q_idx = (int(m.group('qubit1')),)
+            q_idx = tuple(int(qq) for qq in m.group('qubits').split())
 
             op = label_to_gate_dict[op_identif](*q_idx)
             circuit_layer.append(op)
