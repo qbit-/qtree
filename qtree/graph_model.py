@@ -296,7 +296,8 @@ def get_simple_graph(graph, parallel_edges=False, self_loops=False):
 
 def get_peo(old_graph,
             quickbb_extra_args=" --time 60 --min-fill-ordering ",
-            input_suffix=None, keep_input=False):
+            input_suffix=None, keep_input=False,
+            int_vars=False):
     """
     Calculates the elimination order for an undirected
     graphical model of the circuit.
@@ -312,6 +313,8 @@ def get_peo(old_graph,
              If None is provided a random suffix is generated
     keep_input : bool, default False
              Whether to keep input files for debugging
+    int_vars : bool, default False
+             If returned peo should have integers in place of Var objects
     Returns
     -------
     peo_dict : dict
@@ -382,9 +385,12 @@ def get_peo(old_graph,
 
     # transform PEO to a list of Var objects as expected by
     # other parts of code
-    peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
-                    name=old_graph.nodes[v]['name']) for v in peo]
-    return peo_vars, treewidth
+    if int_vars:
+        return peo, treewidth
+    else:
+        peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
+                        name=old_graph.nodes[v]['name']) for v in peo]
+        return peo_vars, treewidth
 
 
 def split_graph_random(old_graph, n_var_parallel=0):
@@ -1132,6 +1138,8 @@ def wrap_general_graph_for_qtree(graph):
     new_graph : type(graph)
             Modified graph
     """
+    graph_type = type(graph)
+
     # relabel nodes starting to integers
     label_dict = dict(zip(
         list(sorted(graph.nodes)),
@@ -1143,54 +1151,109 @@ def wrap_general_graph_for_qtree(graph):
         graph.nodes[node]['size'] = 2
 
     # Add tensors to edges and ensure the graph is a Multigraph
-    new_graph = nx.MultiGraph(
+    new_graph = graph_type(
         nx.relabel_nodes(graph, label_dict, copy=True)
         )
-    for edge in new_graph.edges():
+
+    params = {'keys': True} if graph.is_multigraph() else dict()
+
+    for edge in new_graph.edges(**params):
         new_graph.edges[edge].update(
             {'tensor':
              {'name': 'W', 'indices': tuple(edge), 'data_key': None}})
 
+    node_names = dict((node, f'v_{node}') for node in new_graph.nodes)
+    nx.set_node_attributes(new_graph, node_names, name='name')
+
     return new_graph
 
 
-def generate_random_graph(n_nodes, n_edges):
+def generate_erdos_graph(n_nodes, probability):
     """
-    Generates a random graph with n_nodes and n_edges. Edges are
-    selected randomly from a uniform distribution over n*(n-1)/2
-    possible edges
+    Generates a random graph with n_nodes and the probability of
+    edge equal probability.
 
     Parameters
     ----------
     n_nodes : int
           Number of nodes
-    n_edges : int
-          Number of edges
+    probability : float
+          probability of edge
     Returns
     -------
     graph : networkx.Graph
           Random graph usable by graph_models
     """
 
-    # Create a disconnected graph
-    graph = nx.Graph()
-    graph.add_nodes_from(range(n_nodes))
+    return wrap_general_graph_for_qtree(
+        nx.generators.fast_gnp_random_graph(
+            n_nodes,
+            probability))
 
-    # Add edges
-    row, col = np.tril_indices(n_nodes)
-    idx_to_pair = dict(zip(
-        range(int(n_nodes*(n_nodes+1)//2)),
-        zip(row, col)
-    ))
 
-    edge_indices = np.random.choice(
-        range(int(n_nodes*(n_nodes+1)//2)),
-        n_edges,
-        replace=False
-    )
-    graph.add_edges_from(idx_to_pair[idx] for idx in edge_indices)
+def generate_grid_graph(m, n, periodic=False):
+    """
+    Generates a 2d grid with possible periodic boundary
+    Parameters
+    ----------
+    m, n: int
+          Grid size
+    periodic: bool, default False
+          If the grid should be made periodic
+    """
+    return wrap_general_graph_for_qtree(
+        nx.generators.grid_2d_graph(m, n, periodic=periodic))
 
-    return wrap_general_graph_for_qtree(graph)
+
+def prune_k_tree(old_ktree, probability, n_cliques=1):
+    """
+    Prunes a k-tree preserving its treewidth (k).
+    The edges are preserved with a given probability.
+    The resulting graph is a union of a clique/partial k-trees
+    with an Erdos graph
+
+    Parameters
+    ----------
+    old_ktree: nx.Graph
+               This is a ktree to prune
+    probability: float
+               Probability to preserve edge
+    n_cliques: int, default 1
+               The number of cliques to save in the result
+    Returns
+    -------
+    pruned_ktree: nx.Graph
+    """
+
+    # save a copy to make this function pure
+    ktree = copy.deepcopy(old_ktree)
+
+    # choose some cliques to keep. We choose clique roots at random
+    preserved_roots = list(np.random.choice(
+        ktree.nodes, n_cliques, replace=False))
+    # now extract other nodes in cliques which have these roots
+    all_neighbors = []
+    for root in preserved_roots:
+        all_neighbors += list(ktree.neighbors(root))
+    all_neighbors = list(set(all_neighbors))
+
+    # finally extract chosen cliques/ktrees
+    preserved_subgraph = nx.subgraph(ktree, all_neighbors+preserved_roots)
+
+    # Extract edges to keep
+    preserved_edges = sorted(preserved_subgraph.edges())
+
+    # now start pruning the graph
+    remove_edges = []
+    for edge in ktree.edges:
+        keep_edge = bool(np.random.binomial(1, probability))
+        if (not keep_edge) and (edge not in preserved_edges):
+            remove_edges.append(edge)
+        else:
+            continue
+    ktree.remove_edges_from(remove_edges)
+
+    return ktree
 
 
 def get_treewidth_from_peo(old_graph, peo):
@@ -1656,7 +1719,7 @@ def get_equivalent_peo_naive(graph, peo, clique_vertices):
     return new_peo
 
 
-def get_node_min_fill_heuristic(graph):
+def get_node_min_fill_heuristic(graph, randomize=False):
     """
     Calculates the next node for the min-fill
     heuristic, as described in V. Gogate and R.  Dechter
@@ -1665,16 +1728,19 @@ def get_node_min_fill_heuristic(graph):
     Parameters
     ----------
     graph : networkx.Graph graph to estimate
-
+    randomize : bool, default False
+                if a min fill node is selected at random among
+                nodes with the same minimal fill
     Returns
     -------
     node : node-type
-           node with minimal degree
+           node with minimal fill
     degree : int
            degree of the node
     """
     min_fill = np.inf
 
+    min_fill_nodes = []
     for node in graph.nodes:
         neighbors_g = graph.subgraph(
             graph.neighbors(node))
@@ -1684,12 +1750,110 @@ def get_node_min_fill_heuristic(graph):
         # All possible edges without selfloops
         n_edges_max = int(degree*(degree-1) // 2)
         fill = n_edges_max - n_edges_filled
-        if fill <= min_fill:
-            min_fill_node = node
-            min_fill_degree = degree
-        min_fill = min(fill, min_fill)
+        if fill == min_fill:
+            min_fill_nodes.append((node, degree))
+        elif fill < min_fill:
+            min_fill_nodes = [(node, degree)]
+            min_fill = fill
+        else:
+            continue
+    # Either choose the node at random among equivalent or use
+    # the last one
+    if randomize:
+        min_fill_nodes_d = dict(min_fill_nodes)
+        node = np.random.choice(min_fill_nodes_d)
+        degree = min_fill_nodes_d[node]
+    else:
+        node, degree = min_fill_nodes[-1]
+    return node, degree
 
-    return min_fill_node, min_fill_degree
+
+def get_node_min_degree_heuristic(graph, randomize=False):
+    """
+    Calculates the next node for the min-degree
+    heuristic, as described in V. Gogate and R.  Dechter
+    :url:`http://arxiv.org/abs/1207.4109`
+
+    Parameters
+    ----------
+    graph : networkx.Graph graph to estimate
+    randomize : bool, default False
+                if a min degree node is selected at random among
+                nodes with the same minimal degree
+
+    Returns
+    -------
+    node : node-type
+           node with minimal degree
+    degree : int
+           degree of the node
+    """
+    nodes_by_degree = sorted(list(graph.degree()),
+                             key=lambda pair: pair[1])
+    min_degree = nodes_by_degree[0][1]
+
+    for idx, (node, degree) in enumerate(nodes_by_degree):
+        if degree > min_degree:
+            break
+    min_degree_nodes = nodes_by_degree[:idx]
+
+    # Either choose the node at random among equivalent or use
+    # the last one
+    if randomize:
+        nodes, _ = zip(*min_degree_nodes)
+        node = np.random.choice(nodes)
+    else:
+        node = min_degree_nodes[-1][0]
+
+    return node, min_degree
+
+
+def get_node_max_cardinality_heuristic(graph, randomize=False):
+    """
+    Calculates the next node for the maximal cardinality search
+    heuristic
+
+    Parameters
+    ----------
+    graph : networkx.Graph graph to estimate
+    randomize : bool, default False
+                if a min degree node is selected at random among
+                nodes with the same minimal degree
+
+    Returns
+    -------
+    node : node-type
+           node with minimal degree
+    degree : int
+           degree of the node
+    """
+    max_cardinality = -1
+    max_cardinality_nodes = []
+
+    for node in graph.nodes:
+        cardinality = graph.nodes[node].get('cardinality', 0)
+        degree = graph.degree(node)
+        if cardinality > max_cardinality:
+            max_cardinality_nodes = [(node, degree)]
+        elif cardinality == max_cardinality:
+            max_cardinality_nodes.append((node, degree))
+        else:
+            continue
+    # Either choose the node at random among equivalent or use
+    # the last one
+    if randomize:
+        max_cardinality_nodes_d = dict(max_cardinality_nodes)
+        node = np.random.choice(max_cardinality_nodes_d)
+        degree = max_cardinality_nodes_d[node]
+    else:
+        node, degree = max_cardinality_nodes[-1]
+
+    # update the graph to hold the cardinality information
+    for neighbor in graph.neighbors(node):
+        cardinality = graph.nodes[neighbor].get('cardinality', 0)
+        graph.nodes[neighbor]['cardinality'] = cardinality + 1
+
+    return node, degree
 
 
 def get_upper_bound_peo(old_graph,
@@ -1840,3 +2004,5 @@ if __name__ == '__main__':
     test_is_zero_fillin()
     test_maximum_cardinality_search()
     test_is_clique()
+
+
