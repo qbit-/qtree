@@ -1893,7 +1893,7 @@ def get_upper_bound_peo(old_graph,
 
     # Create Var objects
     peo_var = [Var(var, size=graph.nodes[var]['size'],
-                   name=graph.nodes[var]['name']) for var in peo]
+                   name=old_graph.nodes[var]['name']) for var in peo]
 
     return peo_var, max_degree  # this is clique size - 1
 
@@ -2004,5 +2004,3 @@ if __name__ == '__main__':
     test_is_zero_fillin()
     test_maximum_cardinality_search()
     test_is_clique()
-
-
