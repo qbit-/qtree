@@ -88,6 +88,7 @@ def eval_circuit_np(filename, initial_state=0):
 
     amplitudes = []
     for target_state in range(2**n_qubits):
+        print(target_state)
         # Take appropriate subtensors for different target bitstrings
         slice_dict.update(
             utils.slice_from_bits(target_state, bra_vars)

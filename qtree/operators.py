@@ -206,7 +206,7 @@ class X_1_2(Gate):
     :math:`X^{1/2}`
     gate
     """
-    tensor = Fraction(1, 2) * np.array([[1 + 1j, 1 - 1j],
+    tensor = 1 / 2 * np.array([[1 + 1j, 1 - 1j],
                                         [1 - 1j, 1 + 1j]],
                                        dtype=defs.NP_ARRAY_TYPE)
 
@@ -218,7 +218,7 @@ class Y_1_2(Gate):
     r"""
     :math:`Y^{1/2}` gate
     """
-    tensor = Fraction(1, 2) * np.array([[1 + 1j, -1 - 1j],
+    tensor = 1 / 2 * np.array([[1 + 1j, -1 - 1j],
                                         [1 + 1j, 1 + 1j]],
                                        dtype=defs.NP_ARRAY_TYPE)
 

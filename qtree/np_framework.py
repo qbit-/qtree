@@ -5,10 +5,10 @@ module, and example programs are listed in :py:mod:`simulator` module.
 """
 
 import numpy as np
-import copy
-import qtree.operators as ops
 import qtree.optimizer as opt
 import qtree.utils as utils
+
+from loguru import logger as log
 
 
 def get_np_buckets(buckets, data_dict):
@@ -144,6 +144,7 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
     return sliced_buckets
 
 
+@log.catch(reraise=True)
 def process_bucket_np(bucket, no_sum=False):
     """
     Process bucket in the bucket elimination algorithm.
@@ -173,6 +174,7 @@ def process_bucket_np(bucket, no_sum=False):
         )
 
         result_data = np.einsum(expr, result_data, tensor.data)
+        #log.info(f'einsum {expr}')
 
         # Merge and sort indices and shapes
         result_indices = tuple(sorted(
