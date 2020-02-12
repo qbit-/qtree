@@ -1,3 +1,4 @@
 cirq
 mpi4py
 tqdm
+loguru

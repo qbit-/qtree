@@ -33,7 +33,7 @@ def get_amplitudes_from_cirq(filename, initial_state=0):
     print("Circuit:")
     print(cirq_circuit)
     simulator = cirq.Simulator()
-    log.info(f"Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
+    log.info("Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
 
     result = simulator.simulate(cirq_circuit, initial_state=initial_state)
     log.info("Simulation completed\n")
@@ -313,7 +313,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
         n_qubits, circuit)
 
     # Collect free qubit variables
-    free_qubits = [1, 3]
+    free_qubits = list(range(5*5))
     free_bra_vars = []
     for ii in free_qubits:
         try:
