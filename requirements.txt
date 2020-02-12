@@ -1,2 +1,3 @@
 cirq
 mpi4py
+tqdm

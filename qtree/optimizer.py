@@ -319,6 +319,7 @@ def bucket_elimination(buckets, process_bucket_fn,
     n_var_contract = len(buckets) - n_var_nosum
 
     result = None
+    log.debug(f"Eliminating {len(buckets)} buckets")
     for n, bucket in enumerate(buckets[:n_var_contract]):
         if len(bucket) > 0:
             tensor = process_bucket_fn(bucket)
@@ -342,6 +343,8 @@ def bucket_elimination(buckets, process_bucket_fn,
             result *= tensor
         else:
             result = tensor
+
+    log.debug("Buckets eliminated")
     return result
 
 

@@ -6,6 +6,8 @@ can be used as main functions in the final simulator program
 import numpy as np
 import cirq
 #import random
+from tqdm import tqdm
+from loguru import logger as log
 
 import qtree.operators as ops
 import qtree.optimizer as opt
@@ -31,9 +33,10 @@ def get_amplitudes_from_cirq(filename, initial_state=0):
     print("Circuit:")
     print(cirq_circuit)
     simulator = cirq.Simulator()
+    log.info(f"Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
 
     result = simulator.simulate(cirq_circuit, initial_state=initial_state)
-    print("Simulation completed\n")
+    log.info("Simulation completed\n")
 
     # Cirq for some reason computes all amplitudes with phase -1j
     return result.final_state
@@ -86,9 +89,11 @@ def eval_circuit_np(filename, initial_state=0):
     # Take the subtensor corresponding to the initial state
     slice_dict = utils.slice_from_bits(initial_state, ket_vars)
 
+    amplitudes_reference = get_amplitudes_from_cirq(
+        filename, initial_state)
+
     amplitudes = []
-    for target_state in range(2**n_qubits):
-        print(target_state)
+    for target_state in tqdm(range(2**n_qubits)):
         # Take appropriate subtensors for different target bitstrings
         slice_dict.update(
             utils.slice_from_bits(target_state, bra_vars)
@@ -101,8 +106,6 @@ def eval_circuit_np(filename, initial_state=0):
 
     # Cirq returns the amplitudes in big endian (largest bit first)
 
-    amplitudes_reference = get_amplitudes_from_cirq(
-        filename, initial_state)
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
@@ -364,6 +367,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     amplitudes = result.data.flatten()
 
     # Now calculate the reference
+    print('Calculate reference')
     amplitudes_reference = get_amplitudes_from_cirq(filename)
 
     # Get a slice as we do not need full amplitude
