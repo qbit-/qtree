@@ -41,7 +41,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 1
+    n_var_parallel = 4
 
     # TODO: move this
     def filter_bra_vars(bra_vars, free_qubits):
@@ -139,10 +139,26 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     amplitudes = ampstot[0]
     print(amplitudes.shape)
     for amp in ampstot[1:]:
-        amplitudes+=amp
+        print(amp)
+        amplitudes +=  amp
+
+    ## 6. Aftermath
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+    # Get a slice as we do not need full amplitude
+    bra_slices = {var: slice_dict[var] for var in slice_dict
+                  if var.name.startswith('o')}
+
+    # sort slice in the big endian order for Cirq
+    computed_subtensor = [slice_dict[var]
+                          for var in sorted(bra_slices, key=str)]
+
+    slice_of_amplitudes = amplitudes_reference.reshape(
+        [2]*n_qubits)[tuple(computed_subtensor)]
+    slice_of_amplitudes = slice_of_amplitudes.flatten()
+    ##*
+    amplitudes_reference = slice_of_amplitudes
 
     ## Finalize
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
     print('Reference:')
