@@ -69,7 +69,7 @@ def slice_values_generator(vars_to_slice, offset, comm_size):
             dictionary of {var_parallel : value} pairs
     """
     dimensions = [var.size for var in vars_to_slice]
-    total_tasks = np.prod(dimensions)
+    total_tasks = int(np.prod(dimensions))
 
     # iterate over all possible values of variables idx_parallel
     for pos in range(offset, total_tasks, comm_size):

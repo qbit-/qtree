@@ -41,7 +41,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 4
+    n_var_parallel = 3
 
     # TODO: move this
     def filter_bra_vars(bra_vars, free_qubits):

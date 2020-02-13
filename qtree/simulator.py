@@ -33,7 +33,7 @@ def get_amplitudes_from_cirq(filename, initial_state=0):
     print("Circuit:")
     print(cirq_circuit)
     simulator = cirq.Simulator()
-    log.info("Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
+    log.info(f"Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
 
     result = simulator.simulate(cirq_circuit, initial_state=initial_state)
     log.info("Simulation completed\n")
@@ -313,7 +313,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
         n_qubits, circuit)
 
     # Collect free qubit variables
-    free_qubits = list(range(5*5))
+    free_qubits = list(range(n_qubits))
     free_bra_vars = []
     for ii in free_qubits:
         try:
@@ -337,8 +337,11 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     # Run quickbb
     peo_initial, treewidth = gm.get_peo(graph)
 
+    log.info('Initial peo: {}', peo_initial)
+
     # transform peo so free_bra_vars are at the end
     peo = gm.get_equivalent_peo(graph, peo_initial, free_bra_vars)
+    log.info('Final peo: {}', peo)
 
     # place bra and ket variables to beginning, so these variables
     # will be contracted first
