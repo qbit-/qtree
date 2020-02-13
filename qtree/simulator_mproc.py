@@ -41,7 +41,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 3
+    n_var_parallel = 1
 
     # TODO: move this
     def filter_bra_vars(bra_vars, free_qubits):
@@ -81,6 +81,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # find a reduced graph
     ### Should we reduce the graph with clique or make clique on reduced?
     vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
+    #vars_parallel, graph_reduced = gm.split_graph_random(
         graph_initial, n_var_parallel,
         forbidden_nodes=free_bra_vars,
         metric_fn=gm.get_node_by_mem_reduction)
