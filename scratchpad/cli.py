@@ -23,12 +23,11 @@ def simulate(filename):
 
 @cli.command()
 @click.argument('filename')
-def simulate_mproc(filename):
-    print(filename)
-    eval_circuit_np_parallel_mproc(filename)
+@click.option('-n', '--num-paralllel-vars', 'par_vars', default=1)
+def simulate_mproc(filename, par_vars):
+    print(filename, par_vars)
+    eval_circuit_np_parallel_mproc(filename, n_var_parallel=par_vars)
 
 if __name__ == '__main__':
     cli()
-
-
 

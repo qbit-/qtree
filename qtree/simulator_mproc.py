@@ -1,5 +1,5 @@
+from multiprocessing.dummy import Pool
 import numpy as np
-from multiprocessing import Pool
 from loguru import logger as log
 
 import qtree.utils as utils
@@ -31,37 +31,31 @@ def work(rank, comm_size, vars_parallel, slice_dict,
         amplitudes = result.data.flatten()
         return amplitudes
 
+def print_free_vars_info(free_bra_vars, free_qubits):
+    if len(free_bra_vars) > 0:
+        print('Evaluate subsets of amplitudes over qubits:')
+        print(free_qubits)
+        print('Free variables in the resulting expression:')
+        print(free_bra_vars)
 
-def eval_circuit_np_parallel_mproc(filename, initial_state=0):
+def filter_bra_vars(bra_vars, free_qubits):
+    # Collect free qubit variables
+    free_bra_vars = []
+    for ii in free_qubits:
+        try:
+            free_bra_vars.append(bra_vars[ii])
+        except IndexError:
+            pass
+    bra_vars = [var for var in bra_vars if var not in free_bra_vars]
+    print_free_vars_info(free_bra_vars, free_qubits)
+    return bra_vars, free_bra_vars
+
+
+def eval_circuit_np_parallel_mproc(filename, n_var_parallel=1, initial_state=0):
     """
     Evaluate quantum circuit using MPI to parallelize
     over some of the variables.
     """
-
-    # number of variables to split by parallelization
-    # this should be adjusted by the algorithm from memory/cpu
-    # requirements
-    n_var_parallel = 4
-
-    # TODO: move this
-    def filter_bra_vars(bra_vars, free_qubits):
-        # TODO: move this
-        def print_free_vars_info(free_bra_vars, free_qubits):
-            if len(free_bra_vars) > 0:
-                print('Evaluate subsets of amplitudes over qubits:')
-                print(free_qubits)
-                print('Free variables in the resulting expression:')
-                print(free_bra_vars)
-        # Collect free qubit variables
-        free_bra_vars = []
-        for ii in free_qubits:
-            try:
-                free_bra_vars.append(bra_vars[ii])
-            except IndexError:
-                pass
-        bra_vars = [var for var in bra_vars if var not in free_bra_vars]
-        print_free_vars_info(free_bra_vars, free_qubits)
-        return bra_vars, free_bra_vars
 
     ## 1. Prepare graph with fixed vars
     n_qubits, circuit = ops.read_circuit_file(filename)
@@ -83,9 +77,9 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
         #vars_parallel, graph_reduced = gm.split_graph_random(
         graph_initial, n_var_parallel,
-        #forbidden_nodes=free_bra_vars,
-    #)
-        metric_fn=gm.get_node_by_mem_reduction)
+        forbidden_nodes=free_bra_vars,
+        #)
+        metric_fn=gm.get_node_by_betweenness)
     log.info('Vars parallel: {}', vars_parallel)
 
     graph = graph_reduced
@@ -97,7 +91,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     peo = gm.get_equivalent_peo(graph, peo_initial, free_bra_vars)
     #peo = peo[5:] + peo[:5]
 
-    peo =  ket_vars + bra_vars + vars_parallel + peo
+    peo = ket_vars + bra_vars + vars_parallel + peo
     log.info('Final peo: {}', peo)
 
     ## 4. Prepare vars and buckets
@@ -122,7 +116,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     slice_dict.update(utils.slice_from_bits(target_state, bra_vars))
     slice_dict.update({var: slice(None) for var in free_bra_vars})
 
-    comm_size = 32
+    comm_size = 4
     pool = Pool(comm_size)
     log.info(f"Goin' wild with {comm_size} processes, slice: {slice_dict}")
 
@@ -142,7 +136,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     print(amplitudes.shape)
     for amp in ampstot[1:]:
         print(amp)
-        amplitudes +=  amp
+        amplitudes += amp
 
     ## 6. Aftermath
     amplitudes_reference = get_amplitudes_from_cirq(filename)
@@ -170,4 +164,4 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
                  - np.array(amplitudes_reference)))
 
 if __name__ == '__main__':
-    eval_circuit_np_parallel_mpi('inst_2x2_7_0.txt')
+    eval_circuit_np_parallel_mproc('inst_2x2_7_0.txt')

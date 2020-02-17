@@ -4,6 +4,7 @@ simulator. It's main use is in conjunction with the :py:mod:`optimizer`
 module, and example programs are listed in :py:mod:`simulator` module.
 """
 
+from einsum2 import einsum2
 import numpy as np
 import qtree.optimizer as opt
 import qtree.utils as utils
@@ -173,7 +174,8 @@ def process_bucket_np(bucket, no_sum=False):
             list(map(int, result_indices)), list(map(int, tensor.indices))
         )
 
-        result_data = np.einsum(expr, result_data, tensor.data)
+        #result_data = np.einsum(expr, result_data, tensor.data)
+        result_data = einsum2(expr, result_data, tensor.data)
         #log.info(f'einsum {expr}')
 
         # Merge and sort indices and shapes
