@@ -18,6 +18,7 @@ def do_einsum(n_dim=4, dim_size=2, einsum=np.einsum):
     print(shape)
 
     res = einsum(T1, idx1, T2, idx2, result_idx)
+    print('res shape', res.shape)
     return res
 
 @proc_count()
@@ -32,9 +33,10 @@ def do_einsum_flat(n_dim=4, dim_size=2, einsum=np.einsum):
     print(shape)
 
     res = einsum(T1, idx1, T2, idx2, result_idx)
+    print('res shape', res.shape)
     return res
 
-def profile_einsum(einsum, ndims=range(5, 15), dim_size=2):
+def profile_einsum(einsum, ndims=range(10, 16), dim_size=2):
     msg_templ = '{ndim} dimensions of size {dim_size} total len: {totlen}'
     for ndim in ndims:
         msg = msg_templ.format(  ndim=ndim
