@@ -77,9 +77,9 @@ def run_quickbb(cnffile,
     sh = command + " "
     # this makes Docker process too slow and sometimes fails
     # sh += f"--outfile {outfile} --statfile {statfile} "
-    sh += f"--cnffile {cnffile} "
     if extra_args is not None:
         sh += extra_args
+    sh += f"--cnffile {cnffile} "
 
     log.info("excecuting quickbb: "+sh)
     process = subprocess.Popen(

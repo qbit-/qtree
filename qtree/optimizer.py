@@ -321,8 +321,10 @@ def bucket_elimination(buckets, process_bucket_fn,
     result = None
     log.debug(f"Eliminating {len(buckets)} buckets")
     for n, bucket in enumerate(buckets[:n_var_contract]):
+        log.debug(f"{n}:: bucket len {len(bucket)}")
         if len(bucket) > 0:
             tensor = process_bucket_fn(bucket)
+            log.debug(f'Got tensor with {len(tensor.indices)} indices {tensor}')
             if len(tensor.indices) > 0:
                 # tensor is not scalar.
                 # Move it to appropriate bucket

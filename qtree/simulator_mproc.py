@@ -41,7 +41,7 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
     # requirements
-    n_var_parallel = 1
+    n_var_parallel = 4
 
     # TODO: move this
     def filter_bra_vars(bra_vars, free_qubits):
@@ -81,9 +81,10 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     # find a reduced graph
     ### Should we reduce the graph with clique or make clique on reduced?
     vars_parallel, graph_reduced = gm.split_graph_by_metric_greedy(
-    #vars_parallel, graph_reduced = gm.split_graph_random(
+        #vars_parallel, graph_reduced = gm.split_graph_random(
         graph_initial, n_var_parallel,
-        forbidden_nodes=free_bra_vars,
+        #forbidden_nodes=free_bra_vars,
+    #)
         metric_fn=gm.get_node_by_mem_reduction)
     log.info('Vars parallel: {}', vars_parallel)
 
@@ -121,14 +122,14 @@ def eval_circuit_np_parallel_mproc(filename, initial_state=0):
     slice_dict.update(utils.slice_from_bits(target_state, bra_vars))
     slice_dict.update({var: slice(None) for var in free_bra_vars})
 
-    comm_size = 64
+    comm_size = 32
     pool = Pool(comm_size)
     log.info(f"Goin' wild with {comm_size} processes, slice: {slice_dict}")
 
     results = []
     for rank in range(comm_size):
         args = (rank, comm_size, vars_parallel, slice_dict,
-                buckets, data_dict, free_bra_vars)
+                perm_buckets, data_dict, free_bra_vars)
         res = pool.apply_async(work, args)
         results.append(res)
 
