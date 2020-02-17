@@ -5,3 +5,5 @@ quickbb.cnf
 graph.eps
 adjacency_graph.matcobalt_logs
 cobalt_logs/
+adjacency_graph.mattest_circuits
+test_circuits

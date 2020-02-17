@@ -1,0 +1,32 @@
+L   machine     size        depth       time        tw         par_vars      mem_req        time_cirq           note
+    KNL         5x5         25          >5min                  0              
+    KNL         5x5         10          12s         25         0 
+    KNL         7x7         10          >10min      49         0 
+    KNL         8x8         10          ***         64         0 
+
+    Login       5x5         10          3s          24         3 
+    KNL         6x6         10          >10min      35         7             188+32G
+    KNL         5x6         10          >10min      29         7             188+32G      
+    KNL         5x5         10          >10min      24         7             188+32G      
+
+    KNL         5x5         10          15s         24         3             >30G            2m 10s
+    KNL         5x5         15          41s         24         3             65G             2m 29s
+    KNL         5x5         25          >2min       29         3             188+32G         
+    KNL         5x5         20          >2min       27         3             188+32G         
+
+    KNL         5x5         18          1m 49s      26         2             32G             2m 54s
+    KNL         5x5         20          ~5min       28         2             188+7G          3m 10s
+    KNL         6x6         10          >8min       36         0             5.6G            
+
+-   KNL         5x6         10          5m 3s       30         0             *5.6G                              likely wrong memory
+-   KNL         5x6         10          7m 3s       29         1             *73G                               likely wrong memory
+    KNL         6x6         10          >10m        30         2             187+32G
+
+==  Group: 14.02.20
+    KNL         5x6         10          ~5m50s      30         0             59G             fail               With OMP_NUM_THREADS=1
+    KNL         5x6         10          5m 4s       30         0             59G             fail
+    KNL         5x6         10          7m 10s      30         1             164G            fail
+Fm  KNL         5x6         10          >10min      30         2             *187+31G        fail               OOM (shape=[2]*30)
+Fa  KNL         6x6         10          >40min      36         0             6G                                 Fail (number of subscripts in einsum)
+Fa  KNL         6x6         10          >58min      36         1             8G                                 Fail (number of subscripts in einsum)
+Fa  KNL         6x6         10          >58min      36         1             8G                                 Fail (number of subscripts in einsum)

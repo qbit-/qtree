@@ -4,6 +4,7 @@ import numpy as np
 
 def main():
     max_workers = 64
+    max_workers = 8
     pool = ThreadPoolExecutor(max_workers=max_workers)
     def work(N):
         for i in range(N*N):
