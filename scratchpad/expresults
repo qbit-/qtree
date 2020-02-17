@@ -29,4 +29,4 @@ L   machine     size        depth       time        tw         par_vars      mem
 Fm  KNL         5x6         10          >10min      30         2             *187+31G        fail               OOM (shape=[2]*30)
 Fa  KNL         6x6         10          >40min      36         0             6G                                 Fail (number of subscripts in einsum)
 Fa  KNL         6x6         10          >58min      36         1             8G                                 Fail (number of subscripts in einsum)
-Fa  KNL         6x6         10          >58min      36         1             8G                                 Fail (number of subscripts in einsum)
+Fa  KNL         6x6         10          1h 40m      36         2             180+3G                             bored to wait
