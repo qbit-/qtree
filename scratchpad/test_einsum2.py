@@ -30,12 +30,21 @@ def threaded(f, daemon=False):
     return wrap
 
 def threaded_gen(f):
+    """ makes the function return a generator, 
+    which iterates while thread is running and 
+    yields return value of function at last step.
+    Usage:
+        for res it threaded_gen(f)(*args, **kw):
+            #do stuff here
+        print('Done threaded exec:',res)
+    """
+
     def wrap(*args, **kwargs):
         thr_f =  threaded(f)
         thread = thr_f(*args, **kwargs)
         while thread.is_alive():
             yield
-            sleep(.01)
+            sleep(.1)
         thread.join()
         yield thread.result_queue.get()
         return
@@ -55,6 +64,18 @@ def proc_count(description='Process count'):
         return f_wrapped
     return decorator
 
+def cpu_util(description='CPU utilisation:'):
+    def decorator(f):
+        def f_wrapped(*args, **kwargs):
+            thr_gen = threaded_gen(f)
+            utils = []
+            for res in thr_gen(*args, **kwargs):
+                utils.append(psutil.cpu_percent(interval=0))
+            print(description, max(utils))
+            return res
+        return f_wrapped
+    return decorator
+
 
 @contextmanager
 def timing(description: str) -> None:
@@ -64,6 +85,7 @@ def timing(description: str) -> None:
     print(f"{description}: {ellapsed_time}")
 
 @proc_count()
+@cpu_util()
 def do_einsum(n_dim=4, dim_size=2, einsum=np.einsum):
     shape = [dim_size]*(n_dim + 1)
     idx1 = [0] + list(range(1, n_dim + 1))
