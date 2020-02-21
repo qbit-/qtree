@@ -79,6 +79,7 @@ def eval_circuit_np(filename, initial_state=0):
     # place bra and ket variables to beginning, so these variables
     # will be contracted first
     peo = ket_vars + bra_vars + peo
+    log.info('Final peo: {}', peo)
     perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
 
     # extract bra and ket variables from variable list and sort according
@@ -88,9 +89,6 @@ def eval_circuit_np(filename, initial_state=0):
 
     # Take the subtensor corresponding to the initial state
     slice_dict = utils.slice_from_bits(initial_state, ket_vars)
-
-    amplitudes_reference = get_amplitudes_from_cirq(
-        filename, initial_state)
 
     amplitudes = []
     for target_state in tqdm(range(2**n_qubits)):
@@ -105,6 +103,8 @@ def eval_circuit_np(filename, initial_state=0):
         amplitudes.append(result.data)
 
     # Cirq returns the amplitudes in big endian (largest bit first)
+    amplitudes_reference = get_amplitudes_from_cirq(
+        filename, initial_state)
 
     print('Result:')
     print(np.round(np.array(amplitudes), 3))
