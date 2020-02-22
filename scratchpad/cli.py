@@ -3,6 +3,7 @@ import sys
 sys.path.append('.')
 from qtree.simulator import eval_circuit_np, eval_circuit_multiamp_np
 from qtree.simulator_mproc import eval_circuit_np_parallel_mproc
+from qtree.simulator_mpi import eval_circuit_np_parallel_mpi
 
 @click.group()
 @click.option('--debug/--no-debug', default=False)
@@ -20,6 +21,14 @@ def simulate_per_amp(filename):
 def simulate(filename):
     print(filename)
     eval_circuit_multiamp_np(filename)
+
+@cli.command()
+@click.argument('filename')
+@click.option('-n', '--num-paralllel-vars', 'par_vars', default=1)
+def simulate_mpi(filename, par_vars):
+    print(filename, par_vars)
+    eval_circuit_np_parallel_mpi(filename)
+
 
 @cli.command()
 @click.argument('filename')

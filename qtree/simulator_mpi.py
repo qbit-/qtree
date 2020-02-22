@@ -16,6 +16,7 @@ def eval_circuit_np_parallel_mpi(filename, initial_state=0):
     comm = MPI.COMM_WORLD
     comm_size = comm.size
     rank = comm.rank
+    print('size', comm_size, 'rank:', rank)
 
     # number of variables to split by parallelization
     # this should be adjusted by the algorithm from memory/cpu
