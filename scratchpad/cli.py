@@ -2,6 +2,7 @@ import click
 import sys
 sys.path.append('.')
 from qtree.simulator import eval_circuit_np, eval_circuit_multiamp_np
+from qtree.simulator import eval_circuit_np_one_amp
 from qtree.simulator_mproc import eval_circuit_np_parallel_mproc
 
 @click.group()
@@ -14,6 +15,13 @@ def cli(debug):
 def simulate_per_amp(filename):
     print(filename)
     eval_circuit_np(filename)
+
+@cli.command()
+@click.option('-t', '--target-state', 'target_state', default=0)
+@click.argument('filename')
+def simulate_one_amp(filename, target_state):
+    print(filename)
+    eval_circuit_np_one_amp(filename, target_state=target_state)
 
 @cli.command()
 @click.argument('filename')

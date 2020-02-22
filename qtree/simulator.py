@@ -58,6 +58,44 @@ def get_optimal_graphical_model(
     )
     return graph_optimal
 
+def eval_circuit_np_one_amp(filename, initial_state=0,
+                            target_state=0):
+    # Prepare graphical model
+    n_qubits, circuit = ops.read_circuit_file(filename)
+    buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
+        n_qubits, circuit)
+
+    graph = gm.buckets2graph(
+        buckets,
+        ignore_variables=bra_vars+ket_vars)
+
+    # Run quickbb
+    peo, treewidth = gm.get_peo(graph)
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    peo = ket_vars + bra_vars + peo
+    log.info('Final peo: {}', peo)
+    perm_buckets, perm_dict = opt.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # Take the subtensor corresponding to the initial state
+    slice_dict = utils.slice_from_bits(initial_state, ket_vars)
+
+    amplitudes = []
+    # Take appropriate subtensors for different target bitstrings
+    slice_dict.update(
+        utils.slice_from_bits(target_state, bra_vars)
+    )
+    sliced_buckets = npfr.get_sliced_np_buckets(
+        perm_buckets, data_dict, slice_dict)
+    result = opt.bucket_elimination(
+        sliced_buckets, npfr.process_bucket_np)
+    amplitudes.append(result.data)
+
 
 def eval_circuit_np(filename, initial_state=0):
     """
