@@ -142,6 +142,8 @@ def get_einsum_expr(idx1, idx2):
     """
     result_indices = sorted(list(set(idx1 + idx2)))
     # remap indices to reduce their order, as einsum does not like
+    summation_idxs = set(idx1) & set(idx2)
+    print(f'Summation idx: {summation_idxs}, for {idx1}; {idx2}')
     # large numbers
     idx_to_least_idx = {old_idx: new_idx for new_idx, old_idx
                         in enumerate(result_indices)}

@@ -4,10 +4,10 @@ Qtree quantum circuit simulator. Functions in this file
 can be used as main functions in the final simulator program
 """
 import numpy as np
-import cirq
-#import random
 from tqdm import tqdm
 from loguru import logger as log
+# Cirq is slow in importing
+import cirq
 
 import qtree.operators as ops
 import qtree.optimizer as opt

@@ -3,7 +3,6 @@ This module implements quantum gates from the CMON set of Google
 """
 import numpy as np
 import re
-import itertools
 import cirq
 
 from fractions import Fraction
