@@ -14,32 +14,9 @@ import qtree.optimizer as opt
 import qtree.graph_model as gm
 import qtree.np_framework as npfr
 import qtree.utils as utils
+from qtree.cirq import simulate_state_from_file as get_amplitudes_from_cirq
 
 from qtree.quickbb_api import gen_cnf, run_quickbb
-
-
-def get_amplitudes_from_cirq(filename, initial_state=0):
-    """
-    Calculates amplitudes for a circuit in file filename using Cirq
-    """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
-
-    cirq_circuit = cirq.Circuit()
-
-    for layer in circuit:
-        cirq_circuit.append(op.to_cirq_2d_circ_op(side_length) for op in layer)
-
-    print("Circuit:")
-    print(cirq_circuit)
-    simulator = cirq.Simulator()
-    log.info(f"Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
-
-    result = simulator.simulate(cirq_circuit, initial_state=initial_state)
-    log.info("Simulation completed\n")
-
-    # Cirq for some reason computes all amplitudes with phase -1j
-    return result.final_state
 
 
 def get_optimal_graphical_model(
