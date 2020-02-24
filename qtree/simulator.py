@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from loguru import logger as log
 
-import qtree.operators as ops
+from qtree import read_circuit_file
 import qtree.optimizer as opt
 import qtree.graph_model as gm
 import qtree.np_framework as npfr
@@ -23,7 +23,7 @@ def get_optimal_graphical_model(
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
     graph = gm.buckets2graph(buckets, ignore_variables=bra_vars+ket_vars)
@@ -36,7 +36,7 @@ def get_optimal_graphical_model(
 def eval_circuit_np_one_amp(filename, initial_state=0,
                             target_state=0):
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -79,7 +79,7 @@ def eval_circuit_np(filename, initial_state=0):
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -138,7 +138,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     # import pdb
     # pdb.set_trace()
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -183,7 +183,7 @@ def eval_contraction_cost(filename):
     with and without optimization
     """
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -237,10 +237,10 @@ def test_circ2graph(filename='inst_2x2_7_0.txt'):
     """
     import networkx as nx
 
-    nq, circuit = ops.read_circuit_file(filename)
+    nq, circuit = read_circuit_file(filename)
     graph = gm.circ2graph(nq, circuit)
 
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets_original, _, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
     graph_original = gm.buckets2graph(
@@ -271,7 +271,7 @@ def test_bucket_operation_speed():
     filename = 'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
 
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -321,7 +321,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     target_state = 0
 
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
