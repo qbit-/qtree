@@ -7,12 +7,12 @@ import numpy as np
 from tqdm import tqdm
 from loguru import logger as log
 
+from qtree.baseline_sims.cirq import simulate_state_from_file as get_amplitudes_from_cirq
 from qtree import read_circuit_file
 import qtree.optimizer as opt
 import qtree.graph_model as gm
 import qtree.np_framework as npfr
 import qtree.utils as utils
-from qtree.cirq import simulate_state_from_file as get_amplitudes_from_cirq
 
 from qtree.quickbb_api import gen_cnf, run_quickbb
 
@@ -206,7 +206,7 @@ def eval_contraction_cost(filename):
     mem_opt_tot = sum(mem_opt)
 
     # split graph and relabel in optimized way
-    n_var_parallel = 3
+    n_var_parallel = 5
     _, reduced_graph = gm.split_graph_by_metric(
         graph_raw, n_var_parallel)
     peo, treewidth = gm.get_peo(reduced_graph)
@@ -219,9 +219,9 @@ def eval_contraction_cost(filename):
     mem_par, flop_par = gm.cost_estimator(graph_parallel)
     mem_par_tot = sum(mem_par)
 
-    print('Memory (in doubles):\n raw: {} optimized: {}'.format(
+    print('Memory (in doubles):\n raw: {:.3e}\n optimized: {:.3e}'.format(
         mem_raw_tot, mem_opt_tot))
-    print(' parallel:\n  node: {} total: {} n_tasks: {}'.format(
+    print(' parallel:\n  node: {:.3e} total: {:.3e} n_tasks: {}'.format(
         mem_par_tot, mem_par_tot*2**(n_var_parallel),
         2**(n_var_parallel)
     ))
