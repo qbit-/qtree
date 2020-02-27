@@ -5,6 +5,18 @@ from qtree import log
 import qtree.operators as ops
 
 
+def parse_circuit_1d(circuit: list):
+    """
+    Convert list of layers of gates into cirq circuit
+    with qubits on grid (`cirq.GridQubit`)
+    """
+    cirq_circuit = cirq.Circuit()
+    for layer in circuit:
+        cirq_circuit.append(op.to_cirq_1d_circ_op() for op in layer)
+
+    return cirq_circuit
+
+
 def parse_circuit_2d(n_qubits: int, circuit: list):
     """
     Convert list of layers of gates into cirq circuit

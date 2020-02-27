@@ -197,6 +197,7 @@ def eval_contraction_cost(filename):
 
     # optimize node order
     peo, treewidth = gm.get_peo(graph_raw)
+    print('treewidth', treewidth)
 
     # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(
@@ -310,8 +311,41 @@ def test_bucket_operation_speed():
     tim2 = time.time()
     print(tim2 - tim1)
 
-
 def eval_circuit_multiamp_np(filename, initial_state=0):
+    """
+    Loads circuit from file and evaluates
+    multiple amplitudes at once using np framework
+    """
+
+    # Prepare graphical model
+    n_qubits, circuit = read_circuit_file(filename)
+    amplitudes, slice_dict = simulate_multiamp_np(n_qubits, circuit, initial_state)
+    # Now calculate the reference
+    print('Calculate reference')
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+
+    # Get a slice as we do not need full amplitude
+    bra_slices = {var: slice_dict[var] for var in slice_dict
+                  if var.name.startswith('o')}
+
+    # sort slice in the big endian order for Cirq
+    computed_subtensor = [slice_dict[var]
+                          for var in sorted(bra_slices, key=str)]
+
+    slice_of_amplitudes = amplitudes_reference.reshape(
+        [2]*n_qubits)[tuple(computed_subtensor)]
+    slice_of_amplitudes = slice_of_amplitudes.flatten()
+
+    print('Result:')
+    print(np.round(amplitudes, 3))
+    print('Reference:')
+    print(np.round(slice_of_amplitudes, 3))
+    print('Max difference:')
+    print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
+
+
+
+def simulate_multiamp_np(n_qubits, circuit, initial_state=0):
     """
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
@@ -321,7 +355,6 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     target_state = 0
 
     # Prepare graphical model
-    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -381,30 +414,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
         sliced_buckets, npfr.process_bucket_np,
         n_var_nosum=len(free_bra_vars))
     amplitudes = result.data.flatten()
-
-    # Now calculate the reference
-    print('Calculate reference')
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
-
-    # Get a slice as we do not need full amplitude
-    bra_slices = {var: slice_dict[var] for var in slice_dict
-                  if var.name.startswith('o')}
-
-    # sort slice in the big endian order for Cirq
-    computed_subtensor = [slice_dict[var]
-                          for var in sorted(bra_slices, key=str)]
-
-    slice_of_amplitudes = amplitudes_reference.reshape(
-        [2]*n_qubits)[tuple(computed_subtensor)]
-    slice_of_amplitudes = slice_of_amplitudes.flatten()
-
-    print('Result:')
-    print(np.round(amplitudes, 3))
-    print('Reference:')
-    print(np.round(slice_of_amplitudes, 3))
-    print('Max difference:')
-    print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
-
+    return amplitudes, slice_dict
 
 if __name__ == "__main__":
     eval_circuit_np('inst_2x2_7_0.txt')
