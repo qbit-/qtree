@@ -207,13 +207,15 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     # on the ket ( |0> ) from the left. We thus first place
     # the bra ( <x| ) and then put gates in the reverse order
 
-    # Fill the variable `frame`
-    layer_variables = [Var(qubit, name=f'o_{qubit}')
-                       for qubit in range(qubit_count)]
-    current_var_idx = qubit_count
+    def get_bra_variables(qubit_count):
+        return [Var(qubit, name=f'o_{qubit}')
+                for qubit in range(qubit_count)]
 
-    # Save variables of the bra
-    bra_variables = [var for var in layer_variables]
+    bra_variables = get_bra_variables(qubit_count)
+
+    # Fill the variable `frame`
+    layer_variables = [var for var in bra_variables]
+    current_var_idx = qubit_count
 
     # Initialize buckets
     for qubit in range(qubit_count):
@@ -271,15 +273,23 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
 
     # Finally go over the qubits, append measurement gates
     # and collect ket variables
-    ket_variables = []
 
     op = ops.M(0)  # create a single measurement gate object
     data_dict.update({op.data_key: op.tensor})
 
-    for qubit in range(qubit_count):
+    def get_ket_variables(offset, qubit_count):
+        ket_variables = []
+        current_var_idx = offset
+        for qubit in range(qubit_count):
+            var = Var(current_var_idx, name=f'i_{qubit}', size=2)
+            ket_variables.append(var)
+            current_var_idx += 1
+        return ket_variables
+
+    ket_variables = get_ket_variables(current_var_idx, qubit_count)
+
+    for qubit, new_var in zip(range(qubit_count), ket_variables):
         var = layer_variables[qubit]
-        new_var = Var(current_var_idx, name=f'i_{qubit}', size=2)
-        ket_variables.append(new_var)
         # update buckets and variable `frame`
         buckets[int(var)].append(
             Tensor(op.name,

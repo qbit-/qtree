@@ -4,12 +4,11 @@ Qtree quantum circuit simulator. Functions in this file
 can be used as main functions in the final simulator program
 """
 import numpy as np
-import cirq
-#import random
 from tqdm import tqdm
 from loguru import logger as log
 
-import qtree.operators as ops
+from qtree.baseline_sims.cirq import simulate_state_from_file as get_amplitudes_from_cirq
+from qtree import read_circuit_file
 import qtree.optimizer as opt
 import qtree.graph_model as gm
 import qtree.np_framework as npfr
@@ -18,37 +17,13 @@ import qtree.utils as utils
 from qtree.quickbb_api import gen_cnf, run_quickbb
 
 
-def get_amplitudes_from_cirq(filename, initial_state=0):
-    """
-    Calculates amplitudes for a circuit in file filename using Cirq
-    """
-    n_qubits, circuit = ops.read_circuit_file(filename)
-    side_length = int(np.sqrt(n_qubits))
-
-    cirq_circuit = cirq.Circuit()
-
-    for layer in circuit:
-        cirq_circuit.append(op.to_cirq_2d_circ_op(side_length) for op in layer)
-
-    print("Circuit:")
-    print(cirq_circuit)
-    simulator = cirq.Simulator()
-    log.info(f"Starting Cirq simulation of {n_qubits} qubits and {len(circuit)} layers")
-
-    result = simulator.simulate(cirq_circuit, initial_state=initial_state)
-    log.info("Simulation completed\n")
-
-    # Cirq for some reason computes all amplitudes with phase -1j
-    return result.final_state
-
-
 def get_optimal_graphical_model(
         filename):
     """
     Builds a graphical model to contract a circuit in ``filename``
     and finds its tree decomposition
     """
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
     graph = gm.buckets2graph(buckets, ignore_variables=bra_vars+ket_vars)
@@ -61,7 +36,7 @@ def get_optimal_graphical_model(
 def eval_circuit_np_one_amp(filename, initial_state=0,
                             target_state=0):
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -104,7 +79,7 @@ def eval_circuit_np(filename, initial_state=0):
     Same amplitudes are evaluated with Cirq for comparison.
     """
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -163,7 +138,7 @@ def prepare_parallel_evaluation_np(filename, n_var_parallel):
     # import pdb
     # pdb.set_trace()
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -208,7 +183,7 @@ def eval_contraction_cost(filename):
     with and without optimization
     """
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -222,6 +197,7 @@ def eval_contraction_cost(filename):
 
     # optimize node order
     peo, treewidth = gm.get_peo(graph_raw)
+    print('treewidth', treewidth)
 
     # get cost for reordered graph
     graph, label_dict = gm.relabel_graph_nodes(
@@ -231,7 +207,7 @@ def eval_contraction_cost(filename):
     mem_opt_tot = sum(mem_opt)
 
     # split graph and relabel in optimized way
-    n_var_parallel = 3
+    n_var_parallel = 5
     _, reduced_graph = gm.split_graph_by_metric(
         graph_raw, n_var_parallel)
     peo, treewidth = gm.get_peo(reduced_graph)
@@ -244,9 +220,9 @@ def eval_contraction_cost(filename):
     mem_par, flop_par = gm.cost_estimator(graph_parallel)
     mem_par_tot = sum(mem_par)
 
-    print('Memory (in doubles):\n raw: {} optimized: {}'.format(
+    print('Memory (in doubles):\n raw: {:.3e}\n optimized: {:.3e}'.format(
         mem_raw_tot, mem_opt_tot))
-    print(' parallel:\n  node: {} total: {} n_tasks: {}'.format(
+    print(' parallel:\n  node: {:.3e} total: {:.3e} n_tasks: {}'.format(
         mem_par_tot, mem_par_tot*2**(n_var_parallel),
         2**(n_var_parallel)
     ))
@@ -262,10 +238,10 @@ def test_circ2graph(filename='inst_2x2_7_0.txt'):
     """
     import networkx as nx
 
-    nq, circuit = ops.read_circuit_file(filename)
+    nq, circuit = read_circuit_file(filename)
     graph = gm.circ2graph(nq, circuit)
 
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets_original, _, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
     graph_original = gm.buckets2graph(
@@ -296,7 +272,7 @@ def test_bucket_operation_speed():
     filename = 'test_circuits/inst/cz_v2/10x10/inst_10x10_60_1.txt'
 
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
+    n_qubits, circuit = read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -335,8 +311,41 @@ def test_bucket_operation_speed():
     tim2 = time.time()
     print(tim2 - tim1)
 
-
 def eval_circuit_multiamp_np(filename, initial_state=0):
+    """
+    Loads circuit from file and evaluates
+    multiple amplitudes at once using np framework
+    """
+
+    # Prepare graphical model
+    n_qubits, circuit = read_circuit_file(filename)
+    amplitudes, slice_dict = simulate_multiamp_np(n_qubits, circuit, initial_state)
+    # Now calculate the reference
+    print('Calculate reference')
+    amplitudes_reference = get_amplitudes_from_cirq(filename)
+
+    # Get a slice as we do not need full amplitude
+    bra_slices = {var: slice_dict[var] for var in slice_dict
+                  if var.name.startswith('o')}
+
+    # sort slice in the big endian order for Cirq
+    computed_subtensor = [slice_dict[var]
+                          for var in sorted(bra_slices, key=str)]
+
+    slice_of_amplitudes = amplitudes_reference.reshape(
+        [2]*n_qubits)[tuple(computed_subtensor)]
+    slice_of_amplitudes = slice_of_amplitudes.flatten()
+
+    print('Result:')
+    print(np.round(amplitudes, 3))
+    print('Reference:')
+    print(np.round(slice_of_amplitudes, 3))
+    print('Max difference:')
+    print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
+
+
+
+def simulate_multiamp_np(n_qubits, circuit, initial_state=0):
     """
     Loads circuit from file and evaluates
     multiple amplitudes at once using np framework
@@ -346,7 +355,6 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
     target_state = 0
 
     # Prepare graphical model
-    n_qubits, circuit = ops.read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = opt.circ2buckets(
         n_qubits, circuit)
 
@@ -406,30 +414,7 @@ def eval_circuit_multiamp_np(filename, initial_state=0):
         sliced_buckets, npfr.process_bucket_np,
         n_var_nosum=len(free_bra_vars))
     amplitudes = result.data.flatten()
-
-    # Now calculate the reference
-    print('Calculate reference')
-    amplitudes_reference = get_amplitudes_from_cirq(filename)
-
-    # Get a slice as we do not need full amplitude
-    bra_slices = {var: slice_dict[var] for var in slice_dict
-                  if var.name.startswith('o')}
-
-    # sort slice in the big endian order for Cirq
-    computed_subtensor = [slice_dict[var]
-                          for var in sorted(bra_slices, key=str)]
-
-    slice_of_amplitudes = amplitudes_reference.reshape(
-        [2]*n_qubits)[tuple(computed_subtensor)]
-    slice_of_amplitudes = slice_of_amplitudes.flatten()
-
-    print('Result:')
-    print(np.round(amplitudes, 3))
-    print('Reference:')
-    print(np.round(slice_of_amplitudes, 3))
-    print('Max difference:')
-    print(np.max(np.abs(amplitudes - slice_of_amplitudes)))
-
+    return amplitudes, slice_dict
 
 if __name__ == "__main__":
     eval_circuit_np('inst_2x2_7_0.txt')
