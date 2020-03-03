@@ -10,6 +10,14 @@ def timing(description: str) -> None:
     ellapsed_time = time() - start
     print(f"{description}: {ellapsed_time}")
 
+def timed(descr):
+    def  decor(f):
+        def wrapped(*a,**kw):
+            with timing(descr):
+                return f(*a, **kw)
+        return wrapped
+    return decor
+
 def threaded(f, daemon=False):
     import queue
 
