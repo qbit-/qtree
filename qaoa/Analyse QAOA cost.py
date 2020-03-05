@@ -198,7 +198,7 @@ plt.xscale('log')
 # -
 
 # Sizes for theory
-sizes = np.arange(3,21)
+sizes = np.arange(3,28)
 
 results = [
    get_cost_of_task(s) for s in sizes
