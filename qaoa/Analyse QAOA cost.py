@@ -165,7 +165,7 @@ for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,29) 
+sizes = np.arange(5,27) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
