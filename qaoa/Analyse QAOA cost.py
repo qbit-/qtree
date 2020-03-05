@@ -35,6 +35,7 @@ def get_test_graph(S):
     G = nx.relabel_nodes(G, lambda x: next(gen))
     return G
 
+@profile
 def get_test_qaoa(S):
     G = get_test_graph(S)
     N = G.number_of_nodes()
@@ -42,17 +43,19 @@ def get_test_qaoa(S):
     qc = qaoa.get_qaoa_circuit(G, beta, gamma)
     return qc, N
 
+@profile
 def get_test_expr_graph(S):
     qc, N = get_test_qaoa(S)
     graph = qtree.graph_model.circ2graph(N, qc)
     return graph, N
 
+@profile
 def get_optimized_expr(S):
     graph, N = get_test_expr_graph(S)
     peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
     graph_opt, slice_dict = utils.reorder_graph(graph, peo)
     return graph_opt, nghs, N
-
+@profile
 def get_cost_of_task(S):
     graph_opt, nghs, N = get_optimized_expr(S)
     mems, flops = qtree.graph_model.cost_estimator(graph_opt)
@@ -117,11 +120,12 @@ from pyrofiler.callbacks import append_to
 
 
 # +
-profile = {}
+profile_ = {}
 
-@mem_util(description='mem', callback=append_to(profile))
-@timed('time', callback=append_to(profile))
+@mem_util(description='mem', callback=append_to(profile_))
+@timed('time', callback=append_to(profile_))
 @log.catch()
+@profile
 def simulate_circ(circuit, n_qubits):
     buckets, data_dict, bra_vars, ket_vars = qtree.optimizer.circ2buckets(
         n_qubits, circuit)
@@ -161,11 +165,12 @@ def simulate_circ(circuit, n_qubits):
 
 
 # +
+profile = profile_
 for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,27) 
+sizes = np.arange(5,17) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
