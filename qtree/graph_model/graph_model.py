@@ -294,6 +294,14 @@ def get_simple_graph(graph, parallel_edges=False, self_loops=False):
     return graph
 
 
+def indices_to_vars(peo, old_graph):
+    # transform PEO to a list of Var objects as expected by
+    # other parts of code
+    peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
+                    name=old_graph.nodes[v]['name']) for v in peo]
+    return peo_vars
+
+
 def get_peo(old_graph,
             quickbb_extra_args=" --time 60 --min-fill-ordering ",
             input_suffix=None, keep_input=False,
@@ -383,14 +391,10 @@ def get_peo(old_graph,
         except FileNotFoundError:
             pass
 
-    # transform PEO to a list of Var objects as expected by
-    # other parts of code
     if int_vars:
         return peo, treewidth
     else:
-        peo_vars = [Var(v, size=old_graph.nodes[v]['size'],
-                        name=old_graph.nodes[v]['name']) for v in peo]
-        return peo_vars, treewidth
+        return indices_to_vars(peo, old_graph), treewidth
 
 
 def split_graph_random(old_graph,

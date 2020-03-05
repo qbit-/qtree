@@ -1,4 +1,4 @@
-__pycache__
+**/__pycache__
 quickbb_out.qbb
 quickbb_stat.qbb
 quickbb.cnf
@@ -7,3 +7,4 @@ adjacency_graph.matcobalt_logs
 cobalt_logs/
 adjacency_graph.mattest_circuits
 test_circuits
+**/.ipynb_checkpoints
