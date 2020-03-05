@@ -8,3 +8,4 @@ cobalt_logs/
 adjacency_graph.mattest_circuits
 test_circuits
 **/.ipynb_checkpoints
+*.egg-info
