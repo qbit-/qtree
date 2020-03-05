@@ -63,7 +63,6 @@ def get_cost_of_task(S):
 # utils.plot_cost(mems, flops)
 
 # +
-sizes = np.arange(5,18,1)
 
 def get_est(xs, vals):
     mem_est = np.polyfit(np.log(xs), np.log(vals), 2)
@@ -75,6 +74,7 @@ def get_est(xs, vals):
 
 
 # + active="ipynb"
+# sizes = np.arange(5,18,1)
 # results = [
 #    get_cost_of_task(s) for s in sizes
 # ]
@@ -196,7 +196,7 @@ plt.xscale('log')
 # -
 
 # Sizes for theory
-sizes = np.arange(3,23)
+sizes = np.arange(3,13)
 
 results = [
    get_cost_of_task(s) for s in sizes
