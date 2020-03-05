@@ -170,7 +170,7 @@ for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,17) 
+sizes = np.arange(5,27) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
@@ -203,7 +203,7 @@ plt.xscale('log')
 # -
 
 # Sizes for theory
-sizes = np.arange(3,28)
+sizes = np.arange(3,29)
 
 results = [
    get_cost_of_task(s) for s in sizes
