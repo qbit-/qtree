@@ -74,35 +74,34 @@ def get_est(xs, vals):
     return np.exp(est),  np.exp(mem_est)
 
 
-
-# +
-results = [
-   get_cost_of_task(s) for s in sizes
-]
-def plot_theory(results):
-    sums = [[sum(x) for x in y[:3]] for y in results]
-    memsums, flopsums, nghssums = zip(*sums)
-    ns = list(zip(*results))[3]
-
-    est, mem_est = get_est(ns, memsums)
-    est, flop_est = get_est(ns, flopsums)
-
-
-    plt.plot(ns, memsums, label='mem sum')
-    plt.plot(ns, flopsums, label='flop sum')
-    plt.plot(est, mem_est, '--', label='mem log-log fit')
-    plt.plot(est, flop_est, '--', label='flop log-log fit')
-
-    plt.xlabel('Number of qbits')
-    plt.yscale('log')
-    plt.xscale('log')
-    plt.suptitle('QAOA one amplitude simulation cost', fontsize=14)
-    plt.title('MaxCut triangular grids')
-    plt.legend()
-    plt.minorticks_on()
-    plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
-
-plot_theory(results)
+# + active="ipynb"
+# results = [
+#    get_cost_of_task(s) for s in sizes
+# ]
+# def plot_theory(results):
+#     sums = [[sum(x) for x in y[:3]] for y in results]
+#     memsums, flopsums, nghssums = zip(*sums)
+#     ns = list(zip(*results))[3]
+#
+#     est, mem_est = get_est(ns, memsums)
+#     est, flop_est = get_est(ns, flopsums)
+#
+#
+#     plt.plot(ns, memsums, label='mem sum')
+#     plt.plot(ns, flopsums, label='flop sum')
+#     plt.plot(est, mem_est, '--', label='mem log-log fit')
+#     plt.plot(est, flop_est, '--', label='flop log-log fit')
+#
+#     plt.xlabel('Number of qbits')
+#     plt.yscale('log')
+#     plt.xscale('log')
+#     plt.suptitle('QAOA one amplitude simulation cost', fontsize=14)
+#     plt.title('MaxCut triangular grids')
+#     plt.legend()
+#     plt.minorticks_on()
+#     plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
+#
+# plot_theory(results)
 
 # + active="ipynb"
 # plt.plot(sizes, ns)
@@ -164,7 +163,7 @@ for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,25) 
+sizes = np.arange(5,18) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
@@ -239,7 +238,8 @@ plt.xlabel('Number of qbits')
 plt.suptitle('QAOA one amplitude simulation cost', fontsize=14)
 plt.title('FLOP')
 plt.legend()
-plt.savefig('qaoa_cost_theory_exp.png')
+
 # -
-
-
+filename = 'qaoa_cost_theory_exp'
+plt.savefig(f'qaoa/figures/{filename}.png')
+plt.savefig(f'qaoa/figures/{filename}.pdf')
