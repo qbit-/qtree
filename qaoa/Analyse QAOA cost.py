@@ -195,15 +195,19 @@ plt.yscale('log')
 plt.xscale('log')
 # -
 
+# Sizes for theory
+sizes = np.arange(3,23)
+
 results = [
    get_cost_of_task(s) for s in sizes
 ]
 sums = [[sum(x) for x in y[:3]] for y in results]
 memsums, flopsums, nghssums = zip(*sums)
+ns_theory = list(zip(*results))[3]
 
 # +
-est, mem_est = get_est(ns, memsums)
-est, flop_est = get_est(ns, flopsums)
+est, mem_est = get_est(ns_theory, memsums)
+est, flop_est = get_est(ns_theory, flopsums)
 
 fig, axs = plt.subplots(1,2, figsize=(12,5))
 
@@ -218,7 +222,7 @@ def minorticks():
 plt.sca(axs[0])
 log_log_scale()
 minorticks()
-plt.plot(ns, memsums, label='theory')
+plt.plot(ns_theory, memsums, label='theory')
 plt.plot(ns, mems, label='experiment')
 plt.plot(est, mem_est, '--', label='log-log fit')
 plt.legend()
@@ -228,7 +232,7 @@ plt.xlabel('Number of qbits')
 plt.sca(axs[1])
 log_log_scale()
 minorticks()
-plt.plot(ns, flopsums, label='theory')
+plt.plot(ns_theory, flopsums, label='theory')
 plt.plot(ns, to_flop(profile['time']), label='experiment')
 plt.plot(ns, to_flop(profile['time_raw']), label='experiment raw')
 plt.plot(est, flop_est, '--', label='log-log fit')
