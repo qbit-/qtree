@@ -16,6 +16,7 @@
 # +
 import numpy as np
 import networkx as nx
+from loguru import logger as log
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set_style('whitegrid')
@@ -120,6 +121,7 @@ profile = {}
 
 @mem_util(description='mem', callback=append_to(profile))
 @timed('time', callback=append_to(profile))
+@log.catch()
 def simulate_circ(circuit, n_qubits):
     buckets, data_dict, bra_vars, ket_vars = qtree.optimizer.circ2buckets(
         n_qubits, circuit)
@@ -163,7 +165,7 @@ for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,18) 
+sizes = np.arange(5,29) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
@@ -196,7 +198,7 @@ plt.xscale('log')
 # -
 
 # Sizes for theory
-sizes = np.arange(3,13)
+sizes = np.arange(3,21)
 
 results = [
    get_cost_of_task(s) for s in sizes
