@@ -4,7 +4,6 @@ import qtree
 from qtree.optimizer import Var
 import matplotlib.pyplot as plt
 
-@profile
 def get_locale_peo(old_graph, rule):
     # This is far below computationally effective
     graph = copy.deepcopy(old_graph)

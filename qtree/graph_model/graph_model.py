@@ -440,7 +440,6 @@ def split_graph_random(old_graph,
     return sorted(idx_parallel_var, key=int), graph
 
 
-@profile
 def get_cost_by_node(graph, node):
     """
     Outputs the cost corresponding to the
@@ -520,7 +519,6 @@ def get_cost_by_node(graph, node):
 
     return memory, flops
 
-@profile
 def eliminate_node(graph, node, self_loops=True):
     """
     Eliminates node according to the tensor contraction rules.
