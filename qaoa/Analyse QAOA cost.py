@@ -429,7 +429,7 @@ peoqbb_split, tw = qtree.graph_model.get_peo(graph_split)
 
 # ## Second chopping
 
-chop2 = 1000
+chop2 = 900
 
 for n in peo[chop1:chop1 + chop2]:
     qtree.graph_model.eliminate_node(graph, n)
