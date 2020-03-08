@@ -4,6 +4,17 @@ import qtree
 from qtree.optimizer import Var
 import matplotlib.pyplot as plt
 
+def get_neighbours_peo(old_graph):
+    graph = copy.deepcopy(old_graph)
+    peo = []
+    nghs = []
+    while graph.number_of_nodes():
+        best_node, degree = sorted(graph.degree, key=lambda x:x[1])[0]
+        nghs.append(degree)
+        peo.append(best_node)
+        qtree.graph_model.eliminate_node(graph, best_node)
+    return peo, nghs
+
 def get_locale_peo(old_graph, rule):
     # This is far below computationally effective
     graph = copy.deepcopy(old_graph)
@@ -66,8 +77,12 @@ def n_neighbors(graph, node):
 def edges_to_clique(graph, node):
     ngh = list(graph.neighbors(node))
     N = len(ngh)
-    edges = [e for e in graph.edges if all([x in ngh for x in e])]
-    return N*(N-1) - len(edges)
+    edges = [e for e in graph.edges if all([x in ngh for x in e[:2]])]
+    try:
+        edges = [e for e in edges if e[2] == 0]
+    except IndexError:
+        pass
+    return N*(N-1)//2 - len(edges)
 
 
 def _neighbors(graph, node):
