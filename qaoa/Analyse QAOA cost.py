@@ -359,32 +359,24 @@ utils.plot_cost(costs, mems)
 
 # # Parallelize after critical point
 
-# + [markdown] heading_collapsed=true
 # ## First chopping 
 
-# + hidden=true
 chop1 = 5500
 
-# + hidden=true
 for n in peo[:chop1]:
     qtree.graph_model.eliminate_node(graph, n)
 print('Nodes left:', graph.number_of_nodes())
 
-# + [markdown] hidden=true
 # ### Draw chopped graph
 
-# + hidden=true
 print(peo[4100:])
 print(sorted(graph.degree, key=lambda x: x[1]))
 print(sorted([ utils.edges_to_clique(graph, x[0]) for x in graph.degree]))
 
-# + hidden=true
 nx.draw_kamada_kawai(graph, node_size=16)
 
-# + [markdown] hidden=true
 # ### Draw chopped  parallelised graph
 
-# + hidden=true
 PAR_VARS = 12
 par_vars, graph_split = qtree.graph_model.split_graph_by_metric(
     graph
@@ -392,23 +384,18 @@ par_vars, graph_split = qtree.graph_model.split_graph_by_metric(
 )
 nx.draw_kamada_kawai(graph_split, node_size=16)
 
-# + [markdown] hidden=true
 # ### Late paralelisaton with simple reorder
 
-# + [markdown] hidden=true
 # #### Full chopped cost
 
-# + hidden=true
 graph_opt, nghs = _optimise_graph(graph)
 mems, flops = qtree.graph_model.cost_estimator(graph_opt)
 print(max(mems)/1e9)
 print(max(flops)/1e9)
 utils.plot_cost(mems, flops)
 
-# + [markdown] hidden=true
 # #### Parallelised chopped cost
 
-# + hidden=true
 graph_split_opt, nghs = _optimise_graph(graph_split)
 mems, flops = qtree.graph_model.cost_estimator(graph_split_opt)
 print(max(mems)/1e9)
@@ -416,42 +403,33 @@ print(max(flops)/1e9)
 utils.plot_cost(mems, flops)
 
 
-# + [markdown] hidden=true
 # ### with QuickBB reorder
 
-# + [markdown] hidden=true
 # #### Full chopped cost
 
-# + hidden=true
 peoqbb, tw = qtree.graph_model.get_peo(graph)
 graph_opt_relabel, nghs = utils.reorder_graph(graph, peoqbb)
 mems, flops = qtree.graph_model.cost_estimator(graph_opt_relabel)
 
-# + hidden=true
 print(max(mems)/1e9)
 print(max(flops)/1e9)
 utils.plot_cost(mems, flops)
 
-# + [markdown] hidden=true
 # #### Parallelized chopped cost
 
-# + hidden=true
 peoqbb_split, tw = qtree.graph_model.get_peo(graph_split)
 
-# + hidden=true
 graph_split_relabel, nghs = utils.reorder_graph(graph_split, peoqbb_split)
 mems, flops = qtree.graph_model.cost_estimator(graph_split_relabel)
 print(max(mems)/1e9)
 print(max(flops)/1e9)
 utils.plot_cost(mems, flops)
 
-# + hidden=true
 peoqbb_split, tw = qtree.graph_model.get_peo(graph_split)
-# -
 
 # ## Second chopping
 
-chop2 = 700
+chop2 = 1000
 
 for n in peo[chop1:chop1 + chop2]:
     qtree.graph_model.eliminate_node(graph, n)
