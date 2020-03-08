@@ -286,7 +286,7 @@ plt.savefig('figures/rect_cost_vs_nodes_T_p1.png')
 jjj
 # -
 
-graph, N = get_test_expr_graph(29, 1)
+graph, N = get_test_expr_graph(35, 1)
 print(N)
 
 # +
@@ -338,14 +338,14 @@ costs, mems = qtree.graph_model.cost_estimator(graph_relabel)
 utils.plot_cost(costs, mems)
 # -
 
-for n in peo[:2500]:
+for n in peo[:4100]:
     qtree.graph_model.eliminate_node(graph, n)
     
 
 
 
 nx.draw_kamada_kawai(graph, node_size=16)
-print(peo[3200:])
+print(peo[4100:])
 print(sorted(graph.degree, key=lambda x: x[1]))
 print(sorted([ utils.edges_to_clique(graph, x[0]) for x in graph.degree]))
 
