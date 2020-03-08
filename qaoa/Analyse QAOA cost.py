@@ -386,18 +386,18 @@ print(max(mems)/1e9)
 print(max(flops)/1e9)
 utils.plot_cost(mems, flops)
 
-for n in peo[2500:2500+800]:
+for n in peo[4100:4100+700]:
     qtree.graph_model.eliminate_node(graph, n)
     
 
 
 
 nx.draw_kamada_kawai(graph, node_size=16)
-print(peo[3200:])
+print(peo[4700:])
 print(sorted(graph.degree, key=lambda x: x[1]))
 print(sorted([ utils.edges_to_clique(graph, x[0]) for x in graph.degree]))
 
-# # Parallelize after critical point
+# # Second parallelize after critical point 
 
 par_vars, graph_split = qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=12)
 nx.draw_kamada_kawai(graph_split, node_size=16)
