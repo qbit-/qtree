@@ -29,58 +29,86 @@ import utils_qaoa as qaoa
 
 # +
 def get_test_graph(S):
-    G = nx.triangular_lattice_graph(S, S)
+    #G = nx.triangular_lattice_graph(S, S)
+    G = nx.grid_2d_graph(S+1, (2+S)//2)
     # remove grid labelling
     gen = (x for x in range(G.number_of_nodes()))
     G = nx.relabel_nodes(G, lambda x: next(gen))
     return G
 
-@profile
-def get_test_qaoa(S):
+def get_test_qaoa(S, p):
     G = get_test_graph(S)
     N = G.number_of_nodes()
-    beta, gamma = [np.pi/3], [np.pi/2]
+    beta, gamma = [np.pi/3]*p, [np.pi/2]*p
     qc = qaoa.get_qaoa_circuit(G, beta, gamma)
     return qc, N
 
-@profile
-def get_test_expr_graph(S):
-    qc, N = get_test_qaoa(S)
+def get_test_expr_graph(S, p):
+    qc, N = get_test_qaoa(S, p)
     graph = qtree.graph_model.circ2graph(N, qc)
     return graph, N
 
-@profile
-def get_optimized_expr(S):
-    graph, N = get_test_expr_graph(S)
+def get_optimized_expr(S, p):
+    graph, N = get_test_expr_graph(S, p)
+    graph_opt, nghs = _optimise_graph(graph)
+    return graph_opt, nghs, N
+
+def _optimise_graph(graph):
     peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
     graph_opt, slice_dict = utils.reorder_graph(graph, peo)
-    return graph_opt, nghs, N
-@profile
-def get_cost_of_task(S):
-    graph_opt, nghs, N = get_optimized_expr(S)
+    return graph_opt, nghs
+
+def get_splitted_graph(S, p, pars):
+    graph, N = get_test_expr_graph(S, p)
+    idxs, graph = qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=pars)
+    graph_opt, nghs = _optimise_graph(graph)
+    return graph, nghs, N
+
+def get_cost_of_splitted(S, p, pars):
+    graph, nghs, N = get_splitted_graph(S, p, pars)
+    graph_opt, nghs = _optimise_graph(graph)
+    mems, flops = qtree.graph_model.cost_estimator(graph_opt)
+    return mems,flops,nghs, N
+
+def get_cost_of_task(S, p=1):
+    graph_opt, nghs, N = get_optimized_expr(S, p)
     mems, flops = qtree.graph_model.cost_estimator(graph_opt)
     return mems,flops,nghs, N
 
 
+# -
+
+# ## Example of per-step cost
+
 # + active="ipynb"
-# mems, flops, nghs, N = get_cost_of_task(5)
+# mems, flops, nghs, N = get_cost_of_task(15)
 # utils.plot_cost(mems, flops)
+# -
+
+# ## Cost vs qubits size 
 
 # +
-
+def log_log_scale():
+    plt.yscale('log')
+    plt.xscale('log')
+    
+def minorticks():
+    plt.minorticks_on()
+    plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
+    
 def get_est(xs, vals):
     mem_est = np.polyfit(np.log(xs), np.log(vals), 2)
     mem_est = np.poly1d(mem_est)
-    est = np.linspace(20,1e3, 100)
+    est = np.linspace(20,1e2, 100)
     est = np.log(est)
     mem_est = mem_est(est)
     return np.exp(est),  np.exp(mem_est)
 
 
 # + active="ipynb"
-# sizes = np.arange(5,18,1)
+# sizes = np.arange(5,17,1)
 # results = [
-#    get_cost_of_task(s) for s in sizes
+#    get_cost_of_task(s, 3) for s in sizes
 # ]
 # def plot_theory(results):
 #     sums = [[sum(x) for x in y[:3]] for y in results]
@@ -104,13 +132,158 @@ def get_est(xs, vals):
 #     plt.legend()
 #     plt.minorticks_on()
 #     plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
-#
-# plot_theory(results)
 
 # + active="ipynb"
-# plt.plot(sizes, ns)
+# plot_theory(results)
+#
 # -
 
+# ## Cost with respect to depth
+#
+
+# +
+psize = 4
+Ssize = 9
+
+costs_with_p = []
+for p in range(1, 1+psize):
+    for S in range(2, 2+Ssize):
+        costs = get_cost_of_task(S, p)
+        costs_with_p.append(costs)
+# +
+
+costs_with_p_p= [(sum(x[0]), sum(x[1]), max(x[2]), x[3]) for x in costs_with_p]
+data = np.array(list(zip(*costs_with_p_p)))
+
+data = data.reshape(4, psize, Ssize)
+print(data.shape)
+
+fig, axs = plt.subplots(1,3, figsize=(15, 5))
+
+plt.sca(axs[0])
+log_log_scale()
+minorticks()
+plt.title('memory')
+for i in range(psize):
+    plt.plot(data[-1,i], data[0,i])
+    
+plt.sca(axs[1])
+log_log_scale()
+minorticks()
+plt.title('Flop')
+for i in range(psize):
+    plt.plot(data[-1,i], data[1,i])
+    
+plt.sca(axs[2])
+log_log_scale()
+minorticks()
+plt.title('Neigh')
+for i in range(psize):
+    plt.plot(data[-1,i], data[2,i])
+
+plt.suptitle('Cost dependence for different p')
+plt.savefig('figures/cost_vs_p.png')
+
+
+# +
+psize = 4
+Ssize = 6
+p = 1
+
+costs_with_pars = []
+for pars in range(1, 1+psize):
+    for S in range(20, 20+Ssize):
+        costs = get_cost_of_splitted(S, p, pars)
+        costs_with_pars.append(costs)
+       
+# -
+
+
+
+
+
+# +
+
+
+costs_with_p_ = [(sum(x[0]), sum(x[1]), max(x[2]), x[3]) for x in costs_with_pars]
+data = np.array(list(zip(*costs_with_p_)))
+
+data = data.reshape(4, psize, Ssize)
+print(data.shape)
+
+fig, axs = plt.subplots(1,3, figsize=(15, 5))
+colormap = plt.cm.gist_ncar
+labels = [f'nodes: 2^{i}' for i in range(1, 1+psize)]
+for ax in axs:
+    ax.set_prop_cycle(plt.cycler('color', plt.cm.cool(np.linspace(0, 1, psize))))
+    ax.set_xlabel('Qubit count')
+
+plt.sca(axs[0])
+log_log_scale()
+minorticks()
+plt.title('memory')
+for i in range(psize):
+    plt.plot(data[-1,i], data[0,i])
+    
+plt.sca(axs[1])
+log_log_scale()
+minorticks()
+plt.title('Flop')
+for i in range(psize):
+    plt.plot(data[-1,i], data[1,i])
+    
+plt.sca(axs[2])
+log_log_scale()
+minorticks()
+plt.title('Neigh')
+for i in range(psize):
+    plt.plot(data[-1,i], data[2,i])
+plt.legend(labels)
+
+plt.suptitle('Cost dependence for parallelised, rectangular task. p=1')
+plt.savefig('figures/rect_cost_vs_nodes_p1.png')
+
+
+# +
+
+costs_with_p_ = [(sum(x[0]), sum(x[1]), max(x[2]), x[3]) for x in costs_with_pars]
+data = np.array(list(zip(*costs_with_p_)))
+
+data = data.reshape(4, psize, Ssize)
+data = data.transpose(0,2,1)
+print(data.shape)
+processes = 2**(np.arange(1, 1+psize))
+fig, axs = plt.subplots(1,3, figsize=(15, 5))
+for ax in axs:
+    ax.set_xlabel('Nodes')
+    ax.set_prop_cycle(plt.cycler('color', plt.cm.spring(np.linspace(0, 1, psize))))
+
+plt.sca(axs[0])
+log_log_scale()
+minorticks()
+plt.title('memory')
+for i in range(Ssize):
+    plt.plot(processes, data[0,i])
+    
+plt.sca(axs[1])
+log_log_scale()
+minorticks()
+plt.title('Flop')
+for i in range(Ssize):
+    plt.plot(processes, data[1,i])
+    
+plt.sca(axs[2])
+log_log_scale()
+minorticks()
+plt.title('Neigh')
+for i in range(Ssize):
+    plt.plot(processes, data[2,i])
+
+labels = [f'{int(i)} qubits' for i in data[-1,:, 0]]
+plt.legend(labels)
+plt.suptitle('Cost dependence for parallelised vars, different qubit counts, rectangular task. p=1')
+plt.savefig('figures/rect_cost_vs_nodes_T_p1.png')
+# -
 
 # ## Profiling actual simulation
 
@@ -120,12 +293,11 @@ from pyrofiler.callbacks import append_to
 
 
 # +
-profile_ = {}
+profile = {}
 
-@mem_util(description='mem', callback=append_to(profile_))
-@timed('time', callback=append_to(profile_))
+@mem_util(description='mem', callback=append_to(profile))
+@timed('time', callback=append_to(profile))
 @log.catch()
-@profile
 def simulate_circ(circuit, n_qubits):
     buckets, data_dict, bra_vars, ket_vars = qtree.optimizer.circ2buckets(
         n_qubits, circuit)
@@ -165,12 +337,11 @@ def simulate_circ(circuit, n_qubits):
 
 
 # +
-profile = profile_
 for key in profile:
     profile[key] = []
     
 profile['N'] = []
-sizes = np.arange(5,29) 
+sizes = np.arange(5,27) 
 
 for S in sizes[:]:
     qc, N = get_test_qaoa(S)
@@ -203,7 +374,7 @@ plt.xscale('log')
 # -
 
 # Sizes for theory
-sizes = np.arange(3,22)
+sizes = np.arange(3,21)
 
 results = [
    get_cost_of_task(s) for s in sizes
@@ -217,14 +388,6 @@ est, mem_est = get_est(ns_theory, memsums)
 est, flop_est = get_est(ns_theory, flopsums)
 
 fig, axs = plt.subplots(1,2, figsize=(12,5))
-
-def log_log_scale():
-    plt.yscale('log')
-    plt.xscale('log')
-    
-def minorticks():
-    plt.minorticks_on()
-    plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
 
 plt.sca(axs[0])
 log_log_scale()
