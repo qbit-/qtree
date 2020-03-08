@@ -680,7 +680,6 @@ def get_mem_requirement(graph):
     return memory
 
 
-@profile
 def cost_estimator(old_graph, free_vars=[]):
     """
     Estimates the cost of the bucket elimination algorithm.

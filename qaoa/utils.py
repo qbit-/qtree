@@ -75,13 +75,8 @@ def n_neighbors(graph, node):
 
 
 def edges_to_clique(graph, node):
-    ngh = list(graph.neighbors(node))
-    N = len(ngh)
-    edges = [e for e in graph.edges if all([x in ngh for x in e[:2]])]
-    try:
-        edges = [e for e in edges if e[2] == 0]
-    except IndexError:
-        pass
+    N = graph.degree(node)
+    edges = graph.edges(node)
     return N*(N-1)//2 - len(edges)
 
 
