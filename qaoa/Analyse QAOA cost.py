@@ -186,13 +186,13 @@ plt.savefig('figures/cost_vs_p.png')
 
 
 # +
-psize = 4
-Ssize = 6
+psize = 3
+Ssize = 3
 p = 1
 
 costs_with_pars = []
 for pars in range(1, 1+psize):
-    for S in range(20, 20+Ssize):
+    for S in range(25, 25+Ssize):
         costs = get_cost_of_splitted(S, p, pars)
         costs_with_pars.append(costs)
        
