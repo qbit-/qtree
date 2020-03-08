@@ -283,9 +283,174 @@ labels = [f'{int(i)} qubits' for i in data[-1,:, 0]]
 plt.legend(labels)
 plt.suptitle('Cost dependence for parallelised vars, different qubit counts, rectangular task. p=1')
 plt.savefig('figures/rect_cost_vs_nodes_T_p1.png')
+jjj
 # -
 
+graph, N = get_test_expr_graph(29, 1)
+print(N)
+
+# +
+# %%time
+peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
+graph_relabel, slice_dict = utils.reorder_graph(graph, peo)
+
+costs, flops = qtree.graph_model.cost_estimator(graph_relabel)
+print(max(costs)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(costs, flops)
+
+#nx.draw_kamada_kawai(graph, node_size=3)
+
+# +
+# #%cd ..
+# -
+
+# %%time
+peoqbb, tw = qtree.graph_model.get_peo(graph)
+
+# +
+graph, slice_dict = utils.reorder_graph(graph, peoqbb)
+
+costs, mems = qtree.graph_model.cost_estimator(graph)
+print(max(mems)/1e8)
+print(max(costs)/1e8)
+utils.plot_cost(costs, mems)
+    
+# -
+
+
+
+# +
+# %%time
+peon, nghs = utils.get_neighbours_peo(graph)
+graph_relabel, slice_dict = utils.reorder_graph(graph, peon)
+
+costs, mems = qtree.graph_model.cost_estimator(graph_relabel)
+print(max(mems)/1e8)
+print(max(costs)/1e8)
+utils.plot_cost(costs, mems)
+
+# +
+peo, nghs = utils.get_locale_peo(graph, utils.edges_to_clique)
+graph_relabel, slice_dict = utils.reorder_graph(graph, peo)
+
+costs, mems = qtree.graph_model.cost_estimator(graph_relabel)
+utils.plot_cost(costs, mems)
+# -
+
+for n in peo[:2500]:
+    qtree.graph_model.eliminate_node(graph, n)
+    
+
+
+
+nx.draw_kamada_kawai(graph, node_size=16)
+print(peo[3200:])
+print(sorted(graph.degree, key=lambda x: x[1]))
+print(sorted([ utils.edges_to_clique(graph, x[0]) for x in graph.degree]))
+
+# # Parallelize after critical point
+
+par_vars, graph_split = qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=12)
+nx.draw_kamada_kawai(graph_split, node_size=16)
+
+# ## Late paralelisaton with simple reorder
+
+graph_opt, nghs = _optimise_graph(graph)
+mems, flops = qtree.graph_model.cost_estimator(graph_opt)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+graph_split_opt, nghs = _optimise_graph(graph_split)
+mems, flops = qtree.graph_model.cost_estimator(graph_split_opt)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+
+# ## Late paralelisaton with qbb reorder
+
+peoqbb, tw = qtree.graph_model.get_peo(graph)
+graph_opt_relabel, nghs = utils.reorder_graph(graph, peoqbb)
+mems, flops = qtree.graph_model.cost_estimator(graph_opt_relabel)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+peoqbb_split, tw = qtree.graph_model.get_peo(graph_split)
+
+graph_split_relabel, nghs = utils.reorder_graph(graph_split, peoqbb_split)
+mems, flops = qtree.graph_model.cost_estimator(graph_split_relabel)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+for n in peo[2500:2500+800]:
+    qtree.graph_model.eliminate_node(graph, n)
+    
+
+
+
+nx.draw_kamada_kawai(graph, node_size=16)
+print(peo[3200:])
+print(sorted(graph.degree, key=lambda x: x[1]))
+print(sorted([ utils.edges_to_clique(graph, x[0]) for x in graph.degree]))
+
+# # Parallelize after critical point
+
+par_vars, graph_split = qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=12)
+nx.draw_kamada_kawai(graph_split, node_size=16)
+
+# ## Late paralelisaton with simple reorder
+
+graph_opt, nghs = _optimise_graph(graph)
+mems, flops = qtree.graph_model.cost_estimator(graph_opt)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+graph_split_opt, nghs = _optimise_graph(graph_split)
+mems, flops = qtree.graph_model.cost_estimator(graph_split_opt)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+
+# ## Late paralelisaton with qbb reorder
+
+peoqbb, tw = qtree.graph_model.get_peo(graph)
+graph_opt_relabel, nghs = utils.reorder_graph(graph, peoqbb)
+mems, flops = qtree.graph_model.cost_estimator(graph_opt_relabel)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+peoqbb_split, tw = qtree.graph_model.get_peo(graph_split)
+
+graph_split_relabel, nghs = utils.reorder_graph(graph_split, peoqbb_split)
+mems, flops = qtree.graph_model.cost_estimator(graph_split_relabel)
+print(max(mems)/1e9)
+print(max(flops)/1e9)
+utils.plot_cost(mems, flops)
+
+# +
+sg = graph.subgraph([1538] + list(graph.neighbors(1538)))
+N = sg.number_of_nodes()
+print(sg.number_of_edges(), 1/2*N*(N-1))
+print(list(sg.selfloop_edges()))
+edges = [e for e in graph.edges if all([e[-1]==0]+[x in sg.nodes for x in e[:2]])]
+print(len(edges))
+print(utils.edges_to_clique(graph, 1538))
+
+nx.draw_shell(sg, with_labels=True)
+# -
+
+
+
+#
 # ## Profiling actual simulation
+#
 
 
 from pyrofiler import mem_util, timed, timing

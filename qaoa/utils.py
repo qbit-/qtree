@@ -9,9 +9,12 @@ def get_neighbours_peo(old_graph):
     peo = []
     nghs = []
     while graph.number_of_nodes():
-        best_node, degree = sorted(graph.degree, key=lambda x:x[1])[0]
-        nghs.append(degree)
+        nodes, degrees = np.array(list(graph.degree())).T
+        best_idx = np.argmin(degrees)
+        best_degree = degrees[best_idx]
+        best_node = nodes[best_idx]
         peo.append(best_node)
+        nghs.append(best_degree)
         qtree.graph_model.eliminate_node(graph, best_node)
     return peo, nghs
 
