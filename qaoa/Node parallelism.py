@@ -240,7 +240,7 @@ with pyrof.timing(f'contract simple'):
     
 sliced_contract_ray = ray.remote(sliced_contract)
     
-par_vars = [1,5,15 17]
+par_vars = [1,5,15,17]
 threads = 2**len(par_vars)
 target_shape = C.shape
 
