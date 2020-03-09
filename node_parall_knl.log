@@ -1,0 +1,146 @@
+danlkv@knl08 anl/qtree (qaoa !*%) » cat node_parall_knl.log                                                                             130 ↵
+danlkv@knl08 anl/qtree (qaoa !*%) » python3.7 qaoa/Node\ parallelism.py
+[(slice(None, None, None), slice(0, 1, None), slice(0, 1, None)), (slice(None, None, None), slice(0, 1, None), slice(0, 1, None), slice(None,
+None, None))]
+[(slice(None, None, None), slice(1, 2, None), slice(0, 1, None)), (slice(None, None, None), slice(0, 1, None), slice(1, 2, None), slice(None,
+None, None))]
+[(slice(None, None, None), slice(2, 3, None), slice(0, 1, None)), (slice(None, None, None), slice(0, 1, None), slice(2, 3, None), slice(None,
+None, None))]
+[(slice(None, None, None), slice(0, 1, None), slice(1, 2, None)), (slice(None, None, None), slice(1, 2, None), slice(0, 1, None), slice(None,
+None, None))]
+contract : 5.891693353652954
+contract simple : 6.05984091758728
+        contract sliced 0 : 4.772647142410278
+        contract sliced 1 : 4.750960350036621
+allocate result : 0.0001461505889892578
+slice result : 2.9325485229492188e-05
+assignment : 3.7974953651428223
+contract simple : 6.009496688842773
+        contract sliced 0 : 2.3604817390441895
+        contract sliced 1 : 2.385709524154663
+        contract sliced 2 : 2.391657590866089
+        contract sliced 3 : 2.3934006690979004
+allocate result : 0.00014090538024902344
+assignment : 4.1070778369903564
+contract simple : 5.992784261703491
+        contract sliced 0 : 0.5897917747497559
+        contract sliced 1 : 0.5879101753234863
+        contract sliced 2 : 0.5880939960479736
+        contract sliced 3 : 0.5864572525024414
+        contract sliced 4 : 0.5806498527526855
+        contract sliced 5 : 0.5896165370941162
+        contract sliced 6 : 0.5927176475524902
+        contract sliced 7 : 0.5951464176177979
+        contract sliced 8 : 0.585773229598999
+        contract sliced 9 : 0.5929207801818848
+        contract sliced 10 : 0.5941822528839111
+        contract sliced 11 : 0.5967185497283936
+        contract sliced 12 : 0.5876972675323486
+        contract sliced 13 : 0.5995738506317139
+        contract sliced 14 : 0.5999133586883545
+        contract sliced 15 : 0.6018702983856201
+Sequential patches : 9.568702220916748
+allocate result : 0.06133222579956055
+assignment : 4.0048182010650635
+2020-03-09 05:38:53,147 INFO resource_spec.py:212 -- Starting Ray with 116.94 GiB memory available for workers and up to 18.63 GiB for objects. You can adjust these settings with ray.init(memory=<bytes>, object_store_memory=<bytes>).
+2020-03-09 05:38:54,465 INFO services.py:1078 -- View the Ray dashboard at localhost:8265
+contract simple : 6.589429616928101
+  Ray submit : 1.485130786895752
+2020-03-09 05:39:05,126 WARNING worker.py:1058 -- The actor or task with ID 45b95b1c8bd3a9c4ffffffff0100 is pending and cannot currently be scheduled. It requires {CPU: 1.000000} for execution and {CPU: 1.000000} for placement, but this node only has remaining {node:10.17.6.112: 1.000000}, {CPU: 256.000000}, {memory: 116.943359 GiB}, {object_store_memory: 12.841797 GiB}. In total there are 16 pending tasks and 0 pending actors on this node. This is likely due to all cluster resources being claimed by actors. To resolve the issue, consider creating fewer actors or increase the resources available to this Ray cluster. You can ignore this message if this Ray cluster is expected to auto-scale.
+(pid=74368)     contract sliced 0 : 2.833566904067993
+(pid=74263)     contract sliced 1 : 2.8377091884613037
+(pid=74207)     contract sliced 2 : 2.7967166900634766
+(pid=74310)     contract sliced 4 : 2.653188705444336
+(pid=74370)     contract sliced 5 : 2.499248743057251
+(pid=74236)     contract sliced 3 : 2.6301448345184326
+(pid=74259)     contract sliced 6 : 2.3174612522125244
+(pid=74282)     contract sliced 15 : 1.6348872184753418
+(pid=74196)     contract sliced 8 : 2.0284576416015625
+(pid=74233)     contract sliced 7 : 2.214874267578125
+(pid=74237)     contract sliced 9 : 1.8308913707733154
+(pid=74149)     contract sliced 11 : 1.9490618705749512
+(pid=74360)     contract sliced 10 : 1.8038699626922607
+(pid=74155)     contract sliced 13 : 1.7041714191436768
+(pid=74350)     contract sliced 14 : 1.7701001167297363
+(pid=74190)     contract sliced 12 : 1.5485689640045166
+  fetch results : 51.27786064147949
+Ray compute : 52.79918050765991
+ allocate result : 0.10863351821899414
+ assignment : 11.235596656799316
+Ray total compute : 64.14552617073059
+contract simple : 6.520019769668579
+(pid=75740)     contract sliced 0 : 1.0865974426269531
+(pid=75753)     contract sliced 1 : 0.8590209484100342
+(pid=75718)     contract sliced 2 : 0.9934003353118896
+  Ray submit : 1.8708972930908203
+ allocate result : 0.12926864624023438
+0
+(pid=75757)     contract sliced 4 : 1.6015474796295166
+(pid=75742)     contract sliced 6 : 1.4166967868804932
+(pid=75749)     contract sliced 3 : 1.6087374687194824
+(pid=75704)     contract sliced 5 : 1.479335069656372
+(pid=75708)     contract sliced 7 : 1.427461862564087
+(pid=75712)     contract sliced 8 : 1.5152623653411865
+(pid=75753)     contract sliced 15 : 0.7445390224456787
+(pid=75694)     contract sliced 9 : 1.3473758697509766
+(pid=74190)     contract sliced 14 : 0.8863179683685303
+(pid=74360)     contract sliced 10 : 1.5335299968719482
+(pid=74155)     contract sliced 11 : 1.5270435810089111
+(pid=74350)     contract sliced 12 : 1.4493238925933838
+3
+(pid=74237)     contract sliced 13 : 1.4314398765563965
+4
+9
+13
+15
+5
+10
+11
+6
+14
+12
+2
+1
+8
+7
+fetching results : 11.579967021942139
+Ray compute : 13.744143724441528
+Ray total compute : 13.744542598724365
+contract simple : 6.3751630783081055
+init array : 15.854848861694336
+inited pool
+started work
+        contract sliced 14 : 0.7386898994445801
+        contract sliced 10 : 0.7572083473205566
+        contract sliced 11 : 0.7586460113525391
+        contract sliced 7 : 0.7673323154449463
+        contract sliced 13 : 0.7633297443389893
+        contract sliced 9 : 0.7664749622344971
+        contract sliced 15 : 0.7675890922546387
+        contract sliced 5 : 0.7768762111663818
+        contract sliced 6 : 0.7823166847229004
+        contract sliced 8 : 0.868109941482544
+        contract sliced 0 : 1.0696744918823242
+done work 14
+done work 11
+done work 15
+done work 7
+done work 9
+done work 13
+done work 6
+done work 10
+done work 5
+done work 8
+done work 0
+        contract sliced 12 : 1.5649230480194092
+        contract sliced 3 : 1.5710010528564453
+        contract sliced 2 : 1.710249423980713
+        contract sliced 1 : 1.7142860889434814
+        contract sliced 4 : 1.8920552730560303
+done work 12
+done work 3
+done work 4
+done work 2
+done work 1
+parallel work : 2.535524606704712
+
