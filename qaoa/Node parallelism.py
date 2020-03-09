@@ -73,7 +73,7 @@ test_slices = [
 # +
 def get_example_task():
     A = 11
-    B, C = 9, 7
+    B, C = 10, 8
     shape1 = [2]*(A+B)
     shape2 = [2]*(A+C)
     T1 = np.random.randn(*shape1)
