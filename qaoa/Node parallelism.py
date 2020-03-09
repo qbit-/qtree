@@ -342,7 +342,7 @@ target_shape = C.shape
     
 
 flat_size = len(C.flatten())
-par_vars = [15]
+par_vars = [1,3,15]
 threads = 2**len(par_vars)
 
 with pyrof.timing('init array'):
