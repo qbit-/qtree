@@ -15,7 +15,7 @@
 
 # + [markdown] toc=true
 # <h1>Table of Contents<span class="tocSkip"></span></h1>
-# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Simple-invocation" data-toc-modified-id="Simple-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Simple invocation</a></span></li><li><span><a href="#One-var-parallelisation" data-toc-modified-id="One-var-parallelisation-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>One var parallelisation</a></span></li><li><span><a href="#Two-var-parallelisation" data-toc-modified-id="Two-var-parallelisation-2.3"><span class="toc-item-num">2.3&nbsp;&nbsp;</span>Two var parallelisation</a></span></li><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.4"><span class="toc-item-num">2.4&nbsp;&nbsp;</span>Many var parallelisation</a></span></li><li><span><a href="#Use-ray" data-toc-modified-id="Use-ray-2.5"><span class="toc-item-num">2.5&nbsp;&nbsp;</span>Use ray</a></span></li><li><span><a href="#Concurrent-assignment" data-toc-modified-id="Concurrent-assignment-2.6"><span class="toc-item-num">2.6&nbsp;&nbsp;</span>Concurrent assignment</a></span></li><li><span><a href="#Use-multiprocessing" data-toc-modified-id="Use-multiprocessing-2.7"><span class="toc-item-num">2.7&nbsp;&nbsp;</span>Use multiprocessing</a></span></li></ul></li></ul></div>
+# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Serial-invocation" data-toc-modified-id="Serial-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Serial invocation</a></span><ul class="toc-item"><li><span><a href="#One-var-parallelisation" data-toc-modified-id="One-var-parallelisation-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>One var parallelisation</a></span></li><li><span><a href="#Two-var-parallelisation" data-toc-modified-id="Two-var-parallelisation-2.1.2"><span class="toc-item-num">2.1.2&nbsp;&nbsp;</span>Two var parallelisation</a></span></li><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.1.3"><span class="toc-item-num">2.1.3&nbsp;&nbsp;</span>Many var parallelisation</a></span></li></ul></li><li><span><a href="#Use-ray" data-toc-modified-id="Use-ray-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Use ray</a></span><ul class="toc-item"><li><span><a href="#Simple-assignment" data-toc-modified-id="Simple-assignment-2.2.1"><span class="toc-item-num">2.2.1&nbsp;&nbsp;</span>Simple assignment</a></span></li><li><span><a href="#Concurrent-assignment" data-toc-modified-id="Concurrent-assignment-2.2.2"><span class="toc-item-num">2.2.2&nbsp;&nbsp;</span>Concurrent assignment</a></span></li></ul></li><li><span><a href="#Use-unix-tools" data-toc-modified-id="Use-unix-tools-2.3"><span class="toc-item-num">2.3&nbsp;&nbsp;</span>Use unix tools</a></span><ul class="toc-item"><li><span><a href="#Threading" data-toc-modified-id="Threading-2.3.1"><span class="toc-item-num">2.3.1&nbsp;&nbsp;</span>Threading</a></span></li><li><span><a href="#Multiprocessing" data-toc-modified-id="Multiprocessing-2.3.2"><span class="toc-item-num">2.3.2&nbsp;&nbsp;</span>Multiprocessing</a></span></li></ul></li></ul></li></ul></div>
 # -
 
 import ray
@@ -90,7 +90,7 @@ x[1], y[1]
 
 # -
 
-# ## Simple invocation
+# ## Serial invocation
 
 # +
 
@@ -108,7 +108,7 @@ with pyrof.timing('contract'):
 
 # -
 
-# ## One var parallelisation
+# ### One var parallelisation
 
 # +
 def sliced_contract(x, y, idxs, num):
@@ -125,8 +125,9 @@ def target_slice(result_idx, idxs, num):
     return slices
 
 
-# +
-def one_var_seqpar():
+# -
+
+def _one_var_seqpar():
     contract_idx = set(x[1]) & set(y[1])
     result_idx = set(x[1] + y[1])
 
@@ -152,12 +153,10 @@ def one_var_seqpar():
 
     assert np.array_equal(C, C_par)
 
-# -
 
-# ## Two var parallelisation
+# ### Two var parallelisation
 
-# +
-def two_var_seqpar():
+def _two_var_seqpar():
     contract_idx = set(x[1]) & set(y[1])
     result_idx = set(x[1] + y[1])
 
@@ -185,9 +184,8 @@ def two_var_seqpar():
 
     assert np.array_equal(C, C_par)
 
-# -
 
-# ## Many var parallelisation
+# ### Many var parallelisation
 
 # +
 contract_idx = set(x[1]) & set(y[1])
@@ -221,10 +219,10 @@ with pyrof.timing('assignment'):
 assert np.array_equal(C, C_par)
 
 # -
-
-
-
 # ## Use ray
+# ### Simple assignment
+
+
 def use_ray():
     try: 
         ray.init()
@@ -233,7 +231,6 @@ def use_ray():
         pass
     nodes = ray.nodes()
 
-# +
 def ray_simple():
     contract_idx = set(x[1]) & set(y[1])
     result_idx = set(x[1] + y[1])
@@ -273,11 +270,9 @@ def ray_simple():
 
     assert np.array_equal(C, C_par)
 
-# -
 
-# ## Concurrent assignment
+# ### Concurrent assignment
 
-# +
 def ray_concurr():
     contract_idx = set(x[1]) & set(y[1])
     result_idx = set(x[1] + y[1])
@@ -326,9 +321,9 @@ def ray_concurr():
 
     assert np.array_equal(C, C_par)
 
-# -
 
-# ## Use multiprocessing
+# ## Use unix tools
+# ### Threading
 
 from multiprocessing import Pool, Array
 from multiprocessing.dummy import Pool as ThreadPool
@@ -337,8 +332,6 @@ import os
 def tonumpyarray(mp_arr):
     return np.frombuffer(mp_arr.get_obj())
 
-
-# -
 
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
@@ -350,7 +343,7 @@ C_size = sys.getsizeof(C)
 print(f'result size: {C_size:e}')
 print(f'operands size: {sys.getsizeof(x[0]):e}, {sys.getsizeof(y[0]):e}')
 target_shape = C.shape
-    
+
 with pyrof.timing('Total thread contraction time:'):
     par_vars = [1,2, 4,14, 19, 17, 5]
     threads = 2**len(par_vars)
@@ -371,6 +364,8 @@ with pyrof.timing('Total thread contraction time:'):
     print(f'  result size: {C_size:e}')
 
 assert np.array_equal(C, os.global_C)
+
+# ###  Multiprocessing
 
 # +
 
