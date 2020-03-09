@@ -73,7 +73,8 @@ test_slices = [
 
 # +
 def get_example_task():
-    A = 13
+    A = 8
+    #A = 13
     B, C = 10, 7
     shape1 = [2]*(A+B)
     shape2 = [2]*(A+C)
@@ -325,13 +326,16 @@ def ray_concurr():
 # ## Use unix tools
 # ### Threading
 
+# +
 from multiprocessing import Pool, Array
 from multiprocessing.dummy import Pool as ThreadPool
-
 import os
+
 def tonumpyarray(mp_arr):
     return np.frombuffer(mp_arr.get_obj())
 
+
+# -
 
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
@@ -345,7 +349,7 @@ print(f'operands size: {sys.getsizeof(x[0]):e}, {sys.getsizeof(y[0]):e}')
 target_shape = C.shape
 
 with pyrof.timing('Total thread contraction time:'):
-    par_vars = [1,2, 4,14, 19, 17, 5]
+    par_vars = [1,17, 5]
     threads = 2**len(par_vars)
 
     os.global_C = np.empty(target_shape)
