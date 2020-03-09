@@ -15,13 +15,18 @@
 
 # + [markdown] toc=true
 # <h1>Table of Contents<span class="tocSkip"></span></h1>
-# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Serial-invocation" data-toc-modified-id="Serial-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Serial invocation</a></span><ul class="toc-item"><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Many var parallelisation</a></span></li><li><span><a href="#Concurrent-assignment" data-toc-modified-id="Concurrent-assignment-2.1.2"><span class="toc-item-num">2.1.2&nbsp;&nbsp;</span>Concurrent assignment</a></span></li></ul></li><li><span><a href="#Use-unix-tools" data-toc-modified-id="Use-unix-tools-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Use unix tools</a></span><ul class="toc-item"><li><span><a href="#Threading" data-toc-modified-id="Threading-2.2.1"><span class="toc-item-num">2.2.1&nbsp;&nbsp;</span>Threading</a></span></li><li><span><a href="#Multiprocessing" data-toc-modified-id="Multiprocessing-2.2.2"><span class="toc-item-num">2.2.2&nbsp;&nbsp;</span>Multiprocessing</a></span></li></ul></li></ul></li></ul></div>
+# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Serial-invocation" data-toc-modified-id="Serial-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Serial invocation</a></span><ul class="toc-item"><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Many var parallelisation</a></span></li></ul></li><li><span><a href="#Plot-parallelisation-theoretical-speedup" data-toc-modified-id="Plot-parallelisation-theoretical-speedup-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Plot parallelisation theoretical speedup</a></span></li><li><span><a href="#Use-unix-tools" data-toc-modified-id="Use-unix-tools-2.3"><span class="toc-item-num">2.3&nbsp;&nbsp;</span>Use unix tools</a></span><ul class="toc-item"><li><span><a href="#Threading" data-toc-modified-id="Threading-2.3.1"><span class="toc-item-num">2.3.1&nbsp;&nbsp;</span>Threading</a></span></li><li><span><a href="#Multiprocessing" data-toc-modified-id="Multiprocessing-2.3.2"><span class="toc-item-num">2.3.2&nbsp;&nbsp;</span>Multiprocessing</a></span></li></ul></li></ul></li></ul></div>
 # -
 
 import ray
 import pyrofiler as pyrof
+from pyrofiler.pyrofiler import Profiler
+from pyrofiler import callbacks
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import sys
+sns.set_style('whitegrid')
 np.random.seed(42)
 
 
@@ -52,16 +57,23 @@ def _slices_for_idxs(idxs, *args, shapes=None, slice_idx=0):
         
 
 
+# +
+def log_log_scale():
+    plt.yscale('log')
+    plt.xscale('log')
+    
+def minorticks():
+    plt.minorticks_on()
+    plt.grid(which='minor', alpha=0.5, linestyle='-', axis='both')
+
+
 # -
 
 # # Test parallelism
 # ### Example task
 
 # +
-def get_example_task():
-    A = 8
-    #A = 13
-    B, C = 10, 7
+def get_example_task(A=8, B=10, C=7):
     shape1 = [2]*(A+B)
     shape2 = [2]*(A+C)
     T1 = np.random.randn(*shape1)
@@ -80,8 +92,6 @@ x[1], y[1]
 # ## Serial invocation
 
 # +
-
-#@ray.remote
 def contract(A, B):
     a, idxa = A
     b, idxb = B
@@ -89,6 +99,19 @@ def contract(A, B):
     result_idx = set(idxa + idxb)
     C = np.einsum(a,idxa, b,idxb, result_idx)
     return C
+
+def sliced_contract(x, y, idxs, num):
+    slices = _slices_for_idxs(idxs, x[1], y[1], slice_idx=num)
+    a = x[0][slices[0]]
+    b = y[0][slices[1]]
+    with pyrof.timing(f'\tcontract sliced {num}'):
+        C = contract((a, x[1]), (b, y[1]))
+    return C
+
+def target_slice(result_idx, idxs, num):
+    slices = _slices_for_idxs(idxs, result_idx, slice_idx=num)
+    return slices
+
 
 with pyrof.timing('contract'):
     C = contract(x, y)
@@ -98,37 +121,51 @@ with pyrof.timing('contract'):
 # ### Many var parallelisation
 
 # +
+prof_seq = Profiler()
+prof_seq.use_append()
+
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
+for i in range(3):
+    _ = contract(x,y)
+for rank in range(1,7):
+    with prof_seq.timing('Single thread'):
+        C = contract(x,y)
     
-par_vars = [1, 4, 17, 5]
-threads = 2**len(par_vars)
-target_shape = C.shape
+    par_vars = list(range(rank))
+    target_shape = C.shape
 
-with pyrof.timing('Sequential patches'):
-    C_patches = [
-        sliced_contract(x, y, par_vars, i)
-        for i in range(threads)
-    ]
-
-with pyrof.timing('allocate result'):
-    C_par = np.empty(target_shape)
-
-patch_slces = [
-    target_slice(result_idx, par_vars, i)
-    for i in range(threads)
-]
-
-with pyrof.timing('assignment'):
-    for s, patch in zip(patch_slces, C_patches):
-        C_par[s[0]] = patch
-
-assert np.array_equal(C, C_par)
+    with prof_seq.timing('One patch: total'):
+        i = 0
+        with prof_seq.timing('One patch: compute'):
+            patch = sliced_contract(x, y, par_vars, i)
+        C_par = np.empty(target_shape)
+        with prof_seq.timing('One patch: assign'):
+            _slice = target_slice(result_idx, par_vars, i)
+            C_par[_slice[0]] = patch
 
 # -
+# ## Plot parallelisation theoretical speedup
+
+# +
+prof_seq.data
+threads = 2**np.arange(1,7)
+
+for k in prof_seq.data:
+    plt.plot(threads, prof_seq.data[k], label=k)
+    
+plt.loglog(basex=2, basey=2)
+from matplotlib.ticker import FormatStrFormatter
+
+plt.title('Single node parallelization syntetic test')
+plt.xlabel('Thread count')
+plt.ylabel('Time')
+minorticks()
+plt.legend()
+plt.savefig('figures/node_par_seqtest.pdf')
+# -
+
 # ## Use unix tools
 # ### Threading
 
@@ -143,37 +180,63 @@ def tonumpyarray(mp_arr):
 
 # -
 
+x,y = get_example_task(A=9, B=11, C=7)
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
+# +
+prof_thread = Profiler()
+prof_thread.use_append()
 
+
+
+# +
+    
 C_size = sys.getsizeof(C)
-print(f'result size: {C_size:e}')
-print(f'operands size: {sys.getsizeof(x[0]):e}, {sys.getsizeof(y[0]):e}')
 target_shape = C.shape
 
-with pyrof.timing('Total thread contraction time:'):
-    par_vars = [1,17, 5]
-    threads = 2**len(par_vars)
+for i in range(3):
+    _ = contract(x,y)
+    
+pool = ThreadPool(processes=2**7)
+    
+for rank in range(1,7):
+    with prof_thread.timing('Single thread'):
+        C = contract(x,y)
 
-    os.global_C = np.empty(target_shape)
+    with prof_thread.timing('Multithread: total'):
+        par_vars = list(range(rank))
+        threads = 2**len(par_vars)
 
-    def work(i):
-        patch = sliced_contract(x, y, par_vars, i)
-        sl = target_slice(result_idx, par_vars, i)
-        os.global_C[sl[0]] = patch
+        os.global_C = np.empty(target_shape)
 
-    pool = ThreadPool(processes=threads)
-    print('inited thread pool')
-    with pyrof.timing('Thread work'):
-        _ = pool.map(work, range(threads))
+        def work(i):
+            patch = sliced_contract(x, y, par_vars, i)
+            sl = target_slice(result_idx, par_vars, i)
+            os.global_C[sl[0]] = patch
 
-    C_size = sys.getsizeof(os.global_C)
-    print(f'  result size: {C_size:e}')
+        with prof_thread.timing('Multithread: work'):
+            _ = pool.map(work, range(threads))
+            
 
-assert np.array_equal(C, os.global_C)
+# +
+prof_seq.data
+_data = prof_thread.data
+threads = 2**np.arange(1,7)
+
+for k in _data:
+    plt.plot(threads, _data[k], label=k)
+    
+plt.loglog(basex=2, basey=2)
+from matplotlib.ticker import FormatStrFormatter
+
+plt.title('Single node parallelization syntetic test')
+plt.xlabel('Thread count')
+plt.ylabel('Time')
+minorticks()
+plt.legend()
+plt.savefig('figures/node_par_threadtest.pdf')
+# -
 
 # ###  Multiprocessing
 
