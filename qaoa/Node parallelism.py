@@ -21,6 +21,7 @@
 import ray
 import pyrofiler as pyrof
 import numpy as np
+import sys
 np.random.seed(42)
 
 
@@ -125,62 +126,64 @@ def target_slice(result_idx, idxs, num):
 
 
 # +
-contract_idx = set(x[1]) & set(y[1])
-result_idx = set(x[1] + y[1])
+def one_var_seqpar():
+    contract_idx = set(x[1]) & set(y[1])
+    result_idx = set(x[1] + y[1])
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
-    
-par_vars = [1]
-target_shape = C.shape
-C0 = sliced_contract(x, y, par_vars, 0)
-C1 = sliced_contract(x, y, par_vars, 1)
+    with pyrof.timing(f'contract simple'):
+        C = contract(x,y)
 
-with pyrof.timing('allocate result'):
-    C_par = np.empty(target_shape)
-s0 = target_slice(result_idx, par_vars, 0)
-s1 = target_slice(result_idx, par_vars, 1)
+    par_vars = [1]
+    target_shape = C.shape
+    C0 = sliced_contract(x, y, par_vars, 0)
+    C1 = sliced_contract(x, y, par_vars, 1)
 
-with pyrof.timing('slice result'):
-    _ = C_par[s0[0]]
-    
-with pyrof.timing('assignment'):
-    C_par[s0[0]] = C0
-    C_par[s1[0]] = C1
+    with pyrof.timing('allocate result'):
+        C_par = np.empty(target_shape)
+    s0 = target_slice(result_idx, par_vars, 0)
+    s1 = target_slice(result_idx, par_vars, 1)
 
-assert np.array_equal(C, C_par)
+    with pyrof.timing('slice result'):
+        _ = C_par[s0[0]]
+        
+    with pyrof.timing('assignment'):
+        C_par[s0[0]] = C0
+        C_par[s1[0]] = C1
+
+    assert np.array_equal(C, C_par)
 
 # -
 
 # ## Two var parallelisation
 
 # +
-contract_idx = set(x[1]) & set(y[1])
-result_idx = set(x[1] + y[1])
+def two_var_seqpar():
+    contract_idx = set(x[1]) & set(y[1])
+    result_idx = set(x[1] + y[1])
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
-    
-par_vars = [1, 17]
-target_shape = C.shape
-C_patches = [
-    sliced_contract(x, y, par_vars, i)
-    for i in range(4)
-]
+    with pyrof.timing(f'contract simple'):
+        C = contract(x,y)
+        
+    par_vars = [1, 17]
+    target_shape = C.shape
+    C_patches = [
+        sliced_contract(x, y, par_vars, i)
+        for i in range(4)
+    ]
 
-with pyrof.timing('allocate result'):
-    C_par = np.empty(target_shape)
+    with pyrof.timing('allocate result'):
+        C_par = np.empty(target_shape)
 
-patch_slces = [
-    target_slice(result_idx, par_vars, i)
-    for i in range(4)
-]
+    patch_slces = [
+        target_slice(result_idx, par_vars, i)
+        for i in range(4)
+    ]
 
-with pyrof.timing('assignment'):
-    for s, patch in zip(patch_slces, C_patches):
-        C_par[s[0]] = patch
+    with pyrof.timing('assignment'):
+        for s, patch in zip(patch_slces, C_patches):
+            C_par[s[0]] = patch
 
-assert np.array_equal(C, C_par)
+    assert np.array_equal(C, C_par)
 
 # -
 
@@ -222,148 +225,173 @@ assert np.array_equal(C, C_par)
 
 
 # ## Use ray
-
-try: 
-    ray.init()
-except:
-    print('ray already working')
-    pass
-ray.nodes()
+def use_ray():
+    try: 
+        ray.init()
+    except:
+        print('ray already working')
+        pass
+    nodes = ray.nodes()
 
 # +
-contract_idx = set(x[1]) & set(y[1])
-result_idx = set(x[1] + y[1])
+def ray_simple():
+    contract_idx = set(x[1]) & set(y[1])
+    result_idx = set(x[1] + y[1])
 
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
-    
-sliced_contract_ray = ray.remote(sliced_contract)
-    
-par_vars = [1,5,15,17]
-threads = 2**len(par_vars)
-target_shape = C.shape
+    with pyrof.timing(f'contract simple'):
+        C = contract(x,y)
+        
+    sliced_contract_ray = ray.remote(sliced_contract)
+        
+    par_vars = [1,5,15,17]
+    threads = 2**len(par_vars)
+    target_shape = C.shape
 
-with pyrof.timing('Ray total compute'):
-    with pyrof.timing('Ray compute'):
-        with pyrof.timing('  Ray submit'):
-            C_patches = [
-                sliced_contract_ray.remote(x, y, par_vars, i)
+    with pyrof.timing('Ray total compute'):
+        with pyrof.timing('Ray compute'):
+            with pyrof.timing('  Ray submit'):
+                C_patches = [
+                    sliced_contract_ray.remote(x, y, par_vars, i)
+                    for i in range(threads)
+                ]
+
+
+            patch_slces = [
+                target_slice(result_idx, par_vars, i)
                 for i in range(threads)
             ]
 
+            with pyrof.timing('  fetch results'):
+                patches_fetched = [ray.get(patch) for patch in C_patches]
+        with pyrof.timing(' allocate result'):
+            C_par = np.empty(target_shape)
 
-        patch_slces = [
-            target_slice(result_idx, par_vars, i)
-            for i in range(threads)
-        ]
+        with pyrof.timing(' assignment'):
+            for s, patch in zip(patch_slces, patches_fetched):
+                C_par[s[0]] = patch
 
-        with pyrof.timing('  fetch results'):
-            patches_fetched = [ray.get(patch) for patch in C_patches]
-    with pyrof.timing(' allocate result'):
-        C_par = np.empty(target_shape)
-
-    with pyrof.timing(' assignment'):
-        for s, patch in zip(patch_slces, patches_fetched):
-            C_par[s[0]] = patch
-
-assert np.array_equal(C, C_par)
+    assert np.array_equal(C, C_par)
 
 # -
 
 # ## Concurrent assignment
 
 # +
-contract_idx = set(x[1]) & set(y[1])
-result_idx = set(x[1] + y[1])
+def ray_concurr():
+    contract_idx = set(x[1]) & set(y[1])
+    result_idx = set(x[1] + y[1])
 
 
-with pyrof.timing(f'contract simple'):
-    C = contract(x,y)
-    
-sliced_contract_ray = ray.remote(sliced_contract)
-    
-par_vars = [1,3,16, 17]
-threads = 2**len(par_vars)
-target_shape = C.shape
+    with pyrof.timing(f'contract simple'):
+        C = contract(x,y)
+        
+    sliced_contract_ray = ray.remote(sliced_contract)
+        
+    par_vars = [1,3,16, 17]
+    threads = 2**len(par_vars)
+    target_shape = C.shape
 
-with pyrof.timing('Ray total compute'):
-    with pyrof.timing('Ray compute'):
-        with pyrof.timing('  Ray submit'):
-            C_patches = [
-                sliced_contract_ray.remote(x, y, par_vars, i)
+    with pyrof.timing('Ray total compute'):
+        with pyrof.timing('Ray compute'):
+            with pyrof.timing('  Ray submit'):
+                C_patches = [
+                    sliced_contract_ray.remote(x, y, par_vars, i)
+                    for i in range(threads)
+                ]
+
+
+            patch_slces = [
+                target_slice(result_idx, par_vars, i)
                 for i in range(threads)
             ]
+            
+            with pyrof.timing(' allocate result'):
+                C_par = np.empty(target_shape)
 
+            idx = 0
+            obj_slice_map = {o:s for o, s in zip(C_patches, patch_slces)}
+            obj_slice_id = {o:i for o, i in zip(C_patches, range(threads))}
+            with pyrof.timing('fetching results'):
+                while True:
+                    ready_ids, working_ids = ray.wait(C_patches)
+                    if len(C_patches)==0:
+                        break
+                    C_patches = [i for i in C_patches if i not in ready_ids]
 
-        patch_slces = [
-            target_slice(result_idx, par_vars, i)
-            for i in range(threads)
-        ]
-        
-        with pyrof.timing(' allocate result'):
-            C_par = np.empty(target_shape)
+                    for patch in ready_ids:
+                        sl = obj_slice_map[patch]
+                        print(obj_slice_id[patch])
+                        C_par[sl[0]] = ray.get(patch)
 
-        idx = 0
-        obj_slice_map = {o:s for o, s in zip(C_patches, patch_slces)}
-        obj_slice_id = {o:i for o, i in zip(C_patches, range(threads))}
-        with pyrof.timing('fetching results'):
-            while True:
-                ready_ids, working_ids = ray.wait(C_patches)
-                if len(C_patches)==0:
-                    break
-                C_patches = [i for i in C_patches if i not in ready_ids]
-
-                for patch in ready_ids:
-                    sl = obj_slice_map[patch]
-                    print(obj_slice_id[patch])
-                    C_par[sl[0]] = ray.get(patch)
-
-assert np.array_equal(C, C_par)
+    assert np.array_equal(C, C_par)
 
 # -
 
 # ## Use multiprocessing
 
 from multiprocessing import Pool, Array
+from multiprocessing.dummy import Pool as ThreadPool
+
 import os
 def tonumpyarray(mp_arr):
     return np.frombuffer(mp_arr.get_obj())
 
 
+# -
 
-# +
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
 
 with pyrof.timing(f'contract simple'):
     C = contract(x,y)
+
+C_size = sys.getsizeof(C)
+print(f'result size: {C_size:e}')
+print(f'operands size: {sys.getsizeof(x[0]):e}, {sys.getsizeof(y[0]):e}')
 target_shape = C.shape
     
+with pyrof.timing('Total thread contraction time:'):
+    par_vars = [1,2, 4,14, 19, 17, 5]
+    threads = 2**len(par_vars)
+
+    os.global_C = np.empty(target_shape)
+
+    def work(i):
+        patch = sliced_contract(x, y, par_vars, i)
+        sl = target_slice(result_idx, par_vars, i)
+        os.global_C[sl[0]] = patch
+
+    pool = ThreadPool(processes=threads)
+    print('inited thread pool')
+    with pyrof.timing('Thread work'):
+        _ = pool.map(work, range(threads))
+
+    C_size = sys.getsizeof(os.global_C)
+    print(f'  result size: {C_size:e}')
+
+assert np.array_equal(C, os.global_C)
+
+# +
 
 flat_size = len(C.flatten())
-par_vars = [1,16,3,15]
-threads = 2**len(par_vars)
-
 with pyrof.timing('init array'):
-    os.global_C = tonumpyarray(Array('d', flat_size))
-os.global_C = os.global_C.reshape(target_shape)
+    os.global_C = np.empty(target_shape)
+    #os.global_C = tonumpyarray(Array('d', flat_size))
+#us.global_C = os.global_C.reshape(target_shape)
 
-def work(i):
-    patch = sliced_contract(x, y, par_vars, i)
-    sl = target_slice(result_idx, par_vars, i)
-    os.global_C[sl[0]] = patch
-    print('done work',i)
-    
 pool = Pool(processes=threads)
 print('inited pool')
 with pyrof.timing('parallel work'):
     print('started work')
     _ = pool.map(work, range(threads))
 
+C_size = sys.getsizeof(os.global_C)
+print(f'result size: {C_size:e}')
 assert np.array_equal(C, os.global_C)
 
 # -
+
 
 del os.global_C
 
