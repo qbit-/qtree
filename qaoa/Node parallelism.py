@@ -72,8 +72,8 @@ test_slices = [
 
 # +
 def get_example_task():
-    A = 11
-    B, C = 10, 8
+    A = 13
+    B, C = 10, 7
     shape1 = [2]*(A+B)
     shape2 = [2]*(A+C)
     T1 = np.random.randn(*shape1)
@@ -240,7 +240,7 @@ with pyrof.timing(f'contract simple'):
     
 sliced_contract_ray = ray.remote(sliced_contract)
     
-par_vars = [1, 17]
+par_vars = [1,5,15 17]
 threads = 2**len(par_vars)
 target_shape = C.shape
 
@@ -283,7 +283,7 @@ with pyrof.timing(f'contract simple'):
     
 sliced_contract_ray = ray.remote(sliced_contract)
     
-par_vars = [1, 17]
+par_vars = [1,3,16, 17]
 threads = 2**len(par_vars)
 target_shape = C.shape
 
@@ -342,7 +342,7 @@ target_shape = C.shape
     
 
 flat_size = len(C.flatten())
-par_vars = [1,3,15]
+par_vars = [1,16,3,15]
 threads = 2**len(par_vars)
 
 with pyrof.timing('init array'):
