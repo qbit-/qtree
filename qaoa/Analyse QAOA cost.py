@@ -723,7 +723,7 @@ def trid_plot(x, y, labels, dimspec=(0,1,2)):
 xs = [np.arange(5), sizes, par_vars]
 trid_plot(xs, _data, ['Chop part', 'Task size', 'Par vars'],(1,0,2))
 plt.suptitle('Parallelisation with chopping, naive peo')
-plt.savefig('ifchop_analys_qbbpeo.pdf')
+plt.savefig('figures/chop_analys_qbbpeo.pdf')
 
 _chopcost = np.array(costs_before_chop).reshape(len(sizes), 5, 1)
 trid_plot([' ', sizes, range(5)], _chopcost, ['Chop cost', 'Task size', 'Chop part'], (2,0,1))
