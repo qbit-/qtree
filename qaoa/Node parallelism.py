@@ -15,7 +15,7 @@
 
 # + [markdown] toc=true
 # <h1>Table of Contents<span class="tocSkip"></span></h1>
-# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Serial-invocation" data-toc-modified-id="Serial-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Serial invocation</a></span><ul class="toc-item"><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Many var parallelisation</a></span></li></ul></li><li><span><a href="#Plot-parallelisation-theoretical-speedup" data-toc-modified-id="Plot-parallelisation-theoretical-speedup-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Plot parallelisation theoretical speedup</a></span></li><li><span><a href="#Use-unix-tools" data-toc-modified-id="Use-unix-tools-2.3"><span class="toc-item-num">2.3&nbsp;&nbsp;</span>Use unix tools</a></span><ul class="toc-item"><li><span><a href="#Threading" data-toc-modified-id="Threading-2.3.1"><span class="toc-item-num">2.3.1&nbsp;&nbsp;</span>Threading</a></span></li><li><span><a href="#Multiprocessing" data-toc-modified-id="Multiprocessing-2.3.2"><span class="toc-item-num">2.3.2&nbsp;&nbsp;</span>Multiprocessing</a></span></li></ul></li></ul></li></ul></div>
+# <div class="toc"><ul class="toc-item"><li><span><a href="#Slice-specified-nodes-in-dimspec" data-toc-modified-id="Slice-specified-nodes-in-dimspec-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Slice specified nodes in dimspec</a></span></li><li><span><a href="#Test-parallelism" data-toc-modified-id="Test-parallelism-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Test parallelism</a></span><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-task" data-toc-modified-id="Example-task-2.0.1"><span class="toc-item-num">2.0.1&nbsp;&nbsp;</span>Example task</a></span></li></ul></li><li><span><a href="#Serial-invocation" data-toc-modified-id="Serial-invocation-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>Serial invocation</a></span><ul class="toc-item"><li><span><a href="#Maybe-sqash-dimensions-to-fit-into-einsum?" data-toc-modified-id="Maybe-sqash-dimensions-to-fit-into-einsum?-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Maybe sqash dimensions to fit into einsum?</a></span></li><li><span><a href="#Many-var-parallelisation" data-toc-modified-id="Many-var-parallelisation-2.1.2"><span class="toc-item-num">2.1.2&nbsp;&nbsp;</span>Many var parallelisation</a></span></li></ul></li><li><span><a href="#Plot-parallelisation-theoretical-speedup" data-toc-modified-id="Plot-parallelisation-theoretical-speedup-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Plot parallelisation theoretical speedup</a></span></li><li><span><a href="#Use-unix-tools" data-toc-modified-id="Use-unix-tools-2.3"><span class="toc-item-num">2.3&nbsp;&nbsp;</span>Use unix tools</a></span><ul class="toc-item"><li><span><a href="#Threading" data-toc-modified-id="Threading-2.3.1"><span class="toc-item-num">2.3.1&nbsp;&nbsp;</span>Threading</a></span></li><li><span><a href="#Multiprocessing" data-toc-modified-id="Multiprocessing-2.3.2"><span class="toc-item-num">2.3.2&nbsp;&nbsp;</span>Multiprocessing</a></span></li></ul></li></ul></li></ul></div>
 # -
 
 import ray
@@ -97,6 +97,7 @@ def contract(A, B):
     b, idxb = B
     contract_idx = set(idxa) & set(idxb)
     result_idx = set(idxa + idxb)
+    print('contract result idx',result_idx)
     C = np.einsum(a,idxa, b,idxb, result_idx)
     return C
 
@@ -112,9 +113,73 @@ def target_slice(result_idx, idxs, num):
     slices = _slices_for_idxs(idxs, result_idx, slice_idx=num)
     return slices
 
-
 with pyrof.timing('contract'):
     C = contract(x, y)
+
+
+# + [markdown] heading_collapsed=true
+# ### Maybe sqash dimensions to fit into einsum?
+
+# + hidden=true
+def __contract_bound(A, B):
+    a, idxa = A
+    b, idxb = B
+    contract_idx = set(idxa) & set(idxb)
+    def glue_first(shape):
+        sh = [shape[0] * shape[1]] + list(shape[2:])
+        return sh
+    
+    result_idx = set(idxa + idxb)
+    _map_a = {k:v for k,v in zip(idxa, a.shape)}
+    _map_b = {k:v for k,v in zip(idxb, b.shape)}
+    _map = {**_map_a, **_map_b}
+    print(_map)
+    result_idx = sorted(tuple(_map.keys()))
+    target_shape = tuple([_map[i] for i in result_idx])
+    
+    
+            
+    _dimlen = len(result_idx)
+    _maxdims = 22
+    print('dimlen',_dimlen)
+    new_a, new_b = a.shape, b.shape
+    if _dimlen>_maxdims:
+        _contr_dim = _dimlen - _maxdims
+        print(len(new_a), len(new_b))
+        for i in range(_contr_dim):
+            idxa = idxa[1:]
+            idxb = idxb[1:]
+                    
+            new_a = glue_first(new_a)
+            new_b = glue_first(new_b)
+            
+    _map_a = {k:v for k,v in zip(idxa, a.shape)}
+    _map_b = {k:v for k,v in zip(idxb, b.shape)}
+    _map = {**_map_a, **_map_b}
+    print(_map)
+    result_idx = sorted(tuple(_map.keys()))
+    print(len(new_a), len(new_b))
+    a = a.reshape(new_a)
+    b = b.reshape(new_b)
+    print(a.shape, b.shape)
+    print(idxa, idxb)
+    print('btsh',result_idx, target_shape)
+        
+        
+    C = np.einsum(a,idxa, b,idxb, result_idx)
+    
+    return C.reshape(*target_shape)
+
+def __add_dims(x, dims, ofs):
+    arr, idxs = x
+    arr = arr.reshape(list(arr.shape) + [1]*dims)
+    md = max(idxs)
+    return arr, idxs + list(range(md+ofs, ofs+md+dims)) 
+
+
+
+# + hidden=true
+ 
 
 # -
 
@@ -184,9 +249,9 @@ x,y = get_example_task(A=9, B=11, C=7)
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
 
-# +
 prof_thread = Profiler()
 prof_thread.use_append()
+
 
 
 
@@ -218,10 +283,17 @@ for rank in range(1,7):
         with prof_thread.timing('Multithread: work'):
             _ = pool.map(work, range(threads))
             
+assert np.array_equal(C, os.global_C)
+
 
 # +
 prof_seq.data
 _data = prof_thread.data
+_data_knl = {'Single thread': [1.3409993648529053, 1.3587844371795654, 1.3243846893310547, 1.336273193359375, 1.3332529067993164, 1.3412296772003174], 'Multithread: work': [0.7453043460845947, 0.5046432018280029, 0.39226293563842773, 0.40014123916625977, 0.5875647068023682, 1.0763416290283203], 'Multithread: total': [0.7459092140197754, 0.5054154396057129, 0.3927571773529053, 0.4007418155670166, 0.588019847869873, 1.0771734714508057]}
+_data_biggest = {'Single thread': [27.42847204208374, 26.855594873428345, 26.628530979156494, 26.862286806106567, 26.71247911453247, 27.049968957901], 'Multithread: work': [14.236661434173584, 7.511402368545532, 4.950175762176514, 3.012814521789551, 2.351712703704834, 1.994131088256836], 'Multithread: total': [14.23719048500061, 7.512014150619507, 4.950707912445068, 3.0133090019226074, 2.3522441387176514, 1.9946098327636719]}
+#_data = _data_biggest
+
+
 threads = 2**np.arange(1,7)
 
 for k in _data:
@@ -234,8 +306,9 @@ plt.title('Single node parallelization syntetic test')
 plt.xlabel('Thread count')
 plt.ylabel('Time')
 minorticks()
+
 plt.legend()
-plt.savefig('figures/node_par_threadtest.pdf')
+plt.savefig('figures/node_par_threadtest_local.pdf')
 # -
 
 # ###  Multiprocessing
