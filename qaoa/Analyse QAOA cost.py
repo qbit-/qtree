@@ -15,7 +15,7 @@
 
 # + [markdown] toc=true
 # <h1>Table of Contents<span class="tocSkip"></span></h1>
-# <div class="toc"><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-of-per-step-cost" data-toc-modified-id="Example-of-per-step-cost-0.1"><span class="toc-item-num">0.1&nbsp;&nbsp;</span>Example of per-step cost</a></span></li><li><span><a href="#Cost-vs-qubits-size" data-toc-modified-id="Cost-vs-qubits-size-0.2"><span class="toc-item-num">0.2&nbsp;&nbsp;</span>Cost vs qubits size</a></span></li><li><span><a href="#Cost-with-respect-to-depth" data-toc-modified-id="Cost-with-respect-to-depth-0.3"><span class="toc-item-num">0.3&nbsp;&nbsp;</span>Cost with respect to depth</a></span></li></ul></li><li><span><a href="#Finding-biggest-tacklable-task" data-toc-modified-id="Finding-biggest-tacklable-task-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Finding biggest tacklable task</a></span><ul class="toc-item"><li><span><a href="#Full-ordering" data-toc-modified-id="Full-ordering-1.1"><span class="toc-item-num">1.1&nbsp;&nbsp;</span>Full ordering</a></span><ul class="toc-item"><li><span><a href="#Naive-(degree-based-local)-peo" data-toc-modified-id="Naive-(degree-based-local)-peo-1.1.1"><span class="toc-item-num">1.1.1&nbsp;&nbsp;</span>Naive (degree-based local) peo</a></span></li><li><span><a href="#QuickBB-peo" data-toc-modified-id="QuickBB-peo-1.1.2"><span class="toc-item-num">1.1.2&nbsp;&nbsp;</span>QuickBB peo</a></span></li><li><span><a href="#Another-implementation-of-naive-peo" data-toc-modified-id="Another-implementation-of-naive-peo-1.1.3"><span class="toc-item-num">1.1.3&nbsp;&nbsp;</span>Another implementation of naive peo</a></span></li></ul></li></ul></li><li><span><a href="#Parallelize-after-critical-point" data-toc-modified-id="Parallelize-after-critical-point-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Parallelize after critical point</a></span><ul class="toc-item"><li><span><a href="#First-chopping" data-toc-modified-id="First-chopping-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>First chopping</a></span><ul class="toc-item"><li><span><a href="#Draw-chopped-graph" data-toc-modified-id="Draw-chopped-graph-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Draw chopped graph</a></span></li><li><span><a href="#Draw-chopped--parallelised-graph" data-toc-modified-id="Draw-chopped--parallelised-graph-2.1.2"><span class="toc-item-num">2.1.2&nbsp;&nbsp;</span>Draw chopped  parallelised graph</a></span></li><li><span><a href="#Late-paralelisaton-with-simple-reorder" data-toc-modified-id="Late-paralelisaton-with-simple-reorder-2.1.3"><span class="toc-item-num">2.1.3&nbsp;&nbsp;</span>Late paralelisaton with simple reorder</a></span><ul class="toc-item"><li><span><a href="#Full-chopped-cost" data-toc-modified-id="Full-chopped-cost-2.1.3.1"><span class="toc-item-num">2.1.3.1&nbsp;&nbsp;</span>Full chopped cost</a></span></li><li><span><a href="#Parallelised-chopped-cost" data-toc-modified-id="Parallelised-chopped-cost-2.1.3.2"><span class="toc-item-num">2.1.3.2&nbsp;&nbsp;</span>Parallelised chopped cost</a></span></li></ul></li><li><span><a href="#with-QuickBB-reorder" data-toc-modified-id="with-QuickBB-reorder-2.1.4"><span class="toc-item-num">2.1.4&nbsp;&nbsp;</span>with QuickBB reorder</a></span><ul class="toc-item"><li><span><a href="#Full-chopped-cost" data-toc-modified-id="Full-chopped-cost-2.1.4.1"><span class="toc-item-num">2.1.4.1&nbsp;&nbsp;</span>Full chopped cost</a></span></li><li><span><a href="#Parallelized-chopped-cost" data-toc-modified-id="Parallelized-chopped-cost-2.1.4.2"><span class="toc-item-num">2.1.4.2&nbsp;&nbsp;</span>Parallelized chopped cost</a></span></li></ul></li></ul></li><li><span><a href="#Second-chopping" data-toc-modified-id="Second-chopping-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Second chopping</a></span><ul class="toc-item"><li><span><a href="#Draw-chopped--parallelised-graph" data-toc-modified-id="Draw-chopped--parallelised-graph-2.2.1"><span class="toc-item-num">2.2.1&nbsp;&nbsp;</span>Draw chopped  parallelised graph</a></span></li><li><span><a href="#with-naive-reorder" data-toc-modified-id="with-naive-reorder-2.2.2"><span class="toc-item-num">2.2.2&nbsp;&nbsp;</span>with naive reorder</a></span></li><li><span><a href="#with-QuickBB-reorder" data-toc-modified-id="with-QuickBB-reorder-2.2.3"><span class="toc-item-num">2.2.3&nbsp;&nbsp;</span>with QuickBB reorder</a></span></li></ul></li></ul></li><li><span><a href="#Profiling-actual-simulation" data-toc-modified-id="Profiling-actual-simulation-3"><span class="toc-item-num">3&nbsp;&nbsp;</span>Profiling actual simulation</a></span></li></ul></div>
+# <div class="toc"><ul class="toc-item"><li><ul class="toc-item"><li><span><a href="#Example-of-per-step-cost" data-toc-modified-id="Example-of-per-step-cost-0.1"><span class="toc-item-num">0.1&nbsp;&nbsp;</span>Example of per-step cost</a></span></li><li><span><a href="#Cost-vs-qubits-size" data-toc-modified-id="Cost-vs-qubits-size-0.2"><span class="toc-item-num">0.2&nbsp;&nbsp;</span>Cost vs qubits size</a></span></li><li><span><a href="#Cost-with-respect-to-depth" data-toc-modified-id="Cost-with-respect-to-depth-0.3"><span class="toc-item-num">0.3&nbsp;&nbsp;</span>Cost with respect to depth</a></span></li></ul></li><li><span><a href="#Finding-biggest-tacklable-task" data-toc-modified-id="Finding-biggest-tacklable-task-1"><span class="toc-item-num">1&nbsp;&nbsp;</span>Finding biggest tacklable task</a></span><ul class="toc-item"><li><span><a href="#Full-ordering" data-toc-modified-id="Full-ordering-1.1"><span class="toc-item-num">1.1&nbsp;&nbsp;</span>Full ordering</a></span><ul class="toc-item"><li><span><a href="#Naive-(degree-based-local)-peo" data-toc-modified-id="Naive-(degree-based-local)-peo-1.1.1"><span class="toc-item-num">1.1.1&nbsp;&nbsp;</span>Naive (degree-based local) peo</a></span></li><li><span><a href="#QuickBB-peo" data-toc-modified-id="QuickBB-peo-1.1.2"><span class="toc-item-num">1.1.2&nbsp;&nbsp;</span>QuickBB peo</a></span></li><li><span><a href="#Another-implementation-of-naive-peo" data-toc-modified-id="Another-implementation-of-naive-peo-1.1.3"><span class="toc-item-num">1.1.3&nbsp;&nbsp;</span>Another implementation of naive peo</a></span></li></ul></li></ul></li><li><span><a href="#Parallelize-after-critical-point" data-toc-modified-id="Parallelize-after-critical-point-2"><span class="toc-item-num">2&nbsp;&nbsp;</span>Parallelize after critical point</a></span><ul class="toc-item"><li><span><a href="#First-chopping" data-toc-modified-id="First-chopping-2.1"><span class="toc-item-num">2.1&nbsp;&nbsp;</span>First chopping</a></span><ul class="toc-item"><li><span><a href="#Draw-chopped-graph" data-toc-modified-id="Draw-chopped-graph-2.1.1"><span class="toc-item-num">2.1.1&nbsp;&nbsp;</span>Draw chopped graph</a></span></li><li><span><a href="#Draw-chopped--parallelised-graph" data-toc-modified-id="Draw-chopped--parallelised-graph-2.1.2"><span class="toc-item-num">2.1.2&nbsp;&nbsp;</span>Draw chopped  parallelised graph</a></span></li><li><span><a href="#Late-paralelisaton-with-simple-reorder" data-toc-modified-id="Late-paralelisaton-with-simple-reorder-2.1.3"><span class="toc-item-num">2.1.3&nbsp;&nbsp;</span>Late paralelisaton with simple reorder</a></span><ul class="toc-item"><li><span><a href="#Full-chopped-cost" data-toc-modified-id="Full-chopped-cost-2.1.3.1"><span class="toc-item-num">2.1.3.1&nbsp;&nbsp;</span>Full chopped cost</a></span></li><li><span><a href="#Parallelised-chopped-cost" data-toc-modified-id="Parallelised-chopped-cost-2.1.3.2"><span class="toc-item-num">2.1.3.2&nbsp;&nbsp;</span>Parallelised chopped cost</a></span></li></ul></li><li><span><a href="#with-QuickBB-reorder" data-toc-modified-id="with-QuickBB-reorder-2.1.4"><span class="toc-item-num">2.1.4&nbsp;&nbsp;</span>with QuickBB reorder</a></span><ul class="toc-item"><li><span><a href="#Full-chopped-cost" data-toc-modified-id="Full-chopped-cost-2.1.4.1"><span class="toc-item-num">2.1.4.1&nbsp;&nbsp;</span>Full chopped cost</a></span></li><li><span><a href="#Parallelized-chopped-cost" data-toc-modified-id="Parallelized-chopped-cost-2.1.4.2"><span class="toc-item-num">2.1.4.2&nbsp;&nbsp;</span>Parallelized chopped cost</a></span></li></ul></li></ul></li><li><span><a href="#Second-chopping" data-toc-modified-id="Second-chopping-2.2"><span class="toc-item-num">2.2&nbsp;&nbsp;</span>Second chopping</a></span><ul class="toc-item"><li><span><a href="#Draw-chopped--parallelised-graph" data-toc-modified-id="Draw-chopped--parallelised-graph-2.2.1"><span class="toc-item-num">2.2.1&nbsp;&nbsp;</span>Draw chopped  parallelised graph</a></span></li><li><span><a href="#with-naive-reorder" data-toc-modified-id="with-naive-reorder-2.2.2"><span class="toc-item-num">2.2.2&nbsp;&nbsp;</span>with naive reorder</a></span></li><li><span><a href="#with-QuickBB-reorder" data-toc-modified-id="with-QuickBB-reorder-2.2.3"><span class="toc-item-num">2.2.3&nbsp;&nbsp;</span>with QuickBB reorder</a></span></li></ul></li></ul></li><li><span><a href="#Trying-different-naive-orderings" data-toc-modified-id="Trying-different-naive-orderings-3"><span class="toc-item-num">3&nbsp;&nbsp;</span>Trying different naive orderings</a></span></li><li><span><a href="#Analyse-chopping" data-toc-modified-id="Analyse-chopping-4"><span class="toc-item-num">4&nbsp;&nbsp;</span>Analyse chopping</a></span></li><li><span><a href="#Profiling-actual-simulation" data-toc-modified-id="Profiling-actual-simulation-5"><span class="toc-item-num">5&nbsp;&nbsp;</span>Profiling actual simulation</a></span></li></ul></div>
 
 # +
 import numpy as np
@@ -23,6 +23,10 @@ import networkx as nx
 from loguru import logger as log
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
+import copy
+import sys
+sys.path.append('..')
 sns.set_style('whitegrid')
 import qtree 
 import utils
@@ -87,6 +91,29 @@ def get_cost_of_task(S, p=1):
 # + active="ipynb"
 # mems, flops, nghs, N = get_cost_of_task(15)
 # utils.plot_cost(mems, flops)
+
+# +
+def neigh_plot(nghs):
+    plt.plot(nghs)
+    nghs = np.array(nghs)
+    dn = nghs[1:] - nghs[:-1]
+    plt.plot(dn)
+    
+def get_chop_dn_drop(nghs):
+    nghs = np.array(nghs)
+    dn = nghs[1:] - nghs[:-1]
+    neg_idx = [i for i, n in enumerate(dn) if n<0]
+    pos_idx = [i for i, n in enumerate(dn) if n>0]
+    drop_idx = neg_idx[0]
+    pos_idx.reverse()
+    before_drop = [i for i in pos_idx if i<drop_idx]
+    return before_drop[0] - 1
+
+    
+neigh_plot(nghs)
+get_chop_dn_drop(nghs)
+
+
 # -
 
 # ## Cost vs qubits size 
@@ -199,8 +226,8 @@ for pars in range(1, 1+psize):
     for S in range(25, 25+Ssize):
         costs = get_cost_of_splitted(S, p, pars)
         costs_with_pars.append(costs)
-       
 # -
+
 
 
 
@@ -294,7 +321,7 @@ jjj
 # ## Full ordering
 
 # +
-graph, N = get_test_expr_graph(40, 1)
+graph, N = get_test_expr_graph(13, 1)
 
 print(N)
 # -
@@ -313,6 +340,9 @@ utils.plot_cost(costs, flops)
 
 #nx.draw_kamada_kawai(graph, node_size=3)
 # -
+neigh_plot(nghs)
+
+
 
 
 
@@ -332,7 +362,6 @@ costs, mems = qtree.graph_model.cost_estimator(graph)
 print(max(mems)/1e8)
 print(max(costs)/1e8)
 utils.plot_cost(costs, mems)
-    
 # -
 
 
@@ -361,7 +390,7 @@ utils.plot_cost(costs, mems)
 
 # ## First chopping 
 
-chop1 = 5500
+chop1 = 697
 
 for n in peo[:chop1]:
     qtree.graph_model.eliminate_node(graph, n)
@@ -377,7 +406,7 @@ nx.draw_kamada_kawai(graph, node_size=16)
 
 # ### Draw chopped  parallelised graph
 
-PAR_VARS = 12
+PAR_VARS = 6
 par_vars, graph_split = qtree.graph_model.split_graph_by_metric(
     graph
     , n_var_parallel=PAR_VARS
@@ -490,8 +519,218 @@ print(utils.edges_to_clique(graph, 1538))
 
 nx.draw_shell(sg, with_labels=True)
 # -
+# # Trying different naive orderings 
 
 
+def cost_graph_peo(graph_old, peo):
+    graph, _ = utils.reorder_graph(graph_old, peo)
+    costs  = qtree.graph_model.cost_estimator(graph)
+    return costs
+
+
+# +
+sizes = np.arange(21,32, 2)
+exprs = [get_test_expr_graph(s, 1) for s in sizes]
+qbit_cnts = [N for _, N in exprs]
+exprs = [graph for graph, _ in exprs]
+
+print('Qbit counts:', qbit_cnts)
+
+peos_maxs = {
+    'degree naive':[
+        utils.get_locale_peo(graph, utils.n_neighbors) for graph in exprs
+    ]
+    ,'min-fill naive':[
+        qtree.graph_model.get_upper_bound_peo_ints(graph) for graph in exprs
+    ]
+}
+# -
+
+peos = {k: [peo for peo, max in v] for k, v in peos_maxs.items()}
+costs= {
+    k:[cost_graph_peo(graph, peo) for graph, peo in zip(exprs, v)]
+    for k, v in peos.items()
+}
+
+# +
+mems = { k:[sum(mems) for mems, _ in v] 
+        for k, v in costs.items() }
+mems_max = { k:[np.max(mems) for mems, _ in v] 
+        for k, v in costs.items() }
+
+flops = { k:[sum(flops) for _, flops in v] 
+        for k, v in costs.items() }
+flops_max = { k:[max(flops) for _, flops in v] 
+        for k, v in costs.items() }
+
+for k in mems:
+    plt.plot(qbit_cnts, mems[k], label=k)
+    plt.plot(qbit_cnts, mems_max[k], '--', label=k+'max')
+
+plt.yscale('log')
+plt.xlabel('qbit count')
+plt.title('Compare naive ordering methods')
+
+plt.legend()
+plt.savefig('degree_vs_minfill.pdf')
+# -
+
+import json
+with open('costs_cache.json', 'w+') as f:
+    json.dump(mems, f)
+
+
+# # Analyse chopping
+#
+
+# +
+def get_chop_idxs(graph, peo, cost, nghs):
+    points = 4
+    drop_idx = get_chop_dn_drop(nghs)
+    min_idx = np.argmin(cost[0][:drop_idx])
+    before_min = min_idx - (drop_idx-min_idx)
+    on_plato = 2 * min_idx // 3
+        
+    return on_plato, before_min, min_idx, drop_idx, drop_idx+5
+
+def _cost_before_chop(idxs, cost):
+    mems, floats = cost
+    before_mem = [max(mems[:i]) for i in idxs]
+    return before_mem
+
+
+
+# -
+
+def contract_by_peo(old_graph, peo):
+    graph = copy.deepcopy(old_graph)
+    for n in peo:
+        qtree.graph_model.eliminate_node(graph, n)
+    return graph
+
+
+# +
+sizes = [18, 22, 25, 28]
+
+tasks = [get_test_expr_graph(s, 1) for s in sizes]
+graphs =     [g for g, _ in tasks]
+qbit_sizes = [N for _, N in tasks]
+peos_n = [utils.get_locale_peo(g, utils.n_neighbors) for g in graphs]
+peos, nghs = zip(*peos_n)
+
+# +
+
+costs = [cost_graph_peo(g, p) for g, p in zip(graphs, peos)]
+
+
+# +
+tqdm._instances.clear()
+chopped_g = [
+    contract_by_peo(g, peo[:_idx]) 
+    for g, peo, cost, ng in tqdm( zip(graphs, peos, costs, nghs) )
+    for _idx in get_chop_idxs(g, peo, cost, ng)
+]
+
+costs_before_chop = [
+    mem
+    for g, peo, cost, ng in tqdm( zip(graphs, peos, costs, nghs) )
+    for mem in _cost_before_chop(get_chop_idxs(g, peo, cost, ng), cost)
+]
+
+# +
+print('contracted graphs', [g.number_of_nodes() for g in chopped_g])
+
+print('costs before chop', costs_before_chop)
+
+# +
+par_vars = [0,1,2,3,7,11]
+
+parallelized_g = [
+    g
+    for graph in chopped_g
+    for parvar in par_vars
+    for  _, g in [qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=parvar)]
+]
+# -
+
+print('parallelised graphs', [g.number_of_nodes() for g in parallelized_g])
+
+peos_par = [
+    peo 
+    for g in tqdm( parallelized_g )
+    for peo, _ in [utils.get_locale_peo(g, utils.n_neighbors)]
+]
+
+
+def get_qbb_peo(graph):
+    try:
+        peo, tw = qtree.graph_model.get_peo(graph)
+    except:
+        print('QBB fail, nodes count:', graph.number_of_nodes())
+        peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
+    return peo
+
+
+peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
+
+tqdm._instances.clear()
+
+
+costs_all = [cost_graph_peo(g, p) for g, p in 
+           tqdm(
+               list(
+                   zip(
+                       parallelized_g, peos_par
+                   )
+               )
+           )]
+
+
+
+mems = [max(m) for m,_ in costs_all ]
+
+# +
+_data = np.array(mems).reshape(len(sizes), 5, len(par_vars)) 
+
+_data
+
+
+# -
+
+def trid_plot(x, y, labels, dimspec=(0,1,2)): 
+    y = y.transpose(dimspec)
+    plot_cnt = y.shape[0]
+    line_cnt = y.shape[1]
+    def _label_of(dim, idx):
+        return labels[dim] + ' ' + str(x[dim][idx])
+    
+    fig, axs = plt.subplots(1, plot_cnt, sharey=True, figsize=(15,4))
+    try:
+        iter(axs)
+    except TypeError:
+        axs = [axs]
+    for i, ax in enumerate(axs):
+        plt.sca(ax)
+        plt.title(_label_of(0, i))
+        for j in range(line_cnt):
+            plt.plot(x[2], y[i,j], label=_label_of(1, j))
+            plt.xlabel(labels[2])
+            plt.yscale('log')
+            plt.legend()
+    
+
+
+xs = [np.arange(5), sizes, par_vars]
+trid_plot(xs, _data, ['Chop part', 'Task size', 'Par vars'],(1,0,2))
+plt.suptitle('Parallelisation with chopping, naive peo')
+plt.savefig('chop_analys_naivepeo.pdf')
+
+_chopcost = np.array(costs_before_chop).reshape(len(sizes), 5, 1)
+trid_plot([' ', sizes, range(5)], _chopcost, ['Chop cost', 'Task size', 'Chop part'], (2,0,1))
+
+utils.plot_cost(*costs[-1])
+
+_cost_before_chop([600, 800, 905, 950],  costs[-1])
 
 #
 # # Profiling actual simulation
