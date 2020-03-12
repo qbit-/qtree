@@ -83,7 +83,7 @@ def get_example_task(A=8, B=10, C=7):
     idxs2 = common + list(range(A+B, A+B+C))
     return (T1, idxs1), (T2, idxs2)
 
-x, y = get_example_task()
+x, y = get_example_task(A=9)
 x[1], y[1]
 
 
@@ -151,6 +151,7 @@ for rank in range(1,7):
 # +
 prof_seq.data
 threads = 2**np.arange(1,7)
+C_size = sys.getsizeof(C)
 
 for k in prof_seq.data:
     plt.plot(threads, prof_seq.data[k], label=k)
@@ -158,12 +159,13 @@ for k in prof_seq.data:
 plt.loglog(basex=2, basey=2)
 from matplotlib.ticker import FormatStrFormatter
 
-plt.title('Single node parallelization syntetic test')
+plt.title(f'Single node parallelization one batch test. Task size: {C_size:e}')
 plt.xlabel('Thread count')
 plt.ylabel('Time')
 minorticks()
 plt.legend()
 plt.savefig('figures/node_par_seqtest.pdf')
+plt.close()
 # -
 
 # ## Use unix tools
@@ -180,23 +182,23 @@ def tonumpyarray(mp_arr):
 
 # -
 
-x,y = get_example_task(A=9, B=11, C=7)
+x,y = get_example_task(A=18, B=9, C=5)
 contract_idx = set(x[1]) & set(y[1])
 result_idx = set(x[1] + y[1])
 
 # +
+
 prof_thread = Profiler()
 prof_thread.use_append()
 
-
-
 # +
     
+
+for i in range(1):
+    C = contract(x,y)
+
 C_size = sys.getsizeof(C)
 target_shape = C.shape
-
-for i in range(3):
-    _ = contract(x,y)
     
 pool = ThreadPool(processes=2**7)
     
@@ -213,29 +215,29 @@ for rank in range(1,7):
         def work(i):
             patch = sliced_contract(x, y, par_vars, i)
             sl = target_slice(result_idx, par_vars, i)
-            os.global_C[sl[0]] = patch
 
         with prof_thread.timing('Multithread: work'):
             _ = pool.map(work, range(threads))
-            
+
 
 # +
-prof_seq.data
 _data = prof_thread.data
+print(_data)
 threads = 2**np.arange(1,7)
 
 for k in _data:
     plt.plot(threads, _data[k], label=k)
-    
+
 plt.loglog(basex=2, basey=2)
+plt.yscale('linear')
 from matplotlib.ticker import FormatStrFormatter
 
-plt.title('Single node parallelization syntetic test')
+plt.title(f'Single node parallelization test. Task size: {C_size:e}')
 plt.xlabel('Thread count')
 plt.ylabel('Time')
 minorticks()
 plt.legend()
-plt.savefig('figures/node_par_threadtest.pdf')
+plt.savefig('figures/node_par_threadtest_biggest.pdf')
 # -
 
 # ###  Multiprocessing
