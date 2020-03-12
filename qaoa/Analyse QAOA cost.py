@@ -233,6 +233,12 @@ for pars in range(1, 1+psize):
 
 
 
+
+
+
+
+
+
 # +
 
 
@@ -321,7 +327,7 @@ jjj
 # ## Full ordering
 
 # +
-graph, N = get_test_expr_graph(13, 1)
+graph, N = get_test_expr_graph(12, 1)
 
 print(N)
 # -
@@ -346,11 +352,12 @@ neigh_plot(nghs)
 
 
 
+
 # ### QuickBB peo
 #
 # QuickBB usually fails on big (>5k nodes) graphs
 
-# %cd ..
+# %cd qtree
 
 # %%time
 peoqbb, tw = qtree.graph_model.get_peo(graph)
@@ -390,7 +397,8 @@ utils.plot_cost(costs, mems)
 
 # ## First chopping 
 
-chop1 = 697
+chop1 = 643
+get_chop_idxs(graph, peo, (costs, flops), nghs)
 
 for n in peo[:chop1]:
     qtree.graph_model.eliminate_node(graph, n)
@@ -406,7 +414,7 @@ nx.draw_kamada_kawai(graph, node_size=16)
 
 # ### Draw chopped  parallelised graph
 
-PAR_VARS = 6
+PAR_VARS = 2
 par_vars, graph_split = qtree.graph_model.split_graph_by_metric(
     graph
     , n_var_parallel=PAR_VARS
@@ -523,8 +531,7 @@ nx.draw_shell(sg, with_labels=True)
 
 
 def cost_graph_peo(graph_old, peo):
-    graph, _ = utils.reorder_graph(graph_old, peo)
-    costs  = qtree.graph_model.cost_estimator(graph)
+    graph, _ = utils.reorder_graph(graph_old, peo) costs  = qtree.graph_model.cost_estimator(graph)
     return costs
 
 
@@ -579,19 +586,18 @@ import json
 with open('costs_cache.json', 'w+') as f:
     json.dump(mems, f)
 
-
 # # Analyse chopping
 #
 
 # +
+chop_pts = 3
 def get_chop_idxs(graph, peo, cost, nghs):
-    points = 4
     drop_idx = get_chop_dn_drop(nghs)
     min_idx = np.argmin(cost[0][:drop_idx])
     before_min = min_idx - (drop_idx-min_idx)
     on_plato = 2 * min_idx // 3
         
-    return on_plato, before_min, min_idx, drop_idx, drop_idx+5
+    return min_idx, drop_idx, drop_idx+5
 
 def _cost_before_chop(idxs, cost):
     mems, floats = cost
@@ -610,7 +616,7 @@ def contract_by_peo(old_graph, peo):
 
 
 # +
-sizes = [18, 22, 25, 28]
+sizes = [35, 40, 45]
 
 tasks = [get_test_expr_graph(s, 1) for s in sizes]
 graphs =     [g for g, _ in tasks]
@@ -643,7 +649,7 @@ print('contracted graphs', [g.number_of_nodes() for g in chopped_g])
 print('costs before chop', costs_before_chop)
 
 # +
-par_vars = [0,1,2,3,7,11]
+par_vars = [0,1,2,5, 7, 12]
 
 parallelized_g = [
     g
@@ -665,13 +671,16 @@ peos_par = [
 def get_qbb_peo(graph):
     try:
         peo, tw = qtree.graph_model.get_peo(graph)
+        fail = False
     except:
         print('QBB fail, nodes count:', graph.number_of_nodes())
         peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
-    return peo
+        fail = True
+    return peo, fail
 
 
 peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
+peos_par, fails_qbb = zip(*peos_par)
 
 tqdm._instances.clear()
 
@@ -690,7 +699,7 @@ costs_all = [cost_graph_peo(g, p) for g, p in
 mems = [max(m) for m,_ in costs_all ]
 
 # +
-_data = np.array(mems).reshape(len(sizes), 5, len(par_vars)) 
+_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
 
 _data
 
@@ -717,13 +726,16 @@ def trid_plot(x, y, labels, dimspec=(0,1,2)):
             plt.xlabel(labels[2])
             plt.yscale('log')
             plt.legend()
-    
 
 
-xs = [np.arange(5), sizes, par_vars]
+
+xs = [np.arange(chop_pts), sizes, par_vars]
 trid_plot(xs, _data, ['Chop part', 'Task size', 'Par vars'],(1,0,2))
 plt.suptitle('Parallelisation with chopping, naive peo')
-plt.savefig('figures/chop_analys_qbbpeo.pdf')
+plt.savefig('qaoa/figures/chop_analys_qbbpeo_35-38.pdf')
+
+#mems_naive = mems
+mems_qxx35 = mems
 
 _chopcost = np.array(costs_before_chop).reshape(len(sizes), 5, 1)
 trid_plot([' ', sizes, range(5)], _chopcost, ['Chop cost', 'Task size', 'Chop part'], (2,0,1))
