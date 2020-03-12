@@ -3,7 +3,7 @@ import utils
 import numpy as np
 import networkx as nx
 
-    
+
 def get_test_graph(S):
     #G = nx.triangular_lattice_graph(S, S)
     G = nx.grid_2d_graph(S+1, (2+S)//2)
@@ -105,8 +105,6 @@ def get_test_expr_graph(S, p):
     qc, N = get_test_qaoa(S, p)
     graph = qtree.graph_model.circ2graph(N, qc)
     return graph, N
-
-
 
 def layer_of_Hadamards(qc,N):
     layer = []
