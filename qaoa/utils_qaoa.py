@@ -1,4 +1,109 @@
 import qtree
+import utils
+import networkx as nx
+import numpy as np
+
+def get_test_graph(S):
+    #G = nx.triangular_lattice_graph(S, S)
+    G = nx.grid_2d_graph(S+1, (2+S)//2)
+    # remove grid labelling
+    gen = (x for x in range(G.number_of_nodes()))
+    G = nx.relabel_nodes(G, lambda x: next(gen))
+    return G
+
+def get_test_qaoa(S, p):
+    G = get_test_graph(S)
+    N = G.number_of_nodes()
+    beta, gamma = [np.pi/3]*p, [np.pi/2]*p
+    qc = qaoa.get_qaoa_circuit(G, beta, gamma)
+    return qc, N
+
+def get_test_expr_graph(S, p):
+    qc, N = get_test_qaoa(S, p)
+    graph = qtree.graph_model.circ2graph(N, qc)
+    return graph, N
+
+def get_optimized_expr(S, p):
+    graph, N = get_test_expr_graph(S, p)
+    graph_opt, nghs = _optimise_graph(graph)
+    return graph_opt, nghs, N
+
+def cost_graph_peo(graph_old, peo):
+    graph, _ = utils.reorder_graph(graph_old, peo)
+    costs  = qtree.graph_model.cost_estimator(graph)
+    return costs
+
+def _optimise_graph(graph):
+    peo, nghs = utils.get_locale_peo(graph, utils.n_neighbors)
+    graph_opt, slice_dict = utils.reorder_graph(graph, peo)
+    return graph_opt, nghs
+
+def get_splitted_graph(S, p, pars):
+    graph, N = get_test_expr_graph(S, p)
+    idxs, graph = qtree.graph_model.split_graph_by_metric(graph, n_var_parallel=pars)
+    graph_opt, nghs = _optimise_graph(graph)
+    return graph, nghs, N
+
+def get_cost_of_splitted(S, p, pars):
+    graph, nghs, N = get_splitted_graph(S, p, pars)
+    graph_opt, nghs = _optimise_graph(graph)
+    mems, flops = qtree.graph_model.cost_estimator(graph_opt)
+    return mems,flops,nghs, N
+
+def get_cost_of_task(S, p=1):
+    graph_opt, nghs, N = get_optimized_expr(S, p)
+    mems, flops = qtree.graph_model.cost_estimator(graph_opt)
+    return mems,flops,nghs, N
+
+
+def simulate_circ(circuit, n_qubits, peo):
+    buckets, data_dict, bra_vars, ket_vars = qtree.optimizer.circ2buckets(
+        n_qubits, circuit)
+
+    # place bra and ket variables to beginning, so these variables
+    # will be contracted first
+    #peo, treewidth = qtree.graph_model.get_peo(graph)
+
+    peo = ket_vars + bra_vars + peo
+    perm_buckets, perm_dict = qtree.optimizer.reorder_buckets(buckets, peo)
+
+    # extract bra and ket variables from variable list and sort according
+    # to qubit order
+    ket_vars = sorted([perm_dict[idx] for idx in ket_vars], key=str)
+    bra_vars = sorted([perm_dict[idx] for idx in bra_vars], key=str)
+
+    # Take the subtensor corresponding to the initial state
+    initial_state = target_state = 0
+    slice_dict = qtree.utils.slice_from_bits(initial_state, ket_vars)
+    slice_dict.update(
+        qtree.utils.slice_from_bits(target_state, bra_vars)
+    )
+    sliced_buckets = qtree.np_framework.get_sliced_np_buckets(
+        perm_buckets, data_dict, slice_dict)
+    
+    result = qtree.optimizer.bucket_elimination(
+        sliced_buckets, qtree.np_framework.process_bucket_np)
+    return result
+
+def get_test_graph(S):
+    #G = nx.triangular_lattice_graph(S, S)
+    G = nx.grid_2d_graph(S+1, (2+S)//2)
+    # remove grid labelling
+    gen = (x for x in range(G.number_of_nodes()))
+    G = nx.relabel_nodes(G, lambda x: next(gen))
+    return G
+
+def get_test_qaoa(S, p):
+    G = get_test_graph(S)
+    N = G.number_of_nodes()
+    beta, gamma = [np.pi/3]*p, [np.pi/2]*p
+    qc = get_qaoa_circuit(G, beta, gamma)
+    return qc, N
+
+def get_test_expr_graph(S, p):
+    qc, N = get_test_qaoa(S, p)
+    graph = qtree.graph_model.circ2graph(N, qc)
+    return graph, N
 
 def layer_of_Hadamards(qc,N):
     layer = []
