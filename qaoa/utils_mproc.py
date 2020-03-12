@@ -37,8 +37,11 @@ def get_chop_idxs(graph, peo, cost, nghs):
     min_idx = np.argmin(cost[0][:drop_idx])
     before_min = min_idx - (drop_idx-min_idx)
     on_plato = 2 * min_idx // 3
+    idxs = [on_plato, before_min-4,  before_min, min_idx]
+    idxs += [min_idx + 5, drop_idx-5, drop_idx-3, drop_idx-1]
+    idxs += [drop_idx, drop_idx + 1, drop_idx+3, drop_idx+5]
 
-    return before_min, min_idx, drop_idx-3, drop_idx-1, drop_idx, drop_idx+5
+    return idxs
 
 def cost_before_chop(idxs, cost):
     mems, floats = cost

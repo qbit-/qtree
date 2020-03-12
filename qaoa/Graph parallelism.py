@@ -32,6 +32,7 @@ import copy
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
+from utils_mproc import *
 sns.set_style('whitegrid')
 # %load_ext autoreload
 # %autoreload 2
@@ -41,43 +42,15 @@ sns.set_style('whitegrid')
 #
 
 # +
-chop_pts = 3
-def get_chop_idxs(graph, peo, cost, nghs):
-    drop_idx = get_chop_dn_drop(nghs)
-    min_idx = np.argmin(cost[0][:drop_idx])
-    before_min = min_idx - (drop_idx-min_idx)
-    on_plato = 2 * min_idx // 3
-        
-    return min_idx, drop_idx, drop_idx+5
+chop_pts = 12
 
-def _cost_before_chop(idxs, cost):
-    mems, floats = cost
-    before_mem = [max(mems[:i]) for i in idxs]
-    return before_mem
-
-def get_chop_dn_drop(nghs):
-    nghs = np.array(nghs)
-    dn = nghs[1:] - nghs[:-1]
-    neg_idx = [i for i, n in enumerate(dn) if n<0]
-    pos_idx = [i for i, n in enumerate(dn) if n>0]
-    drop_idx = neg_idx[0]
-    pos_idx.reverse()
-    before_drop = [i for i in pos_idx if i<drop_idx]
-    return before_drop[0] - 1
-
-
+experiment_name = 'skylake_30-45'
 
 # -
 
-def contract_by_peo(old_graph, peo):
-    graph = copy.deepcopy(old_graph)
-    for n in peo:
-        qtree.graph_model.eliminate_node(graph, n)
-    return graph
-
 
 # +
-sizes = [12, 13]
+sizes = np.arange(30,46)
 
 tasks = [qaoa.get_test_expr_graph(s, 1) for s in sizes]
 graphs =     [g for g, _ in tasks]
@@ -85,11 +58,9 @@ qbit_sizes = [N for _, N in tasks]
 # -
 
 print('Qubit sizes', qbit_sizes)
-pool = Pool(processes=1)
+pool = Pool(processes=128)
 
 
-def n_peo(graph):
-    return utils.get_locale_peo(graph, utils.n_neighbors)
 peos_n = pool.map(n_peo, graphs)
 peos, nghs = zip(*peos_n)
 
@@ -119,7 +90,7 @@ print('contracted graphs', [g.number_of_nodes() for g in chopped_g])
 print('costs before chop', costs_before_chop)
 
 # +
-par_vars = [0,1,2,5, 7, 12]
+par_vars = [0,1,2,3,5,7,8,9,10,11 ,12]
 
 parallelized_g = [
     g
@@ -162,15 +133,19 @@ with prof.timing('Costs chopped'):
     costs_all = pool.map(_get_cost, _pg_peos)
 
 
-experiment_name = 'small_chops_test'
 
 mems = [max(m) for m,_ in costs_all ]
+flops = [max(m) for _,f in costs_all ]
 
 # +
-_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
+_data = np.array(flops).reshape(len(sizes), chop_pts, len(par_vars)) 
 
 print(_data)
-np.save(f'cached_data/{experiment_name}',_data)
+np.save(f'cached_data/{experiment_name}_flops',_data)
+
+_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
+print(_data)
+np.save(f'cached_data/{experiment_name}_mems',_data)
 
 
 # -
