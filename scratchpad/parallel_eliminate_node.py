@@ -1,9 +1,13 @@
-from multiprocessing import Pool, Array
+import ray
 import numpy as np
+from multiprocessing import Pool, Array, RawArray
+from multiprocessing.dummy import Pool
 from profilers import timing, cpu_util, proc_count, repeat, timed
-import os
+import os, sys
 
 ### Utils
+NCORES = int(sys.argv[1])
+ray.init(num_cpus=NCORES, object_store_memory=20*1e9)
 
 def tonumpyarray(mp_arr):
     return np.frombuffer(mp_arr.get_obj())
@@ -42,33 +46,37 @@ def multidim_chunks(shape, N):
 ###
 ### Workers
 
-@timed('contract')
-@cpu_util()
+#@timed('contract')
+#@cpu_util()
 def first_idx_contract(A,B):
     assert A.shape[0] == B.shape[0]
     pid = os.getpid()
-    print(pid,'shape',A.shape,B.shape)
     x =  np.einsum('ij, ik -> ijk', A,B)
     return x
 
 def contract_put(A, B, target_slice):
     x = first_idx_contract(A,B)
-    with timing('assign'):
-        os.global_C[target_slice] = x
+    os.global_C[target_slice] = x
 
 def unpacked(args):
     return contract_put(*args)
 
 ### 
 
-def eliminate(A, B, nproc=3):
+def eliminate(*ops, nproc=NCORES):
     #ops = [A,B]
+    A = ops[0]
     N = A.shape[0]
     target_shape = [N]
     target_shape += list(A.shape[1:])
     target_shape += list(B.shape[1:])
     print('target shape', target_shape)
     # Create shared memory array
+    with timing('np create arr'):
+        test_ray_arr = np.zeros(target_shape)
+    print('array size in GB',sys.getsizeof(test_ray_arr)/1e9)
+    with timing('ray share arr'):
+        ray.put(test_ray_arr)
     with timing('Create array'):
         flat_size = multiply_list(target_shape)
         os.global_C = tonumpyarray(Array('d',flat_size))
@@ -112,13 +120,13 @@ def test_2dim():
     assert np.array_equal(C , C1)
 
 def test_3dim():
-    A = np.random.randn(4, 700, 10)
-    B = np.random.randn(4, 600, 10)
+    A = np.random.randn(4, 70, 10)
+    B = np.random.randn(4, 160, 2, 2,2,2,2,2,2,2, 10)
     with timing('Parallel total'):
         C = eliminate(A,B)
     print('result shape', C.shape)
     with timing('Simple'):
-        C1 = np.einsum('abc, aef -> abcef',A, B)
+        C1 = np.einsum('abc, aef... -> abcef...',A, B)
     assert np.array_equal(C , C1)
 
 if __name__=='__main__':
