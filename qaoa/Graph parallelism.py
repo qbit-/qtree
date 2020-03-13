@@ -33,6 +33,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 import memcached_qaoa_utils as cached_utils
+from utils_mproc import *
 sns.set_style('whitegrid')
 # %load_ext autoreload
 # %autoreload 2
@@ -42,47 +43,23 @@ sns.set_style('whitegrid')
 #
 
 # +
-chop_pts = 3
-def get_chop_idxs(graph, peo, cost, nghs):
-    drop_idx = get_chop_dn_drop(nghs)
-    min_idx = np.argmin(cost[0][:drop_idx])
-    before_min = min_idx - (drop_idx-min_idx)
-    on_plato = 2 * min_idx // 3
-        
-    return min_idx, drop_idx, drop_idx+5
-
-def _cost_before_chop(idxs, cost):
-    mems, floats = cost
-    before_mem = [max(mems[:i]) for i in idxs]
-    return before_mem
-
-def get_chop_dn_drop(nghs):
-    nghs = np.array(nghs)
-    dn = nghs[1:] - nghs[:-1]
-    neg_idx = [i for i, n in enumerate(dn) if n<0]
-    pos_idx = [i for i, n in enumerate(dn) if n>0]
-    drop_idx = neg_idx[0]
-    pos_idx.reverse()
-    before_drop = [i for i in pos_idx if i<drop_idx]
-    return before_drop[0] - 1
-
+chop_pts = 12
+experiment_name = 'skylake_randomregd4_15-28'
 
 # -
 
-peo, nghs = cached_utils.neigh_peo(23)
-costs = cached_utils.graph_contraction_costs(23, peo)
 #utils.plot_cost(*costs)
 
 # +
-sizes = np.arange(25,35)
+sizes = np.arange(15,28)
 
-tasks = [cached_utils.qaoa_expr_graph(s) for s in sizes]
+tasks = [cached_utils.qaoa_expr_graph(s, type='randomreg') for s in sizes]
 graphs, qbit_sizes = zip(*tasks)
 
 # -
 
 print('Qubit sizes', qbit_sizes)
-pool = Pool(processes=20)
+pool = Pool(processes=120)
 
 
 peos_n = pool.map(cached_utils.neigh_peo, sizes)
@@ -105,7 +82,7 @@ chopped_g = [
 costs_before_chop = [
     mem
     for g, peo, cost, ng in tqdm( zip(graphs, peos, costs, nghs) )
-    for mem in _cost_before_chop(get_chop_idxs(g, peo, cost, ng), cost)
+    for mem in cost_before_chop(get_chop_idxs(g, peo, cost, ng), cost)
 ]
 
 # +
@@ -114,7 +91,7 @@ print('contracted graphs', [g.number_of_nodes() for g in chopped_g])
 print('costs before chop', costs_before_chop)
 
 # +
-par_vars = [0,1,2,5, 7, 12]
+par_vars = [0,1,2,3,5, 7,8,9,10,11, 12]
 
 parallelized_g = [
     g
@@ -127,9 +104,6 @@ parallelized_g = [
 print('parallelised graphs', [g.number_of_nodes() for g in parallelized_g])
 
 
-def n_peo(graph):
-    return utils.get_locale_peo(graph, utils.n_neighbors)
-_pg_peos = tqdm(list(zip(parallelized_g, peos_par)))
 with prof.timing('peos chopped'):
     peos_par_n = pool.map(n_peo, tqdm(parallelized_g))
 peos_par, nghs_par = zip(*peos_par_n)
@@ -146,10 +120,10 @@ def get_qbb_peo(graph):
     return peo, fail
 
 
-peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
-peos_par, fails_qbb = zip(*peos_par)
+#peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
+#peos_par, fails_qbb = zip(*peos_par)
 
-tqdm._instances.clear()
+#tqdm._instances.clear()
 
 
 _pg_peos = tqdm(list(zip(parallelized_g, peos_par)))
@@ -157,16 +131,18 @@ with prof.timing('Costs chopped'):
     costs_all = pool.map(_get_cost, _pg_peos)
 
 
-experiment_name = 'small_chops_test'
+flops = [sum(f) for _,f in costs_all ]
+_data = np.array(flops).reshape(len(sizes), chop_pts, len(par_vars)) 
+np.save(f'cached_data/{experiment_name}_flops',_data)
 
 mems = [max(m) for m,_ in costs_all ]
+_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
+np.save(f'cached_data/{experiment_name}_mems',_data)
+print(_data)
 
 # +
-_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
 
-print(_data)
-np.save(f'cached_data/{experiment_name}',_data)
-
+return
 
 # -
 

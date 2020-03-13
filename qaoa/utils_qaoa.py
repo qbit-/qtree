@@ -4,23 +4,37 @@ import numpy as np
 import networkx as nx
 
 
-def get_test_graph(S):
+def get_test_graph(S, type='grid', **kw):
+    if type=='grid':
+        G = nx.grid_2d_graph(S+1, (2+S)//2)
+    elif type=='rectgrid':
+        G = nx.grid_2d_graph(S, S)
+    elif type=='rectgrid':
+        G = nx.grid_2d_graph(S, S)
+    elif type=='randomreg':
+        n = 2*S*S//2
+        d = kw.get('degree', 4)
+        G = nx.random_regular_graph(d, n, seed=kw.get('seed', 42))
+    elif type=='randomgnp':
+        n = 2*S*S//2
+        d = kw.get('degree', 4)
+        G = nx.gnm_random_graph(n, d*n//2, seed=kw.get('seed', 42))
+
     #G = nx.triangular_lattice_graph(S, S)
-    G = nx.grid_2d_graph(S+1, (2+S)//2)
     # remove grid labelling
     gen = (x for x in range(G.number_of_nodes()))
     G = nx.relabel_nodes(G, lambda x: next(gen))
     return G
 
-def get_test_qaoa(S, p):
-    G = get_test_graph(S)
+def get_test_qaoa(S, p, type='grid', **kw):
+    G = get_test_graph(S, type, **kw)
     N = G.number_of_nodes()
     beta, gamma = [np.pi/3]*p, [np.pi/2]*p
     qc = qaoa.get_qaoa_circuit(G, beta, gamma)
     return qc, N
 
-def get_test_expr_graph(S, p):
-    qc, N = get_test_qaoa(S, p)
+def get_test_expr_graph(S, p, type='grid', **kw):
+    qc, N = get_test_qaoa(S, p, type, **kw)
     graph = qtree.graph_model.circ2graph(N, qc)
     return graph, N
 

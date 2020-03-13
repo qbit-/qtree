@@ -8,8 +8,8 @@ import utils
 memory = joblib.Memory('./cached_data/memcache')
 
 @memory.cache
-def qaoa_expr_graph(size, p=1):
-    return qaoa.get_test_expr_graph(size, p)
+def qaoa_expr_graph(size, p=1, type='grid', seed=42):
+    return qaoa.get_test_expr_graph(size, p, type=type, seed=seed)
 
 @memory.cache
 def neigh_peo(size, p=1):
