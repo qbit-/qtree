@@ -44,13 +44,13 @@ sns.set_style('whitegrid')
 # +
 chop_pts = 12
 
-experiment_name = 'skylake_30-45'
+experiment_name = 'skylake_30-38_sum'
 
 # -
 
 
 # +
-sizes = np.arange(30,46)
+sizes = np.arange(30,39)
 
 tasks = [qaoa.get_test_expr_graph(s, 1) for s in sizes]
 graphs =     [g for g, _ in tasks]
@@ -63,13 +63,14 @@ pool = Pool(processes=128)
 
 peos_n = pool.map(n_peo, graphs)
 peos, nghs = zip(*peos_n)
+np.save(f'cached_data/peos_full_{experiment_name}',peos)
 
 # +
-_get_cost = lambda x: qaoa.cost_graph_peo(*x)
 
 with prof.timing('Get full costs naive'):
-    costs = pool.map(_get_cost, zip(graphs, peos))
+    costs = pool.map(get_cost, zip(graphs, peos))
 
+np.save(f'cached_data/costs_full_{experiment_name}',costs)
 
 # +
 chopped_g = [
@@ -81,7 +82,7 @@ chopped_g = [
 costs_before_chop = [
     mem
     for g, peo, cost, ng in tqdm( zip(graphs, peos, costs, nghs) )
-    for mem in _cost_before_chop(get_chop_idxs(g, peo, cost, ng), cost)
+    for mem in cost_before_chop(get_chop_idxs(g, peo, cost, ng), cost)
 ]
 
 # +
@@ -103,9 +104,9 @@ parallelized_g = [
 print('parallelised graphs', [g.number_of_nodes() for g in parallelized_g])
 
 
-def n_peo(graph):
-    return utils.get_locale_peo(graph, utils.n_neighbors)
-_pg_peos = tqdm(list(zip(parallelized_g, peos_par)))
+#peos_repeated = zip(*[peos]*len(par_vars)*chop_pts)
+#peos_repeated = [ peo for batch in peos_repeated for peo in batch ]
+
 with prof.timing('peos chopped'):
     peos_par_n = pool.map(n_peo, tqdm(parallelized_g))
 peos_par, nghs_par = zip(*peos_par_n)
@@ -122,20 +123,20 @@ def get_qbb_peo(graph):
     return peo, fail
 
 
-peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
-peos_par, fails_qbb = zip(*peos_par)
+#peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
+#peos_par, fails_qbb = zip(*peos_par)
 
 tqdm._instances.clear()
 
 
 _pg_peos = tqdm(list(zip(parallelized_g, peos_par)))
 with prof.timing('Costs chopped'):
-    costs_all = pool.map(_get_cost, _pg_peos)
+    costs_all = pool.map(get_cost, _pg_peos)
 
 
 
-mems = [max(m) for m,_ in costs_all ]
-flops = [max(m) for _,f in costs_all ]
+mems = [sum(m) for m,_ in costs_all ]
+flops = [sum(f) for _,f in costs_all ]
 
 # +
 _data = np.array(flops).reshape(len(sizes), chop_pts, len(par_vars)) 
