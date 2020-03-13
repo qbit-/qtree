@@ -24,9 +24,12 @@ sys.path.append('./qaoa')
 
 import pyrofiler as prof
 from multiprocessing.dummy import Pool
+from multiprocessing import Pool
 import utils_qaoa as qaoa
 import utils
 import numpy as np
+from functools import partial
+
 import qtree
 import copy
 from tqdm import tqdm
@@ -52,8 +55,9 @@ experiment_name = 'skylake_randomregd4_15-28'
 
 # +
 sizes = np.arange(15,28)
+type_ = 'randomreg'
 
-tasks = [cached_utils.qaoa_expr_graph(s, type='randomreg') for s in sizes]
+tasks = [cached_utils.qaoa_expr_graph(s, type=type_) for s in sizes]
 graphs, qbit_sizes = zip(*tasks)
 
 # -
@@ -62,13 +66,17 @@ print('Qubit sizes', qbit_sizes)
 pool = Pool(processes=120)
 
 
-peos_n = pool.map(cached_utils.neigh_peo, sizes)
+cached_neigh_peo = cached_utils.memory.cache(cached_utils.neigh_peo)
+peos_n = pool.map(partial(cached_neigh_peo, type=type_), sizes)
 peos, nghs = zip(*peos_n)
 
 # +
 
+cached_contr_cost = cached_utils.memory.cache(cached_utils.graph_contraction_costs)
 with prof.timing('Get full costs naive'):
-    costs = pool.starmap(cached_utils.graph_contraction_costs, zip(sizes, peos))
+    costs = pool.starmap(partial(
+        cached_contr_cost, type=type_)
+        , zip(sizes, peos))
 print(costs)
 raise
 
@@ -142,7 +150,7 @@ print(_data)
 
 # +
 
-return
+raise
 
 # -
 
