@@ -12,3 +12,5 @@ test_circuits
 *.error
 *.output
 *.cobaltlog
+einsum2/*
+test_circuits/*
