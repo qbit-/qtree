@@ -67,7 +67,6 @@ def get_chop_dn_drop(nghs):
     return before_drop[0] - 1
 
 
-
 # -
 
 peo, nghs= cached_utils.neigh_peo(23)
@@ -77,26 +76,24 @@ utils.plot_cost(*costs)
 # +
 sizes = [12, 13]
 
-tasks = [qaoa.get_test_expr_graph(s, 1) for s in sizes]
-graphs =     [g for g, _ in tasks]
-qbit_sizes = [N for _, N in tasks]
+tasks = [cached_utils.qaoa_expr_graph(s) for s in sizes]
+graphs, qbit_sizes = zip(*tasks)
+
 # -
 
 print('Qubit sizes', qbit_sizes)
 pool = Pool(processes=1)
 
 
-def n_peo(graph):
-    return utils.get_locale_peo(graph, utils.n_neighbors)
-peos_n = pool.map(n_peo, graphs)
+peos_n = pool.map(cached_utils.neigh_peo, sizes)
 peos, nghs = zip(*peos_n)
 
 # +
-_get_cost = lambda x: qaoa.cost_graph_peo(*x)
 
 with prof.timing('Get full costs naive'):
-    costs = pool.map(_get_cost, zip(graphs, peos))
+    costs = pool.map(cached_data.graph_contraction_costs, zip(sizes, peos))
 
+raise
 
 # +
 chopped_g = [
