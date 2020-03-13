@@ -30,11 +30,11 @@ def get_test_qaoa(S, p, type='grid', **kw):
     G = get_test_graph(S, type, **kw)
     N = G.number_of_nodes()
     beta, gamma = [np.pi/3]*p, [np.pi/2]*p
-    qc = qaoa.get_qaoa_circuit(G, beta, gamma)
+    qc = get_qaoa_circuit(G, beta, gamma)
     return qc, N
 
 def get_test_expr_graph(S, p, type='grid', **kw):
-    qc, N = get_test_qaoa(S, p, type, **kw)
+    qc, N = get_test_qaoa(S, p, type=type, **kw)
     graph = qtree.graph_model.circ2graph(N, qc)
     return graph, N
 
@@ -99,26 +99,6 @@ def simulate_circ(circuit, n_qubits, peo):
     result = qtree.optimizer.bucket_elimination(
         sliced_buckets, qtree.np_framework.process_bucket_np)
     return result
-
-def get_test_graph(S):
-    #G = nx.triangular_lattice_graph(S, S)
-    G = nx.grid_2d_graph(S+1, (2+S)//2)
-    # remove grid labelling
-    gen = (x for x in range(G.number_of_nodes()))
-    G = nx.relabel_nodes(G, lambda x: next(gen))
-    return G
-
-def get_test_qaoa(S, p):
-    G = get_test_graph(S)
-    N = G.number_of_nodes()
-    beta, gamma = [np.pi/3]*p, [np.pi/2]*p
-    qc = get_qaoa_circuit(G, beta, gamma)
-    return qc, N
-
-def get_test_expr_graph(S, p):
-    qc, N = get_test_qaoa(S, p)
-    graph = qtree.graph_model.circ2graph(N, qc)
-    return graph, N
 
 def layer_of_Hadamards(qc,N):
     layer = []
