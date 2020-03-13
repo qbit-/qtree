@@ -14,6 +14,11 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+def just_remove_peo(x):
+    graph, peo = x
+    peo = [var for var in peo if var in graph.nodes]
+    return peo
+
 
 def get_qbb_peo(graph):
     try:
