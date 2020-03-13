@@ -69,12 +69,12 @@ def get_chop_dn_drop(nghs):
 
 # -
 
-peo, nghs= cached_utils.neigh_peo(23)
+peo, nghs = cached_utils.neigh_peo(23)
 costs = cached_utils.graph_contraction_costs(23, peo)
-utils.plot_cost(*costs)
+#utils.plot_cost(*costs)
 
 # +
-sizes = [12, 13]
+sizes = np.arange(25,35)
 
 tasks = [cached_utils.qaoa_expr_graph(s) for s in sizes]
 graphs, qbit_sizes = zip(*tasks)
@@ -82,7 +82,7 @@ graphs, qbit_sizes = zip(*tasks)
 # -
 
 print('Qubit sizes', qbit_sizes)
-pool = Pool(processes=1)
+pool = Pool(processes=20)
 
 
 peos_n = pool.map(cached_utils.neigh_peo, sizes)
@@ -91,8 +91,8 @@ peos, nghs = zip(*peos_n)
 # +
 
 with prof.timing('Get full costs naive'):
-    costs = pool.map(cached_data.graph_contraction_costs, zip(sizes, peos))
-
+    costs = pool.starmap(cached_utils.graph_contraction_costs, zip(sizes, peos))
+print(costs)
 raise
 
 # +
