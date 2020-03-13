@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py
+#     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
@@ -46,7 +46,6 @@ chop_pts = 12
 
 experiment_name = 'skylake_30-38_sum'
 
-# -
 
 
 # +
@@ -104,8 +103,8 @@ parallelized_g = [
 print('parallelised graphs', [g.number_of_nodes() for g in parallelized_g])
 
 
-#peos_repeated = zip(*[peos]*len(par_vars)*chop_pts)
-#peos_repeated = [ peo for batch in peos_repeated for peo in batch ]
+# peos_repeated = zip(*[peos]*len(par_vars)*chop_pts)
+# peos_repeated = [ peo for batch in peos_repeated for peo in batch ]
 
 with prof.timing('peos chopped'):
     peos_par_n = pool.map(n_peo, tqdm(parallelized_g))
@@ -123,8 +122,8 @@ def get_qbb_peo(graph):
     return peo, fail
 
 
-#peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
-#peos_par, fails_qbb = zip(*peos_par)
+# peos_par = [ get_qbb_peo(g) for g in tqdm( parallelized_g ) ]
+# peos_par, fails_qbb = zip(*peos_par)
 
 tqdm._instances.clear()
 
