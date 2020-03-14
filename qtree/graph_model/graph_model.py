@@ -5,6 +5,7 @@ Operations with graphical models
 import numpy as np
 import re
 import copy
+from tqdm import tqdm
 import networkx as nx
 import itertools
 import matplotlib.pyplot as plt
@@ -349,7 +350,7 @@ def get_peo(old_graph,
 
     if graph.number_of_edges() > 0:
         gen_cnf(cnffile, graph)
-        out_bytes = run_quickbb(cnffile, defs.QUICKBB_COMMAND)
+        out_bytes = run_quickbb(cnffile, defs.QUICKBB_COMMAND, extra_args=quickbb_extra_args)
 
         # Extract order
         m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
@@ -708,7 +709,7 @@ def cost_estimator(old_graph, free_vars=[]):
         return [1], [1]
 
     results = []
-    for n, node in enumerate(nodes):
+    for n, node in tqdm(list(enumerate(nodes))):
         if node not in free_vars:
             memory, flops = get_cost_by_node(graph, node)
             results.append((memory, flops))

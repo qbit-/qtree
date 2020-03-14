@@ -87,6 +87,7 @@ def run_quickbb(cnffile,
     output, error = process.communicate()
     if error:
         log.error(error)
+        print(error)
     # log.info(output)
     # with open(outfile, 'r') as fp:
     #     log.info("OUTPUT:\n"+fp.read())
