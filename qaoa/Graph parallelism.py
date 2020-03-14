@@ -47,14 +47,14 @@ sns.set_style('whitegrid')
 
 # +
 chop_pts = 12
-experiment_name = 'skylake_randomregd4_15-28'
+experiment_name = 'skylake_randomregd3_10-20'
 
 # -
 
 #utils.plot_cost(*costs)
 
 # +
-sizes = np.arange(15,28)
+sizes = np.arange(10,21)
 type_ = 'randomreg'
 
 tasks = [cached_utils.qaoa_expr_graph(s, type=type_) for s in sizes]
@@ -78,7 +78,6 @@ with prof.timing('Get full costs naive'):
         cached_contr_cost, type=type_)
         , zip(sizes, peos))
 print(costs)
-raise
 
 # +
 chopped_g = [
@@ -136,16 +135,13 @@ def get_qbb_peo(graph):
 
 _pg_peos = tqdm(list(zip(parallelized_g, peos_par)))
 with prof.timing('Costs chopped'):
-    costs_all = pool.map(_get_cost, _pg_peos)
+    costs_all = pool.map(get_cost, _pg_peos)
 
 
-flops = [sum(f) for _,f in costs_all ]
-_data = np.array(flops).reshape(len(sizes), chop_pts, len(par_vars)) 
-np.save(f'cached_data/{experiment_name}_flops',_data)
+np.save(f'cached_data/{experiment_name}_costs',costs_all)
 
 mems = [max(m) for m,_ in costs_all ]
-_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars)) 
-np.save(f'cached_data/{experiment_name}_mems',_data)
+_data = np.array(mems).reshape(len(sizes), chop_pts, len(par_vars))
 print(_data)
 
 # +
