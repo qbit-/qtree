@@ -1,6 +1,24 @@
 __pycache__
-quickbb_out.qbb
-quickbb_stat.qbb
-quickbb.cnf
-graph.eps
-adjacency_graph.mat
+# Compiled python modules.
+*.pyc
+
+# Setuptools distribution folder.
+/dist/
+
+# Python egg metadata, regenerated from source files by setuptools.
+/*.egg-info
+
+# Emacs temporary files
+.#*
+
+# checkpoints
+*/.ipynb_checkpoints
+
+# binary files
+scratchpad/output/*
+
+# Mac OS temporary files
+.DS_Store
+
+# ignore build packages
+build
