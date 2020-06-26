@@ -109,6 +109,9 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
     sliced_buckets : list of lists
               buckets with sliced Numpy tensors
     """
+    # import pdb
+    # pdb.set_trace()
+
     # Create np buckets from buckets
     sliced_buckets = []
     for bucket in buckets:

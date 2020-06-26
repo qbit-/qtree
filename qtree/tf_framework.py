@@ -44,8 +44,10 @@ def get_sliced_tf_buckets(buckets, slice_dict):
         tf_bucket = []
         for tensor in bucket:
             # Save the reference to placeholder in the dictionary
-            placeholder = tf.placeholder(defs.TF_ARRAY_TYPE,
-                                         tensor.shape, name=tensor.name)
+            placeholder = tf.stop_gradient(
+                tf.placeholder(defs.TF_ARRAY_TYPE,
+                               tensor.shape, name=tensor.name)
+                )
             placeholder_dict[placeholder] = tensor.data_key
 
             # sort tensor dimensions
@@ -62,12 +64,16 @@ def get_sliced_tf_buckets(buckets, slice_dict):
             for idx in indices_sorted:
                 if idx in slice_dict:
                     # insert slice variables into the placeholder dict
-                    slice_start = tf.placeholder(
-                        tf.int32,
-                        name=idx.name + '_start')
-                    slice_stop = tf.placeholder(
-                        tf.int32,
-                        name=idx.name + '_stop')
+                    slice_start = tf.stop_gradient(
+                        tf.placeholder(
+                            tf.int32,
+                            name=idx.name + '_start')
+                        )
+                    slice_stop = tf.stop_gradient(
+                        tf.placeholder(
+                            tf.int32,
+                            name=idx.name + '_stop')
+                        )
                     placeholder_dict[slice_start] = (idx, 'start')
                     placeholder_dict[slice_stop] = (idx, 'stop')
                     slice_bounds.append(slice(slice_start, slice_stop))
@@ -180,8 +186,11 @@ def slice_tf_buckets(tf_buckets, old_pdict, idx_parallel):
     pdict = {key: val for key, val in old_pdict.items()}
     # Define slice variables
     slice_var_dict = {'q_{}'.format(var):
-                      tf.placeholder(dtype=tf.int32,
-                                     shape=[], name='q_{}'.format(var))
+                      tf.stop_gradient(
+                          tf.placeholder(dtype=tf.int32,
+                                         shape=[],
+                                         name='q_{}'.format(var))
+                      )
                       for var in idx_parallel}
     pdict.update(slice_var_dict)
 

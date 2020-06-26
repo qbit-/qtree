@@ -7,9 +7,7 @@ go here.
 import functools
 import itertools
 import random
-import re
 import networkx as nx
-import qtree.utils as utils
 import qtree.operators as ops
 
 from qtree.logger_setup import log
@@ -166,7 +164,7 @@ class Tensor(object):
                 and self.data == other.data)
 
 
-def circ2buckets(qubit_count, circuit, max_depth=None):
+def circ2buckets(qubit_count, circuit, pdict={}, max_depth=None):
     """
     Takes a circuit in the form of list of lists, builds
     corresponding buckets. Buckets contain Tensors
@@ -181,6 +179,10 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     circuit : list of lists
             quantum circuit as returned by
             :py:meth:`operators.read_circuit_file`
+    pdict : dict
+            Dictionary with placeholders if any parameteric gates
+            were unresolved
+
     max_depth : int
             Maximal depth of the circuit which should be used
     Returns
@@ -250,12 +252,19 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
                 min_var_idx = min(min_var_idx,
                                   int(layer_variables[qubit]))
 
+            # fill placeholders in parameters if any
+            for par, value in op.parameters.items():
+                if isinstance(value, ops.placeholder):
+                    op._parameters[par] = pdict[value]
+
+            data_key = (op.name,
+                        hash((op.name, tuple(op.parameters.items()))))
             # Build a tensor
             t = Tensor(op.name, variables,
-                       data_key=op.data_key)
+                       data_key=data_key)
 
             # Insert tensor data into data dict
-            data_dict[op.data_key] = op.tensor
+            data_dict[data_key] = op.gen_tensor()
 
             # Append tensor to buckets
             # first_qubit_var = layer_variables[op.qubits[0]]
@@ -274,7 +283,9 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
     ket_variables = []
 
     op = ops.M(0)  # create a single measurement gate object
-    data_dict.update({op.data_key: op.tensor})
+    data_key = (op.name, hash((op.name, tuple(op.parameters.items()))))
+    data_dict.update(
+        {data_key: op.gen_tensor()})
 
     for qubit in range(qubit_count):
         var = layer_variables[qubit]
@@ -284,7 +295,7 @@ def circ2buckets(qubit_count, circuit, max_depth=None):
         buckets[int(var)].append(
             Tensor(op.name,
                    indices=[var, new_var],
-                   data_key=op.data_key)
+                   data_key=data_key)
         )
         buckets.append([])
         layer_variables[qubit] = new_var
@@ -474,9 +485,10 @@ def test_bucket_graph_conversion(filename):
     n_qubits, circuit = ops.read_circuit_file(filename)
     buckets, data_dict, bra_vars, ket_vars = circ2buckets(
         n_qubits, circuit)
-    graph = gm.circ2graph(n_qubits, circuit, omit_terminals=False)
+    graph, *_ = gm.importers.circ2graph(
+        n_qubits, circuit, omit_terminals=False)
 
-    graph_from_buckets = gm.buckets2graph(buckets)
+    graph_from_buckets = gm.importers.buckets2graph(buckets)
     buckets_from_graph = graph2buckets(graph)
 
     buckets_equal = True

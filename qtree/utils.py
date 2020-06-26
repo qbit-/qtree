@@ -124,7 +124,7 @@ def num_to_alnum(integer):
 
 def get_einsum_expr(idx1, idx2):
     """
-    Takes two tuples of indice and returns an einsum expression
+    Takes two tuples of indices and returns an einsum expression
     to evaluate the sum over repeating indices
 
     Parameters
@@ -200,5 +200,3 @@ def mpi_profile_decorator(comm, filename=None):
             return result
         return wrap_f
     return prof_decorator
-
-

@@ -12,7 +12,7 @@ REQUIRED_PACKAGES = [
     'numpy>=1.18.1',
     'networkx>=2.3',
     'matplotlib>=3.1.3',
-    'google-api-client<0.17.0',
+    'google-api-core<=1.17.0',
     'cirq'
 
 ]
