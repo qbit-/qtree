@@ -285,15 +285,15 @@ class Z(Gate):
     cirq_op = cirq.Z
 
 
+
 class cZ(Gate):
     """
-    Controlled :math:`Z`-gate
+    Controlled :math:`Z` gate
     """
     def gen_tensor(self):
-        return np.array([1, 1, 1, -1],
+        return np.array([[1, 1],
+                         [1, -1]],
                         dtype=defs.NP_ARRAY_TYPE)
-    # or np.array([[[1., 0.],[0., 1.]],[[0., 1.],[1., 0.]]])
-
     _changes_qubits = tuple()
     cirq_op = cirq.CZ
 
