@@ -59,6 +59,7 @@ class Gate:
         # supposedly unique id for an instance
         self._parameters = { }
         self._check_qubit_count(qubits)
+        self.name = type(self).__name__
 
     def _check_qubit_count(self, qubits):
         n_qubits = len(self.gen_tensor().shape) - len(
@@ -90,12 +91,9 @@ class Gate:
             t = orig()
             return t.conj().T
         self.gen_tensor = conj_tensor
-        self._parameters['dag'] = not self._parameters['dag']
+        self.name += '+'
         return self
 
-    @property
-    def name(self):
-        return type(self).__name__
 
     def gen_tensor(self):
         raise NotImplementedError()
@@ -121,7 +119,7 @@ class Gate:
         )
 
     def __str__(self):
-        return ("{}".format(type(self).__name__) +
+        return ("{}".format(self.name) +
                 "({})".format(','.join(map(str, self._qubits)))
         )
 
@@ -169,6 +167,7 @@ class ParametricGate(Gate):
         # supposedly unique id for an instance
         self._parameters = parameters
         self._check_qubit_count(qubits)
+        self.name = type(self).__name__
 
     def _check_qubit_count(self, qubits):
         # fill parameters and save a copy
@@ -208,7 +207,7 @@ class ParametricGate(Gate):
                             sorted(self._parameters.items(),
                                    key=lambda pair: pair[0])))
 
-        return ("{}".format(type(self).__name__) + "[" + par_str + "]" +
+        return ("{}".format(self.name) + "[" + par_str + "]" +
                 "({})".format(','.join(map(str, self._qubits))))
 
 
