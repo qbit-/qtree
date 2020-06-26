@@ -57,9 +57,7 @@ class Gate:
     def __init__(self, *qubits):
         self._qubits = tuple(qubits)
         # supposedly unique id for an instance
-        self._parameters = {
-            'dag':False
-        }
+        self._parameters = { }
         self._check_qubit_count(qubits)
 
     def _check_qubit_count(self, qubits):
@@ -167,9 +165,10 @@ class ParametricGate(Gate):
             Returns True
     """
     def __init__(self, *qubits, **parameters):
-        super().__init__(*qubits)
+        self._qubits = tuple(qubits)
         # supposedly unique id for an instance
-        self._parameters.update(parameters)
+        self._parameters = parameters
+        self._check_qubit_count(qubits)
 
     def _check_qubit_count(self, qubits):
         # fill parameters and save a copy
