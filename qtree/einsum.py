@@ -201,8 +201,8 @@ def einsum2graph(subscripts, *operands):
     Construct a graph of a tensor contraction from the
     input to Numpy's einsum.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     subsrcipts : str
         set of indices in Einstein notation
         i.e. 'ij,jk,klm,lm->i'
@@ -210,8 +210,8 @@ def einsum2graph(subscripts, *operands):
     operands: list of array_like
         tensor
 
-    Returns:
-    --------
+    Returns
+    -------
     graph : networkx.MultiGraph
             Graph which corresponds to the tensors contraction
     free_variables: list of Var
@@ -292,17 +292,15 @@ def einsum2graph(subscripts, *operands):
 def einsum_sequential_np(subscripts, *operands):
     """
     This function implements a sequential einsum using graphical models.
-    Parameters:
-    -----------
-    subsrcipts : str
-        set of indices in Einstein notation
-        i.e. 'ij,jk,klm,lm->i'
 
-    operands: list of array_like
-        tensor
+    Parameters
+    ----------
+    subsrcipts : str, set of indices in Einstein notation, i.e. 'ij,jk,klm,lm->i'
 
-    Returns:
-    --------
+    operands: list of array_like, tensor
+
+    Returns
+    -------
     result: array_like
         Result of the contraction
     """
