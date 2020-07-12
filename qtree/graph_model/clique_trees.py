@@ -134,7 +134,7 @@ def get_tree_from_peo(graph_old, peo):
     for start_edge in start_edges:
         prune_tree(tree, start_edge)
 
-    assert len(list(tree.selfloop_edges())) == 0
+    assert len(list(nx.selfloop_edges(tree))) == 0
     return tree
 
 
@@ -224,7 +224,7 @@ def rm_element_in_tree(tree, node):
 
             new_tree.add_edges_from((new_clique, neighbor) for
                                     neighbor in neighbors)
-    assert len(list(new_tree.selfloop_edges())) == 0
+    assert len(list(nx.selfloop_edges(new_tree))) == 0
 
     # prune tree because non-maximal cliques may have emerged
     start_edges = []
@@ -321,7 +321,7 @@ def get_reduced_tree(tree, reduce_by):
         max_clique = find_max_cliques(new_tree)[0]
         current_treewidth = len(max_clique) - 1
 
-    assert len(list(new_tree.selfloop_edges())) == 0
+    assert len(list(nx.selfloop_edges(new_tree))) == 0
     return new_tree, eliminated_nodes
 
 

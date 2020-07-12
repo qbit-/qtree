@@ -95,7 +95,7 @@ def get_simple_graph(graph, parallel_edges=False, self_loops=False):
         # deepcopy is critical here to copy edge dictionaries
         graph = nx.Graph(copy.deepcopy(graph), copy=False)
     if not self_loops:
-        graph.remove_edges_from(graph.selfloop_edges())
+        graph.remove_edges_from(nx.selfloop_edges(graph))
 
     return graph
 
@@ -513,6 +513,6 @@ def make_clique_on(old_graph, clique_nodes, name_prefix='C'):
                                  'data_key': None}
     )
     clique_size = len(clique_nodes)
-    log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
+    #log.info(f"Clique of size {clique_size} on vertices: {clique_nodes}")
 
     return graph
