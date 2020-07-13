@@ -153,6 +153,9 @@ class Tensor(object):
             raise ValueError(f'No data assigned in tensor {self.name}')
         if self.indices == other.indices:
             return self.copy(data=self._data * other._data)
+        elif len(self.indices) == 0 or len(other.indices) == 0:
+            # Scalar multiplication
+            return self.copy(data=self._data * other._data)
         else:
             raise ValueError(f'Index mismatch in __mul__: {self.indices} times {other.indices}')
 
