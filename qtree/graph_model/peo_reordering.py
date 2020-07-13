@@ -257,7 +257,7 @@ def is_clique(old_graph, vertices):
     subgraph = old_graph.subgraph(vertices)
 
     # Remove selfloops so the clique is well defined
-    have_edges = set(subgraph.edges()) - set(nx.selfloop_edge(subgraph))
+    have_edges = set(subgraph.edges()) - set(nx.selfloop_edges(subgraph))
 
     # Sort all edges to be in the (low, up) order
     have_edges = set([tuple(sorted(edge, key=int))
