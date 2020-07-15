@@ -69,7 +69,10 @@ def prune_tree(tree, start_edge):
                         (right, neighbor))
 
     for edge in tree.edges():
-        del tree.edges[edge]['visited']
+        try:
+            del tree.edges[edge]['visited']
+        except KeyError:
+            print('Edge not visited while prune')
 
 
 def get_tree_from_peo(graph_old, peo):
@@ -129,8 +132,9 @@ def get_tree_from_peo(graph_old, peo):
     # Now prune the tree to leave only maximal cliques
     # Execute pruning
     start_edges = []
-    for component in nx.connected_component_subgraphs(tree):
-        start_edges.append(next(iter(component.edges())))
+    for component in [tree.subgraph(c) for c in nx.connected_components(tree)]:
+        if len(component.edges()):
+            start_edges.append(next(iter(component.edges())))
     for start_edge in start_edges:
         prune_tree(tree, start_edge)
 
@@ -179,7 +183,7 @@ def get_subtree_by_length_width(tree, nodelist):
 
     # For each connected tree run DFS
     component_roots = []
-    for component in nx.connected_component_subgraphs(tree):
+    for component in [tree.subgraph(c) for c in nx.connected_components(tree)]:
         component_roots.append(next(iter(component)))
 
     for component_root in component_roots:
@@ -228,8 +232,9 @@ def rm_element_in_tree(tree, node):
 
     # prune tree because non-maximal cliques may have emerged
     start_edges = []
-    for component in nx.connected_component_subgraphs(new_tree):
-        start_edges.append(next(iter(component.edges())))
+    for component in [new_tree.subgraph(c) for c in nx.connected_components(new_tree)]:
+        if len(component.edges()):
+            start_edges.append(next(iter(component.edges())))
     for start_edge in start_edges:
         prune_tree(new_tree, start_edge)
 
