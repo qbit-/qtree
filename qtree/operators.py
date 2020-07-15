@@ -7,6 +7,7 @@ import cirq
 
 from fractions import Fraction
 from qtree.logger_setup import log
+from functools import partial
 
 import qtree.system_defs as defs
 import uuid
@@ -73,6 +74,10 @@ class Gate:
                     self.name, len(qubits), n_qubits))
 
     @classmethod
+    def dag_tensor(cls, inst):
+        return cls.gen_tensor(inst).conj().T
+
+    @classmethod
     def dagger(cls):
         # This thing modifies the base class itself.
         orig = cls.gen_tensor
@@ -86,11 +91,7 @@ class Gate:
     def dagger_me(self):
         # Maybe the better way is to create a separate object
         # Warning: dagger().dagger().dagger() will define many things
-        orig = self.gen_tensor
-        def conj_tensor():
-            t = orig()
-            return t.conj().T
-        self.gen_tensor = conj_tensor
+        self.gen_tensor = partial(self.dag_tensor, self)
         self.name += '+'
         return self
 
