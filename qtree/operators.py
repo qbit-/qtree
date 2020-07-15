@@ -375,6 +375,20 @@ class Y_1_2(Gate):
 
     _changes_qubits = (0, )
 
+class W_1_2(Gate):
+    r"""
+    :math:`W^{1/2}` gate
+    """
+    def gen_tensor(self):
+        sqj = np.sqrt(1j)
+        nsqj = np.sqrt(-1j)
+        return (1/np.sqrt(2)*
+                np.array([[1 , -sqj],
+                          [nsqj, 1]])
+        ).astype(defs.NP_ARRAY_TYPE)
+
+    _changes_qubits = (0, )
+
     def cirq_op(self, x): return cirq.Y(x)**0.5
 
 
@@ -480,6 +494,7 @@ class ZPhase(ParametricGate):
     """
 
     _changes_qubits = tuple()
+    parameter_count = 1
 
     @staticmethod
     def _gen_tensor(**parameters):
@@ -553,6 +568,32 @@ class XPhase(ParametricGate):
 
     def cirq_op(self, x): return cirq.XPowGate(
             exponent=float(self._parameters['alpha']))(x)
+
+class fSim(ParametricGate):
+    _changes_qubits = (0, 1)
+    parameter_count = 2
+
+    @staticmethod
+    def _gen_tensor(**parameters):
+        alpha, beta = parameters['alpha'], parameters['beta']
+        c = np.cos(alpha)
+        s = np.sin(alpha)
+        g = np.exp(-1j*beta)
+
+        return np.array([[[[1, 0],
+                           [0, 0]],
+
+                          [[0, c],
+                           [-1j*s, 0]]],
+
+
+                         [[[0, -1j*s],
+                           [c, 0]],
+
+                          [[0, 0],
+                           [0, g]]]])
+
+
 
 
 class U(ParametricGate):
@@ -631,13 +672,18 @@ def read_circuit_file(filename, max_depth=None):
         't': T,
         'z': Z,
         'cz': cZ,
+        'rz': ZPhase,
         'x': X,
         'y': Y,
         'x_1_2': X_1_2,
         'y_1_2': Y_1_2,
+        'hz_1_2': W_1_2,
+        'fs': fSim
     }
 
-    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+)'
+    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+(?!\.))+)'
+    params_search_patt_1 = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+)$'
+    params_search_patt_2 = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+) (?P<beta>-?\d+\.\d+)$'
 
     log.info("reading file {}".format(filename))
     circuit = []
@@ -673,8 +719,19 @@ def read_circuit_file(filename, max_depth=None):
             op_identif = m.group('operation')
 
             q_idx = tuple(int(qq) for qq in m.group('qubits').split())
-
-            op = label_to_gate_dict[op_identif](*q_idx)
+            op_cls = label_to_gate_dict[op_identif]
+            if issubclass(op_cls, ParametricGate):
+                if op_cls.parameter_count==1:
+                    m = re.search(params_search_patt_1, op_str)
+                    alpha = m.group('alpha')
+                    op = op_cls(*q_idx, alpha=float(alpha))
+                elif op_cls.parameter_count==2:
+                    m = re.search(params_search_patt_2, op_str)
+                    alpha = m.group('alpha')
+                    beta = m.group('beta')
+                    op = op_cls(*q_idx, alpha=float(alpha), beta=float(beta))
+            else:
+                op = op_cls(*q_idx)
             circuit_layer.append(op)
 
         circuit.append(circuit_layer)  # last layer
