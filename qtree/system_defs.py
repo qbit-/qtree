@@ -4,9 +4,10 @@ Here we put all system-dependent constants
 import numpy as np
 import os
 import shutil
+from pathlib import Path
 from .logger_setup import log
 
-QTREE_PATH = os.path.dirname((os.path.abspath(__file__)))
+QTREE_PATH = Path(os.path.abspath(__file__)).parent.parent
 THIRDPARTY_PATH = os.path.join(QTREE_PATH, 'thirdparty')
 
 # Check for QuickBB
@@ -23,15 +24,20 @@ if not QUICKBB_COMMAND:
         
 # Check for Tamaki solver
 try:
-    TAMAKI_SOLVER_PATH = os.path.dirname(
-        shutil.which('tw-exact'))
-    if not TAMAKI_SOLVER_PATH:
+    tw_loc = shutil.which('tw-exact')
+    if tw_loc:
+        TAMAKI_SOLVER_PATH = os.path.dirname(tw_loc)
+    else:
+        TAMAKI_SOLVER_PATH = None
+    if TAMAKI_SOLVER_PATH is None:
         tamaki_solver_path = os.path.join(
             THIRDPARTY_PATH, 'tamaki_treewidth')
         if os.path.isdir(tamaki_solver_path):
             TAMAKI_SOLVER_PATH = tamaki_solver_path
-except Exception:
-    log.warn('Tamaki solver is unavailable')
+        else:
+            raise Exception(f'No path {tamaki_solver_path}')
+except Exception as e:
+    log.warn(f'Tamaki solver is unavailable: {e}')
 
 MAXIMAL_MEMORY = 1e22   # 100000000 64bit complex numbers
 NP_ARRAY_TYPE = np.complex64

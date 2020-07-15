@@ -300,7 +300,11 @@ def get_upper_bound_peo_pace2017(
 
     data = generate_gr_file(graph)
     out_data = api.run_heuristic_solver(data, **method_args[method])
-    tree, treewidth = read_td_file(out_data, as_data=True)
+    try:
+        tree, treewidth = read_td_file(out_data, as_data=True)
+    except ValueError:
+        print(out_data)
+        raise
     peo = get_peo_from_tree(tree)
 
     # return to the original labelling

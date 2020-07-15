@@ -46,7 +46,7 @@ def run_exact_solver(data, command="tw-exact", cwd=None,
 
 
 def run_heuristic_solver(data, wait_time=1,
-                         command="tw-heuristic", cwd=None,
+                         command="./tw-heuristic", cwd=None,
                          extra_args=None):
     """
     Runs the exact solver and collects its output
