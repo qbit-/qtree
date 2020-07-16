@@ -525,3 +525,77 @@ def split_graph_by_tree_trimming(
     graph.remove_nodes_from(eliminated_nodes)
 
     return eliminated_nodes, graph
+
+# Duplicate with changed sorting
+def split_graph_by_tree_trimming_width(
+        old_graph, n_var_parallel):
+    """
+    Splits graph by removing variables from its tree decomposition.
+    The graph is **ASSUMED** to be in the perfect elimination order,
+    e.g. it has to be relabelled before calling split function.
+
+    Parameters
+    ----------
+    old_graph : networkx.Graph or networkx.MultiGraph
+                graph to split by parallelizing over variables
+
+                Parallel edges and self-loops in the graph are
+                removed (if any)
+
+    n_var_parallel : int
+                number of variables to eliminate by parallelization
+    Returns
+    -------
+    idx_parallel : list
+          variables removed by parallelization
+    graph : networkx.Graph
+          new graph without parallelized variables
+    """
+    graph = copy.deepcopy(old_graph)
+
+    # Produce a tree from the ordering of the graph
+    # and get a maximal clique
+    tree = get_tree_from_peo(
+        old_graph, list(range(graph.number_of_nodes())))
+
+    cliques = list(tree.nodes())
+    all_nodes = []
+    for clique in cliques:
+        all_nodes = clique.union(all_nodes)
+    # are_subtrees_connected(tree, list(all_nodes))
+
+    eliminated_nodes = []
+    for ii in range(n_var_parallel):
+        # if ii == 179:
+        #     import pdb
+        #     pdb.set_trace()
+        max_cliques = find_max_cliques(tree, len(all_nodes))
+        nodes_in_max_cliqes = [node for clique
+                               in max_cliques for node in clique]
+        nodes_by_subwidth = get_subtree_by_length_width(
+            tree, nodes_in_max_cliqes)
+
+        # get (node, path length, total subtree width)
+        nodes_in_rmorder = [(node, len(nodes_by_subwidth[node]),
+                             sum(nodes_by_subwidth[node]))
+                            for node in nodes_by_subwidth]
+        # sort by path length, then by total width of subtree
+        nodes_in_rmorder = sorted(
+            nodes_in_rmorder,
+            key=lambda x: (x[2], x[1]))
+        rmnode = nodes_in_rmorder[-1][0]
+        tree = rm_element_in_tree(tree, rmnode)
+        eliminated_nodes.append(rmnode)
+
+        cliques = list(tree.nodes())
+        all_nodes = []
+        for clique in cliques:
+            all_nodes = clique.union(all_nodes)
+        # are_subtrees_connected(tree, list(all_nodes))
+
+    # we are done with finding the set for removal.
+    # Remove nodes from the graph and return
+
+    graph.remove_nodes_from(eliminated_nodes)
+
+    return eliminated_nodes, graph
