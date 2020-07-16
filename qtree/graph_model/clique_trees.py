@@ -72,7 +72,8 @@ def prune_tree(tree, start_edge):
         try:
             del tree.edges[edge]['visited']
         except KeyError:
-            print('Edge not visited while prune')
+            pass
+            #print('Edge not visited while prune')
 
 
 def get_tree_from_peo(graph_old, peo):
