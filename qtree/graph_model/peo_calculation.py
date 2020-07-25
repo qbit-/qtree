@@ -14,7 +14,7 @@ import itertools
 
 import qtree.system_defs as defs
 from qtree.graph_model.exporters import (generate_cnf_file, generate_gr_file)
-from qtree.graph_model.importers import read_td_file
+from qtree.graph_model.importers import read_td_file, get_stats_from_td_file
 
 from qtree.optimizer import Var
 from qtree.graph_model.base import (
@@ -301,6 +301,8 @@ def get_upper_bound_peo_pace2017(
     data = generate_gr_file(graph)
     out_data = api.run_heuristic_solver(data, **method_args[method])
     try:
+        stats = get_stats_from_td_file(out_data)
+        print('stats', stats)
         tree, treewidth = read_td_file(out_data, as_data=True)
     except ValueError:
         print(out_data)
