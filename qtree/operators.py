@@ -727,6 +727,8 @@ def read_circuit_file(filename, max_depth=None):
 
             q_idx = tuple(int(qq) for qq in m.group('qubits').split())
             op_cls = label_to_gate_dict[op_identif]
+
+            """
             if op_identif=='fs':
                 circuit_layer.append(cZ(*q_idx))
                 circuit_layer.append(SWAP(*q_idx))
@@ -735,20 +737,21 @@ def read_circuit_file(filename, max_depth=None):
                #circuit_layer.append(H(q_idx[0]))
                #circuit_layer.append(H(q_idx[1]))
                #circuit_layer.append(cZ(*q_idx))
+            """
+
+            if issubclass(op_cls, ParametricGate):
+                if op_cls.parameter_count==1:
+                    m = re.search(params_search_patt_1, op_str)
+                    alpha = m.group('alpha')
+                    op = op_cls(*q_idx, alpha=float(alpha))
+                elif op_cls.parameter_count==2:
+                    m = re.search(params_search_patt_2, op_str)
+                    alpha = m.group('alpha')
+                    beta = m.group('beta')
+                    op = op_cls(*q_idx, alpha=float(alpha), beta=float(beta))
             else:
-                if issubclass(op_cls, ParametricGate):
-                    if op_cls.parameter_count==1:
-                        m = re.search(params_search_patt_1, op_str)
-                        alpha = m.group('alpha')
-                        op = op_cls(*q_idx, alpha=float(alpha))
-                    elif op_cls.parameter_count==2:
-                        m = re.search(params_search_patt_2, op_str)
-                        alpha = m.group('alpha')
-                        beta = m.group('beta')
-                        op = op_cls(*q_idx, alpha=float(alpha), beta=float(beta))
-                else:
-                    op = op_cls(*q_idx)
-                circuit_layer.append(op)
+                op = op_cls(*q_idx)
+            circuit_layer.append(op)
 
         circuit.append(circuit_layer)  # last layer
 
