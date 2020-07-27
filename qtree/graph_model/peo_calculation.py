@@ -494,9 +494,12 @@ def get_peo(old_graph, method="tamaki"):
     peo = get_peo_from_tree(tree)
     peo = [inv_dict[pp] for pp in peo]
 
-    peo_vars = [Var(var, size=old_graph.nodes[var]['size'],
-                    name=old_graph.nodes[var]['name'])
-                for var in peo]
+    try:
+        peo_vars = [Var(var, size=old_graph.nodes[var]['size'],
+                        name=old_graph.nodes[var]['name'])
+                    for var in peo]
+    except:
+        peo_vars = peo
 
     return peo_vars, treewidth
 

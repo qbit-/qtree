@@ -1,6 +1,6 @@
 [submodule "test_circuits"]
 	path = test_circuits
-	url = https://github.com/sboixo/GRCS.git
+	url = https://github.com/DaniloZZZ/GRCS.git
 [submodule "thirdparty/tamaki_treewidth"]
 	path = thirdparty/tamaki_treewidth
 	url = https://github.com/TCS-Meiji/PACE2017-TrackA.git

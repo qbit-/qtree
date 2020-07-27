@@ -422,6 +422,7 @@ def get_peo_from_tree(old_tree, clique_vertices=[]):
             break
 
         intersection = node.intersection(parent)
+
         for index in node - intersection:
             peo.append(index)
 

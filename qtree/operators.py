@@ -593,6 +593,13 @@ class fSim(ParametricGate):
                           [[0, 0],
                            [0, g]]]])
 
+class SWAP(Gate):
+    ## This gate is a snowflake for graph model
+    ## it swaps qubits
+    _changes_qubits = tuple()
+    @staticmethod
+    def gen_tensor():
+        return np.array([[1,1],[1,1]])
 
 
 
@@ -720,11 +727,14 @@ def read_circuit_file(filename, max_depth=None):
 
             q_idx = tuple(int(qq) for qq in m.group('qubits').split())
             op_cls = label_to_gate_dict[op_identif]
-            if op_identif=='fsh':
+            if op_identif=='fs':
                 circuit_layer.append(cZ(*q_idx))
-                circuit_layer.append(H(q_idx[0]))
-                circuit_layer.append(H(q_idx[1]))
-                circuit_layer.append(cZ(*q_idx))
+                circuit_layer.append(SWAP(*q_idx))
+
+               #circuit_layer.append(cZ(*q_idx))
+               #circuit_layer.append(H(q_idx[0]))
+               #circuit_layer.append(H(q_idx[1]))
+               #circuit_layer.append(cZ(*q_idx))
             else:
                 if issubclass(op_cls, ParametricGate):
                     if op_cls.parameter_count==1:
