@@ -259,7 +259,7 @@ def get_upper_bound_peo_builtin(old_graph, method="min_fill"):
 
 
 def get_upper_bound_peo_pace2017(
-        old_graph, method="tamaki", wait_time=60):
+        old_graph, method="tamaki", wait_time=60, print_stats=False):
     """
     Calculates a PEO and treewidth using one of the external solvers
 
@@ -302,7 +302,8 @@ def get_upper_bound_peo_pace2017(
     out_data = api.run_heuristic_solver(data, **method_args[method])
     try:
         stats = get_stats_from_td_file(out_data)
-        print('stats', stats)
+        if print_stats:
+            print('stats', stats)
         tree, treewidth = read_td_file(out_data, as_data=True)
     except ValueError:
         print(out_data)
