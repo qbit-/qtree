@@ -647,6 +647,23 @@ def u1(parameters: [float], *qubits):
     return U(*qubits, theta=0, phi=0, lambda_param=parameters[0])
 
 
+LABEL_TO_GATE_DICT = {
+    'i': I,
+    'h': H,
+    't': T,
+    'z': Z,
+    'cz': cZ,
+    'cX': cX,
+    'rz': ZPhase,
+    'rX': XPhase,
+    'x': X,
+    'y': Y,
+    'x_1_2': X_1_2,
+    'y_1_2': Y_1_2,
+    'hz_1_2': W_1_2,
+    'fs': fSim
+}
+
 def read_circuit_file(filename, max_depth=None):
     """
     Read circuit file and return quantum circuit in the
@@ -666,24 +683,10 @@ def read_circuit_file(filename, max_depth=None):
     circuit : list of lists
             quantum circuit as a list of layers of gates
     """
-    label_to_gate_dict = {
-        'i': I,
-        'h': H,
-        't': T,
-        'z': Z,
-        'cz': cZ,
-        'rz': ZPhase,
-        'x': X,
-        'y': Y,
-        'x_1_2': X_1_2,
-        'y_1_2': Y_1_2,
-        'hz_1_2': W_1_2,
-        'fs': fSim
-    }
 
-    operation_search_patt = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+(?!\.))+)'
-    params_search_patt_1 = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+)$'
-    params_search_patt_2 = r'(?P<operation>' + r'|'.join(label_to_gate_dict.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+) (?P<beta>-?\d+\.\d+)$'
+    operation_search_patt = r'(?P<operation>' + r'|'.join(LABEL_TO_GATE_DICT.keys()) + r')(?P<qubits>( \d+(?!\.))+)'
+    params_search_patt_1 = r'(?P<operation>' + r'|'.join(LABEL_TO_GATE_DICT.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+)$'
+    params_search_patt_2 = r'(?P<operation>' + r'|'.join(LABEL_TO_GATE_DICT.keys()) + r')(?P<qubits>( \d+)+) (?P<alpha>-?\d+\.\d+) (?P<beta>-?\d+\.\d+)$'
 
     log.info("reading file {}".format(filename))
     circuit = []
@@ -719,7 +722,7 @@ def read_circuit_file(filename, max_depth=None):
             op_identif = m.group('operation')
 
             q_idx = tuple(int(qq) for qq in m.group('qubits').split())
-            op_cls = label_to_gate_dict[op_identif]
+            op_cls = LABEL_TO_GATE_DICT[op_identif]
             if op_identif=='fsh':
                 circuit_layer.append(cZ(*q_idx))
                 circuit_layer.append(H(q_idx[0]))
@@ -746,6 +749,16 @@ def read_circuit_file(filename, max_depth=None):
             log.info("Ignored {} layers".format(n_ignored_layers))
 
     return qubit_count, circuit
+
+def circuit_to_text(circuit, n_qubits):
+    reverse_dict = {v:k for k,v in LABEL_TO_GATE_DICT.items()}
+    file = f"{n_qubits}\n"
+    for i, layer in enumerate(circuit):
+        for gate in layer:
+            qubit_label=reverse_dict[type(gate)]
+            qubits = ' '.join([str(q) for q in gate.qubits])
+            file += f"{i} {qubit_label} {qubits} \n"
+    return file
 
 
 def read_qasm_file(filename, max_ins=None):
