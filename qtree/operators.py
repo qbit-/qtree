@@ -541,7 +541,7 @@ class XPhase(ParametricGate):
 def rx(parameters: [float], *qubits):
     """Arbitrary :math:`X` rotation"""
 
-    return XPhase(*qubits, alpha=parameters[0]/np.pi - 0.5)
+    return XPhase(*qubits, alpha=parameters[0]/np.pi)
 
 
 class XPhase(ParametricGate):
@@ -769,11 +769,14 @@ def read_qasm_file(filename, max_ins=None):
     """
     from qiskit import QuantumCircuit
 
+    qiskit_circuit = QuantumCircuit.from_qasm_file(filename)
+    return from_qiskit_circuit(qiskit_circuit)
+
+def from_qiskit_circuit(qiskit_circuit):
+    circuit_qubits = qiskit_circuit.qubits
+
     output_circuit = []
     indexed_circuit = []
-
-    qiskit_circuit = QuantumCircuit.from_qasm_file(filename)
-    circuit_qubits = qiskit_circuit.qubits
 
     # creates the indexed circuit, which replaces
     # qubits with their indices
@@ -796,7 +799,7 @@ def read_qasm_file(filename, max_ins=None):
     for gate in output_circuit:
         return_circuit.append([gate])
 
-    qubit_count = qiskit_circuit.num_qubits
+    qubit_count = len(qiskit_circuit.qubits)
     return qubit_count, return_circuit
 
 
