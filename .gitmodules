@@ -4,6 +4,7 @@
 [submodule "thirdparty/tamaki_treewidth"]
 	path = thirdparty/tamaki_treewidth
 	url = https://github.com/TCS-Meiji/PACE2017-TrackA.git
+    ignore = dirty # works for git >= 1.7.4.3
 [submodule "thirdparty/quickbb"]
 	path = thirdparty/quickbb
 	url = https://github.com/qbit-/quickbb.git

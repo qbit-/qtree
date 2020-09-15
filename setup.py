@@ -17,7 +17,7 @@ REQUIRED_PACKAGES = [
 
 ]
 
-setuptools.setup(name='qtree',
+setuptools.setup(name='qtensor-qtree',
                  version='0.1.1',
                  description='Simple quantum circuit simulator'
                  ' based on undirected graphical models',

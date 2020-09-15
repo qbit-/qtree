@@ -298,6 +298,32 @@ def read_gr_file(file_or_data, as_data=False, compressed=False):
     return graph
 
 
+def get_stats_from_td_file(data):
+    comment_patt = re.compile('^(\s*c\s+)(?P<comment>.*)')
+    width_patt = re.compile('width = (?P<value>\d+)')
+    time_patt = re.compile('time = (?P<value>\d+)')
+    datafile = StringIO(data)
+    comments = []
+    for n, line in enumerate(datafile):
+        m = re.search(comment_patt, line)
+        if m is None:
+            continue
+        comment = m.group('comment')
+        m = re.search(width_patt, comment)
+        key = 'width'
+        if m is None:
+            m = re.search(time_patt, comment)
+            key  = 'time'
+        if m is None:
+            continue
+        val = m.group('value')
+        comments.append({key.strip():int(val)})
+
+    comment_pairs = list(zip(comments[::2], comments[1::2]))
+    stats = [{**x,**y} for x, y in comment_pairs]
+    return stats
+
+
 def read_td_file(file_or_data, as_data=False, compressed=False):
     """
     Reads file/data in the td format of the PACE 2017 competition
