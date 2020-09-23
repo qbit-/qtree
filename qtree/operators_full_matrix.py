@@ -257,7 +257,7 @@ class I(Gate):
     def gen_tensor(self):
         return np.array([1, 1], dtype=defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.I
 
 
@@ -319,7 +319,7 @@ class Tdag(Gate):
         return np.array([1, np.exp(-1.j*np.pi/4)],
                         dtype=defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.inverse(cirq.T)
 
 
@@ -343,7 +343,7 @@ class Sdag(Gate):
         return np.array([1, -1j],
                         dtype=defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.inverse(cirq.S)
 
 
@@ -419,7 +419,7 @@ class ccX(Gate):
         #TODO: tensor shapes
         return np.array([])
 
-    _changes_qubits = (2, )
+    _changes_qubits = (1, 2, 3)
     cirq_op = cirq.CCNOT
 
 
@@ -606,7 +606,7 @@ class U(ParametricGate):
           s = sin(t/2)
     """
 
-    _changes_qubits = (0,)
+    _changes_qubits = (0, )
 
     @staticmethod
     def _gen_tensor(**parameters):
