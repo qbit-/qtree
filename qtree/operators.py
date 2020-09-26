@@ -747,6 +747,8 @@ def read_circuit_stream(stream, max_depth=None):
             if issubclass(op_cls, ParametricGate):
                 if op_cls.parameter_count==1:
                     m = re.search(params_search_patt_1, op_str)
+                    if m is None:
+                        raise Exception(f'Could not find parameter for gate. `{line})')
                     alpha = m.group('alpha')
                     op = op_cls(*q_idx, alpha=float(alpha))
                 elif op_cls.parameter_count==2:

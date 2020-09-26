@@ -278,7 +278,7 @@ class Z(Gate):
     :math:`Z`-gate
     """
     def gen_tensor(self):
-        return np.array([1, -1],
+        return np.diag([1, -1],
                         dtype=defs.NP_ARRAY_TYPE)
 
     _changes_qubits = (0, )
@@ -291,9 +291,8 @@ class cZ(Gate):
     Controlled :math:`Z` gate
     """
     def gen_tensor(self):
-        return np.array([[1, 1],
-                         [1, -1]],
-                        dtype=defs.NP_ARRAY_TYPE)
+        return np.diag([1, 1, 1, -1]],
+                        dtype=defs.NP_ARRAY_TYPE).reshape(*[2]*4)
     _changes_qubits = (0,1)
     cirq_op = cirq.CZ
 
@@ -303,7 +302,7 @@ class T(Gate):
     :math:`T`-gate
     """
     def gen_tensor(self):
-        return np.array([1, np.exp(1.j*np.pi/4)],
+        return np.diag([1, np.exp(1.j*np.pi/4)],
                         dtype=defs.NP_ARRAY_TYPE)
 
     _changes_qubits = (0,)
@@ -316,7 +315,7 @@ class Tdag(Gate):
     """
     def gen_tensor(self):
         pass
-        return np.array([1, np.exp(-1.j*np.pi/4)],
+        return np.diag([1, np.exp(-1.j*np.pi/4)],
                         dtype=defs.NP_ARRAY_TYPE)
 
     _changes_qubits = tuple()
@@ -328,7 +327,7 @@ class S(Gate):
     :math:`S`-gate
     """
     def gen_tensor(self):
-        return np.array([1, 1j],
+        return np.diag([1, 1j],
                         dtype=defs.NP_ARRAY_TYPE)
 
     _changes_qubits = (0,)
