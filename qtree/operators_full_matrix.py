@@ -553,6 +553,7 @@ class XPhase(ParametricGate):
     """
 
     _changes_qubits = (0, )
+    parameter_count = 1
 
     @staticmethod
     def _gen_tensor(**parameters):
@@ -757,7 +758,6 @@ def read_circuit_stream(stream, max_depth=None):
 
     return qubit_count, circuit
 
-
 def circuit_to_text(circuit, n_qubits):
     reverse_dict = {v:k for k,v in LABEL_TO_GATE_DICT.items()}
     file = f"{n_qubits}\n"
@@ -765,7 +765,12 @@ def circuit_to_text(circuit, n_qubits):
         for gate in layer:
             qubit_label=reverse_dict[type(gate)]
             qubits = ' '.join([str(q) for q in gate.qubits])
-            file += f"{i} {qubit_label} {qubits} \n"
+            params = gate._parameters
+            param_str = ' '.join([str(x) for x in params.values()])
+            if param_str:
+                file += f"{i} {qubit_label} {qubits} {param_str}\n"
+            else:
+                file += f"{i} {qubit_label} {qubits} \n"
     return file
 
 
@@ -790,11 +795,14 @@ def read_qasm_file(filename, max_ins=None):
     """
     from qiskit import QuantumCircuit
 
+    qiskit_circuit = QuantumCircuit.from_qasm_file(filename)
+    return from_qiskit_circuit(qiskit_circuit)
+
+def from_qiskit_circuit(qiskit_circuit):
+    circuit_qubits = qiskit_circuit.qubits
+
     output_circuit = []
     indexed_circuit = []
-
-    qiskit_circuit = QuantumCircuit.from_qasm_file(filename)
-    circuit_qubits = qiskit_circuit.qubits
 
     # creates the indexed circuit, which replaces
     # qubits with their indices
