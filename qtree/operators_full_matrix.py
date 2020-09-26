@@ -399,10 +399,11 @@ class X(Gate):
 
 class cX(Gate):
     def gen_tensor(self):
-        return np.array([[[1., 0.],
-                          [0., 1.]],
-                         [[0., 1.],
-                          [1., 0.]]])
+        return np.array([[1., 0., 0., 0.],
+                         [0., 1., 0., 0.],
+                         [0., 0., 0., 1.],
+                         [0., 0., 1., 0.],
+                        ]).astype(defs.NP_ARRAY_TYPE).reshape(*[2]*4)
 
     _changes_qubits = (0, 1)
     cirq_op = cirq.CNOT
