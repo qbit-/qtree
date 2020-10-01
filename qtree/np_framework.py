@@ -109,6 +109,9 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
     sliced_buckets : list of lists
               buckets with sliced Numpy tensors
     """
+    # import pdb
+    # pdb.set_trace()
+
     # Create np buckets from buckets
     sliced_buckets = []
     for bucket in buckets:
@@ -136,6 +139,8 @@ def get_sliced_np_buckets(buckets, data_dict, slice_dict):
             # update indices
             indices_sliced = [idx.copy(size=size) for idx, size in
                               zip(indices_sorted, data.shape)]
+            indices_sliced = [i for sl, i in zip(slice_bounds, indices_sliced) if not isinstance(sl, int)]
+            assert len(data.shape) == len(indices_sliced)
 
             sliced_bucket.append(
                 tensor.copy(indices=indices_sliced, data=data))
@@ -168,6 +173,24 @@ def process_bucket_np(bucket, no_sum=False):
     result_data = bucket[0].data
 
     for tensor in bucket[1:]:
+        """
+        next_result_indices = tuple(sorted(
+            set(result_indices + tensor.indices),
+            key=int)
+        )
+        ixc = list(map(int, next_result_indices))
+        idx_to_least_idx = {old_idx: new_idx for new_idx, old_idx
+                        in enumerate(ixc)}
+
+        ixa, ixb = list(map(int, result_indices)), list(map(int, tensor.indices))
+        ixa, ixb = list(map(lambda x: idx_to_least_idx[x], ixa)), list(map(lambda x: idx_to_least_idx[x], ixb))
+        print(len(ixa), len(ixb), len(ixc))
+        #print(result_data.shape, len(ixb), len(ixc))
+        ixc = list(map(lambda x: idx_to_least_idx[x], ixc))
+
+        result_data = np.einsum(result_data, ixa, tensor.data, ixb, ixc)
+        result_indices = next_result_indices
+        """
         expr = utils.get_einsum_expr(
             list(map(int, result_indices)), list(map(int, tensor.indices))
         )

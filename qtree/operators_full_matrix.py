@@ -59,7 +59,7 @@ class Gate:
         self._qubits = tuple(qubits)
         # supposedly unique id for an instance
         self._parameters = { }
-        self._check_qubit_count(qubits)
+        #self._check_qubit_count(qubits)
         self.name = type(self).__name__
 
     def _check_qubit_count(self, qubits):
@@ -167,7 +167,7 @@ class ParametricGate(Gate):
         self._qubits = tuple(qubits)
         # supposedly unique id for an instance
         self._parameters = parameters
-        self._check_qubit_count(qubits)
+        #self._check_qubit_count(qubits)
         self.name = type(self).__name__
 
     def _check_qubit_count(self, qubits):
@@ -257,7 +257,7 @@ class I(Gate):
     def gen_tensor(self):
         return np.array([1, 1], dtype=defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.I
 
 
@@ -278,10 +278,9 @@ class Z(Gate):
     :math:`Z`-gate
     """
     def gen_tensor(self):
-        return np.array([1, -1],
-                        dtype=defs.NP_ARRAY_TYPE)
+        return np.diag([1, -1]).astype(defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.Z
 
 
@@ -291,10 +290,8 @@ class cZ(Gate):
     Controlled :math:`Z` gate
     """
     def gen_tensor(self):
-        return np.array([[1, 1],
-                         [1, -1]],
-                        dtype=defs.NP_ARRAY_TYPE)
-    _changes_qubits = tuple()
+        return np.diag([1, 1, 1, -1]).astype(defs.NP_ARRAY_TYPE).reshape(*[2]*4)
+    _changes_qubits = (0,1)
     cirq_op = cirq.CZ
 
 
@@ -303,10 +300,9 @@ class T(Gate):
     :math:`T`-gate
     """
     def gen_tensor(self):
-        return np.array([1, np.exp(1.j*np.pi/4)],
-                        dtype=defs.NP_ARRAY_TYPE)
+        return np.diag([1, np.exp(1.j*np.pi/4)]).astype(defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0,)
     cirq_op = cirq.T
 
 
@@ -316,10 +312,9 @@ class Tdag(Gate):
     """
     def gen_tensor(self):
         pass
-        return np.array([1, np.exp(-1.j*np.pi/4)],
-                        dtype=defs.NP_ARRAY_TYPE)
+        return np.diag([1, np.exp(-1.j*np.pi/4)]).astype(defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.inverse(cirq.T)
 
 
@@ -328,10 +323,9 @@ class S(Gate):
     :math:`S`-gate
     """
     def gen_tensor(self):
-        return np.array([1, 1j],
-                        dtype=defs.NP_ARRAY_TYPE)
+        return np.diag([1, 1j]).astype(defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0,)
     cirq_op = cirq.S
 
 
@@ -343,7 +337,7 @@ class Sdag(Gate):
         return np.array([1, -1j],
                         dtype=defs.NP_ARRAY_TYPE)
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     cirq_op = cirq.inverse(cirq.S)
 
 
@@ -405,12 +399,13 @@ class X(Gate):
 
 class cX(Gate):
     def gen_tensor(self):
-        return np.array([[[1., 0.],
-                          [0., 1.]],
-                         [[0., 1.],
-                          [1., 0.]]])
+        return np.array([[1., 0., 0., 0.],
+                         [0., 1., 0., 0.],
+                         [0., 0., 0., 1.],
+                         [0., 0., 1., 0.],
+                        ]).astype(defs.NP_ARRAY_TYPE).reshape(*[2]*4)
 
-    _changes_qubits = (1, )
+    _changes_qubits = (0, 1)
     cirq_op = cirq.CNOT
 
 
@@ -419,7 +414,7 @@ class ccX(Gate):
         #TODO: tensor shapes
         return np.array([])
 
-    _changes_qubits = (2, )
+    _changes_qubits = (1, 2, 3)
     cirq_op = cirq.CCNOT
 
 
@@ -461,7 +456,7 @@ class YPhase(ParametricGate):
             g = exp(i·π·t/2).
     """
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
 
     @staticmethod
     def _gen_tensor(**parameters):
@@ -493,7 +488,7 @@ class ZPhase(ParametricGate):
     g = exp(i·π·t)
     """
 
-    _changes_qubits = tuple()
+    _changes_qubits = (0, )
     parameter_count = 1
 
     @staticmethod
@@ -541,7 +536,7 @@ class XPhase(ParametricGate):
 def rx(parameters: [float], *qubits):
     """Arbitrary :math:`X` rotation"""
 
-    return XPhase(*qubits, alpha=parameters[0]/np.pi)
+    return XPhase(*qubits, alpha=parameters[0]/np.pi - 0.5)
 
 
 class XPhase(ParametricGate):
@@ -594,13 +589,6 @@ class fSim(ParametricGate):
                           [[0, 0],
                            [0, g]]]])
 
-class SWAP(Gate):
-    ## This gate is a snowflake for graph model
-    ## it swaps qubits
-    _changes_qubits = tuple()
-    @staticmethod
-    def gen_tensor():
-        return np.array([[1,1],[1,1]])
 
 
 
@@ -614,7 +602,7 @@ class U(ParametricGate):
           s = sin(t/2)
     """
 
-    _changes_qubits = (0,)
+    _changes_qubits = (0, )
 
     @staticmethod
     def _gen_tensor(**parameters):
@@ -747,8 +735,6 @@ def read_circuit_stream(stream, max_depth=None):
             if issubclass(op_cls, ParametricGate):
                 if op_cls.parameter_count==1:
                     m = re.search(params_search_patt_1, op_str)
-                    if m is None:
-                        raise Exception(f'Could not find parameter for gate. `{line})')
                     alpha = m.group('alpha')
                     op = op_cls(*q_idx, alpha=float(alpha))
                 elif op_cls.parameter_count==2:
@@ -834,7 +820,7 @@ def from_qiskit_circuit(qiskit_circuit):
     for gate in output_circuit:
         return_circuit.append([gate])
 
-    qubit_count = len(qiskit_circuit.qubits)
+    qubit_count = qiskit_circuit.num_qubits
     return qubit_count, return_circuit
 
 
